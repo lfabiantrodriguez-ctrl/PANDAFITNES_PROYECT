@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panda Fitness - Control de Recepción</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <div class="app-frame">
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">PANDA<span>FITNESS</span></div>
+            <ul class="nav-list">
+                <li><a href="dashboard.html" class="nav-link">Control de Aforo</a></li>
+                <li><a href="reservas.html" class="nav-link">Módulo de Reservas</a></li>
+                <li><a href="recepcion.html" class="nav-link active-page">Check-in Único</a></li>
+                <li><a href="socios.html" class="nav-link">Gestión de Socios</a></li>
+                <li><a href="login.html" class="nav-link" style="margin-top: 4rem; color: var(--panda-red);">Cerrar Sesión</a></li>
+            </ul>
+        </aside>
+
+        <main class="app-main">
+            <div class="view-title-block" style="display: flex; justify-content: space-between; align-items: flex-end;">
+                <div>
+                    <h1>Módulo de Recepción y Control de Acceso</h1>
+                    <p>Validación de credenciales en tiempo real y manifiesto de reservas diarias.</p>
+                </div>
+                <div style="width: 220px;">
+                    <label class="element-label" style="font-size: 0.85rem; color: var(--panda-gray-dark);">Filtrar Historial (Calendario)</label>
+                    <input type="date" class="input-field" value="2026-06-11" onchange="alert('Cargando el manifiesto de reservas para la fecha seleccionada...');">
+                </div>
+            </div>
+
+            <div class="stats-grid" style="margin-bottom: 2.5rem;">
+                <div class="stat-card" style="width: 45%; margin-right: 5%; height: auto; float: left;">
+                    <label class="element-label" style="font-size: 0.95rem;">Escanear Código de Socio o DNI</label>
+                    <div style="margin-top: 1rem; margin-bottom: 1rem;">
+                        <input type="text" class="input-field" value="73948201" placeholder="Ingrese número...">
+                    </div>
+                    <button class="action-btn btn-dark btn-full" onclick="alert('Registro localizado en la base de datos central.');">Consultar Reserva</button>
+                </div>
+
+                <div class="stat-card" style="width: 50%; float: left; border-left: 4px solid var(--panda-emerald);">
+                    <div style="display: table; width: 100%; margin-bottom: 1rem;">
+                        <div style="display: table-cell;">
+                            <h3 style="font-size: 1.25rem; font-weight: 700;">Fabián Tongo Rodríguez</h3>
+                            <span style="font-size: 0.85rem; color: var(--panda-gray-dark);">Socio ID: #PF-9834</span>
+                        </div>
+                        <div style="display: table-cell; text-align: right; vertical-align: top;">
+                            <span class="badge-status badge-valid">Membresía Vigente</span>
+                        </div>
+                    </div>
+
+                    <div style="background-color: var(--panda-bg-alt); padding: 1rem; border-radius: 6px; font-size: 0.9rem; margin-bottom: 1.5rem;">
+                        <div style="margin-bottom: 0.4rem;">Hora programada de Reserva: <strong style="float: right;">18:30 hrs</strong></div>
+                        <div style="margin-bottom: 0.4rem;">Hora actual de marcación: <strong style="float: right;">18:41 hrs</strong></div>
+                        <div style="border-top: 1px solid var(--panda-gray-light); padding-top: 0.4rem; margin-top: 0.4rem;">
+                            Estado de Tolerancia: <strong style="float: right; color: var(--panda-emerald);">Válido (+11 min transcurridos)</strong>
+                        </div>
+                    </div>
+
+                    <button class="action-btn btn-emerald btn-full" onclick="alert('Marcación procesada. Acceso concedido a la sala de entrenamiento.');">
+                        Confirmar Entrada (Check-In Único)
+                    </button>
+                </div>
+            </div>
+
+            <h2 style="font-size: 1.2rem; margin-bottom: 1rem; font-weight: 700;">Manifiesto Operativo: Jueves 11 de Junio, 2026</h2>
+            <div class="table-frame">
+                <table class="corporate-table">
+                    <thead>
+                        <tr>
+                            <th>Hora Reserva</th>
+                            <th>Socio Identificado</th>
+                            <th>Tiempo Declarado</th>
+                            <th>Estado de Acceso</th>
+                            <th>Check-in Real</th>
+                            <th>Acciones Manuales</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td><strong>17:00 hrs</strong></td>
+                            <td>Verónica Juárez Nicolás<br><span style="font-size: 0.8rem; color: #8E8E93;">#PF-4012</span></td>
+                            <td>90 Minutos</td>
+                            <td><span class="badge-status badge-valid" style="background-color: #E3FCEF; color: #006644;">En Sala</span></td>
+                            <td>17:05 hrs</td>
+                            <td><button class="action-btn btn-dark" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" disabled>Completado</button></td>
+                        </tr>
+                        
+                        <tr>
+                            <td><strong>18:30 hrs</strong></td>
+                            <td>Fabián Tongo Rodríguez<br><span style="font-size: 0.8rem; color: #8E8E93;">#PF-9834</span></td>
+                            <td>90 Minutos</td>
+                            <td><span class="badge-status" style="background-color: #FFF3E0; color: #E65100;">Pendiente (En Tolerancia)</span></td>
+                            <td>--:--</td>
+                            <td><button class="action-btn btn-emerald" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;">Marcar Ingreso</button></td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>17:30 hrs</strong></td>
+                            <td>Franz Bances Sánchez<br><span style="font-size: 0.8rem; color: #8E8E93;">#PF-2291</span></td>
+                            <td>60 Minutos</td>
+                            <td><span class="badge-status badge-alert">Cancelado por Tardanza</span></td>
+                            <td>No asistió</td>
+                            <td><button class="action-btn btn-dark" style="padding: 0.3rem 0.8rem; font-size: 0.8rem;" disabled>Cupo Liberado</button></td>
+                        </tr>
+
+                        <tr>
+                            <td><strong>19:30 hrs</strong></td>
+                            <td>Gustavo Manayay Serquén<br><span style="font-size: 0.8rem; color: #8E8E93;">#PF-1102</span></td>
+                            <td>120 Minutos</td>
+                            <td><span class="badge-status" style="background-color: var(--panda-gray-subtle); color: var(--panda-gray-dark);">Próximo Bloque</span></td>
+                            <td>--:--</td>
+                            <td><button class="action-btn btn-dark" style="padding: 0.3rem 0.8rem; font-size: 0.8rem; background-color: var(--panda-gray-light); color: var(--panda-gray-dark);">Aún no habilitado</button></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+</body>
+</html>

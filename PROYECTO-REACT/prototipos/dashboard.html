@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panda Fitness - Panel Operativo</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <div class="app-frame">
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">PANDA<span>FITNESS</span></div>
+            <ul class="nav-list">
+                <li><a href="dashboard.html" class="nav-link active-page">Control de Aforo</a></li>
+                <li><a href="reservas.html" class="nav-link">Módulo de Reservas</a></li>
+                <li><a href="recepcion.html" class="nav-link">Check-in Único</a></li>
+                <li><a href="socios.html" class="nav-link">Gestión de Socios</a></li>
+                <li><a href="login.html" class="nav-link" style="margin-top: 4rem; color: var(--panda-red);">Cerrar Sesión</a></li>
+            </ul>
+        </aside>
+
+        <main class="app-main">
+            <div class="view-title-block">
+                <h1>Monitoreo de Capacidad Instalada</h1>
+                <p>Métricas predictivas basadas estrictamente en las curvas de permanencia declaradas por los socios.</p>
+            </div>
+
+            <div class="stats-grid">
+                <div class="stat-card" style="border-top: 4px solid var(--panda-dark);">
+                    <div class="stat-label">Aforo en Sala Actual</div>
+                    <div class="stat-value">38 <span style="font-size: 1.2rem; color: var(--panda-gray-dark); font-weight: 400;">/ 50 Max</span></div>
+                    <div class="stat-desc">12 Cupos Libres Inmediatos</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Reservas para el Siguiente Bloque</div>
+                    <div class="stat-value">09</div>
+                    <div class="stat-desc" style="color: var(--panda-dark);">Franja de las 19:30 hrs</div>
+                </div>
+                <div class="stat-card">
+                    <div class="stat-label">Trazabilidad de Accesos Hoy</div>
+                    <div class="stat-value">142</div>
+                    <div class="stat-desc">Sustitución total de cuadernos</div>
+                </div>
+            </div>
+
+            <h2 style="font-size: 1.2rem; margin-bottom: 1rem; font-weight: 700;">Matriz Dinámica de Ocupación Temporal</h2>
+            <div class="table-frame">
+                <table class="corporate-table">
+                    <thead>
+                        <tr>
+                            <th>Franja Horaria de Control</th>
+                            <th>Permanencias Estimadas</th>
+                            <th>Ocupación Calculada</th>
+                            <th>Cupos Restantes</th>
+                            <th>Estado Automatizado</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>17:00 hrs - 18:30 hrs</td>
+                            <td>32 Socios concurrentes</td>
+                            <td>32 / 50</td>
+                            <td>18 Libres</td>
+                            <td><span class="badge-status badge-valid">Permitir Reservas</span></td>
+                        </tr>
+                        <tr>
+                            <td>18:30 hrs - 20:00 hrs (Hora Punta)</td>
+                            <td>50 Socios concurrentes</td>
+                            <td>50 / 50</td>
+                            <td>0 Libres</td>
+                            <td><span class="badge-status badge-alert">Bloqueo por Límite</span></td>
+                        </tr>
+                        <tr>
+                            <td>20:00 hrs - 21:30 hrs</td>
+                            <td>15 Socios concurrentes</td>
+                            <td>15 / 50</td>
+                            <td>35 Libres</td>
+                            <td><span class="badge-status badge-valid">Permitir Reservas</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+</body>
+</html>

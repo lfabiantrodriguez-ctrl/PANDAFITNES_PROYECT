@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panda Fitness - Reservas de Sala</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <div class="app-frame">
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">PANDA<span>FITNESS</span></div>
+            <ul class="nav-list">
+                <li><a href="dashboard.html" class="nav-link">Control de Aforo</a></li>
+                <li><a href="reservas.html" class="nav-link active-page">Módulo de Reservas</a></li>
+                <li><a href="recepcion.html" class="nav-link">Check-in Único</a></li>
+                <li><a href="socios.html" class="nav-link">Gestión de Socios</a></li>
+                <li><a href="login.html" class="nav-link" style="margin-top: 4rem; color: var(--panda-red);">Cerrar Sesión</a></li>
+            </ul>
+        </aside>
+
+        <main class="app-main">
+            <div class="view-title-block">
+                <h1>Planificación de Asistencia Obligatoria</h1>
+                <p>El sistema calcula de manera anticipada los aforos cruzando la hora de llegada con su permanencia establecida.</p>
+            </div>
+
+            <div class="content-box-md">
+                <div class="system-notice">
+                    <strong>Regulación de Capacidad:</strong> Al enviar esta información, el sistema reserva su cupo. Contará con una ventana de tolerancia de 15 a 20 minutos para ingresar en la recepción. De lo contrario, se liberará automáticamente.
+                </div>
+
+                <form action="dashboard.html" method="GET" onsubmit="alert('Cálculo Dinámico Completado: Cupo Asegurado en Sala.');">
+                    <div class="form-element">
+                        <label class="element-label">Fecha Seleccionada</label>
+                        <input type="date" class="input-field" required value="2026-06-15">
+                    </div>
+
+                    <div class="form-element">
+                        <label class="element-label">Hora de Llegada Planificada (Obligatorio)</label>
+                        <input type="time" class="input-field" required value="18:30">
+                    </div>
+
+                    <div class="form-element">
+                        <label class="element-label">Tiempo de Permanencia Declarado</label>
+                        <select class="input-field" style="height: 45px;" required>
+                            <option value="60">60 Minutos (1 Hora Extrema)</option>
+                            <option value="90" selected>90 Minutos (Estándar Recomendado)</option>
+                            <option value="120">120 Minutos (Entrenamiento Avanzado)</option>
+                        </select>
+                    </div>
+
+                    <button type="submit" class="action-btn btn-emerald btn-full" style="margin-top: 1rem;">
+                        Validar Aforo y Registrar Reserva
+                    </button>
+                </form>
+            </div>
+        </main>
+    </div>
+
+</body>
+</html>

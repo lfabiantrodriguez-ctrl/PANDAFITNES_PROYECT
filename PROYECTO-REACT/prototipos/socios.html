@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Panda Fitness - Repositorio de Socios</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+    <div class="app-frame">
+        <aside class="app-sidebar">
+            <div class="sidebar-brand">PANDA<span>FITNESS</span></div>
+            <ul class="nav-list">
+                <li><a href="dashboard.html" class="nav-link">Control de Aforo</a></li>
+                <li><a href="reservas.html" class="nav-link">Módulo de Reservas</a></li>
+                <li><a href="recepcion.html" class="nav-link">Check-in Único</a></li>
+                <li><a href="socios.html" class="nav-link active-page">Gestión de Socios</a></li>
+                <li><a href="login.html" class="nav-link" style="margin-top: 4rem; color: var(--panda-red);">Cerrar Sesión</a></li>
+            </ul>
+        </aside>
+
+        <main class="app-main">
+            <div class="view-title-block">
+                <h1>Repositorio Centralizado de Socios y Control Administrativo</h1>
+                <p>Base de datos unificada de contratos, eliminando por completo la vulnerabilidad del registro en papel.</p>
+            </div>
+
+            <div class="table-frame">
+                <table class="corporate-table">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Socio / Cliente Registrado</th>
+                            <th>Plan Contratado</th>
+                            <th>Monto Abonado</th>
+                            <th>Última Transacción</th>
+                            <th>Estado Financiero</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr>
+                            <td>#PF-9834</td>
+                            <td>Fabián Tongo Rodríguez</td>
+                            <td>Membresía VIP Trimestral</td>
+                            <td>S/. 350.00</td>
+                            <td>01/06/2026</td>
+                            <td><span class="badge-status badge-valid">Al Día</span></td>
+                        </tr>
+                        <tr>
+                            <td>#PF-4012</td>
+                            <td>Verónica Juárez Nicolás</td>
+                            <td>Plan Confort Mensual</td>
+                            <td>S/. 130.00</td>
+                            <td>12/05/2026</td>
+                            <td><span class="badge-status badge-alert">Pago Pendiente</span></td>
+                        </tr>
+                        <tr>
+                            <td>#PF-2291</td>
+                            <td>Franz Bances Sánchez</td>
+                            <td>Pase Libre Anual</td>
+                            <td>S/. 1,200.00</td>
+                            <td>15/01/2026</td>
+                            <td><span class="badge-status badge-valid">Al Día</span></td>
+                        </tr>
+                        <tr>
+                            <td>#PF-1102</td>
+                            <td>Gustavo Manayay Serquén</td>
+                            <td>Plan Confort Mensual</td>
+                            <td>S/. 130.00</td>
+                            <td>05/06/2026</td>
+                            <td><span class="badge-status badge-valid">Al Día</span></td>
+                        </tr>
+                        <tr>
+                            <td>#PF-3349</td>
+                            <td>Fabiana Ventura Chicoma</td>
+                            <td>Membresía VIP Trimestral</td>
+                            <td>S/. 350.00</td>
+                            <td>20/04/2026</td>
+                            <td><span class="badge-status badge-alert">Vencido</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </main>
+    </div>
+
+</body>
+</html>

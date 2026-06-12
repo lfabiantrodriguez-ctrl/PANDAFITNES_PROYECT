@@ -1,0 +1,43 @@
+:root {
+  --panda-bg-main: #ffffff;
+  --panda-bg-alt: #fafafa;
+  --panda-card-bg: #ffffff;
+  --panda-dark: #111111;
+  --panda-gray-dark: #3a3a3c;
+  --panda-gray-light: #e5e5ea;
+  --panda-gray-subtle: #f2f2f7;
+  --panda-emerald: #00875a;
+  --panda-emerald-hover: #006644;
+  --panda-emerald-light: #e3fcef;
+  --panda-red: #d32f2f;
+  --panda-red-light: #ffebee;
+  --font-primary: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+
+  color: var(--panda-dark);
+  background: var(--panda-bg-alt);
+  font: 16px/1.45 var(--font-primary);
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  min-width: 320px;
+  margin: 0;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+#root {
+  min-height: 100vh;
+}
