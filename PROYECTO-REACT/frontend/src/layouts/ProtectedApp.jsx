@@ -28,5 +28,5 @@ export default function ProtectedApp({ token, user, onLogout, setUser }) {
     return <Navigate to="/login" state={{ from: location }} replace />
   }
 
-  return <AppLayout token={token} user={user} onLogout={onLogout} />
+  return <AppLayout token={token} user={user} onLogout={onLogout} setUser={setUser} />
 }

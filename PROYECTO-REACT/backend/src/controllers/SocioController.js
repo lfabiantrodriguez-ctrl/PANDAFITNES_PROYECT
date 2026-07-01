@@ -66,6 +66,12 @@ class SocioController {
             if (error.message.includes("No existe el rol cliente") || error.message.includes("El plan seleccionado no existe")) {
                 return res.status(400).json({ message: error.message });
             }
+
+            // Handle MySQL duplicate entry errors to return a clear 409 response
+            if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
+                return res.status(409).json({ message: 'Ya existe un usuario con ese DNI o email' });
+            }
+
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }

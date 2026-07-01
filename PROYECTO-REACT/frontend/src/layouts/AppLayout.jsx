@@ -4,6 +4,7 @@ import ReservationsView from '../pages/ReservationsView'
 import CheckInView from '../pages/CheckInView'
 import MembersView from '../pages/MembersView'
 import ProfileView from '../pages/ProfileView'
+import HamburgerMenu from '../components/HamburgerMenu'
 
 export const ROLE_HOME = {
   admin: '/app/check-in',
@@ -23,7 +24,7 @@ export const MENU_ITEMS = {
   ],
 }
 
-export default function AppLayout({ token, user, onLogout }) {
+export default function AppLayout({ token, user, onLogout, setUser }) {
   const navigate = useNavigate()
   const items = MENU_ITEMS[user.rol] || []
 
@@ -60,14 +61,21 @@ export default function AppLayout({ token, user, onLogout }) {
         </div>
       </aside>
 
+      <HamburgerMenu 
+        items={items} 
+        user={user} 
+        onLogout={onLogout}
+        homeRoute={ROLE_HOME[user.rol] || '/app/perfil'}
+      />
+
       <main className="app-main">
         <Routes>
           <Route path="/" element={<RoleRedirect user={user} />} />
           <Route path="aforo" element={<RoleGate user={user} roles={['cliente']}><CapacityView /></RoleGate>} />
-          <Route path="reservas" element={<RoleGate user={user} roles={['cliente']}><ReservationsView /></RoleGate>} />
-          <Route path="check-in" element={<RoleGate user={user} roles={['admin']}><CheckInView /></RoleGate>} />
+          <Route path="reservas" element={<RoleGate user={user} roles={['cliente']}><ReservationsView token={token} /></RoleGate>} />
+          <Route path="check-in" element={<RoleGate user={user} roles={['admin']}><CheckInView token={token} /></RoleGate>} />
           <Route path="socios" element={<RoleGate user={user} roles={['admin']}><MembersView token={token} /></RoleGate>} />
-          <Route path="perfil" element={<ProfileView user={user} />} />
+          <Route path="perfil" element={<ProfileView user={user} token={token} setUser={setUser} />} />
         </Routes>
       </main>
     </div>

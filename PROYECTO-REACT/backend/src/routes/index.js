@@ -3,6 +3,9 @@ const authRoutes = require("./authRoutes");
 const dniRoutes = require("./dniRoutes");
 const planRoutes = require("./planRoutes");
 const socioRoutes = require("./socioRoutes");
+const reservationRoutes = require("./reservationRoutes");
+const capacityRoutes = require("./capacityRoutes");
+const checkInRoutes = require("./checkInRoutes");
 
 const router = express.Router();
 
@@ -14,5 +17,8 @@ router.use("/auth", authRoutes);
 router.use("/dni", dniRoutes);
 router.use("/admin/planes", planRoutes);
 router.use("/admin/socios", socioRoutes);
+router.use("/aforo", capacityRoutes);
+router.use("/reservas", reservationRoutes);
+router.use("/admin/checkin", checkInRoutes);
 
 module.exports = router;

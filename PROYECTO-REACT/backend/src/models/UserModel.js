@@ -30,6 +30,7 @@ class UserModel {
                 u.apellido,
                 u.dni,
                 u.email,
+                u.password_hash,
                 u.telefono,
                 r.nombre AS rol
             FROM usuarios u
@@ -40,6 +41,24 @@ class UserModel {
         );
 
         return rows[0] || null;
+    }
+
+    static async updateProfile(id, { nombre, apellido, email, telefono }) {
+        const [result] = await db.execute(
+            `UPDATE usuarios SET nombre = ?, apellido = ?, email = ?, telefono = ? WHERE id = ?`,
+            [nombre, apellido, email, telefono, id],
+        );
+
+        return result.affectedRows > 0;
+    }
+
+    static async updatePasswordHash(id, passwordHash) {
+        const [result] = await db.execute(
+            `UPDATE usuarios SET password_hash = ? WHERE id = ?`,
+            [passwordHash, id],
+        );
+
+        return result.affectedRows > 0;
     }
 }
 

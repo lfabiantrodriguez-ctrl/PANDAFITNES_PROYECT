@@ -748,12 +748,11 @@
 
   .app-frame {
     grid-template-columns: 1fr;
+    grid-template-rows: auto 1fr;
   }
 
   .app-sidebar {
-    position: relative;
-    min-height: auto;
-    gap: 1.5rem;
+    display: none;
   }
 
   .app-main {
@@ -764,12 +763,83 @@
   .form-panel-title {
     display: grid;
   }
+
+  .capacity-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .site-header {
+    width: 100%;
+    padding: 0 16px;
+  }
+
+  .hero-section,
+  .info-grid {
+    width: 100%;
+    padding: 0 16px;
+  }
+
+  .app-main {
+    padding: 1.5rem;
+  }
+
+  .capacity-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  .internal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .capacity-panel {
+    padding: 20px;
+  }
+
+  .panel-heading {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .input-action-row {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 560px) {
+  :root {
+    --panda-dark: #1a1a1c;
+    --panda-bg-main: #f5f5f5;
+    --panda-bg-alt: #efefef;
+    --panda-card-bg: #ffffff;
+    --panda-gray-dark: #676767;
+    --panda-gray-light: #d7d7d7;
+    --panda-gray-subtle: #f0f0f0;
+    --panda-emerald: #008b5a;
+    --panda-emerald-hover: #006d47;
+    --panda-emerald-light: #dcf5ed;
+    --panda-red: #d4243f;
+    --panda-red-light: #f7d6dd;
+  }
+
   .site-header {
     align-items: flex-start;
     flex-direction: column;
+    width: 100%;
+    padding: 0 16px;
   }
 
   .login-button {
@@ -798,20 +868,151 @@
     display: grid;
   }
 
+  .panel-heading h2 {
+    font-size: 1.8rem;
+  }
+
   .login-container,
   .content-box-md {
     padding: 1.5rem;
+    border-radius: 8px;
   }
 
   .profile-row {
     grid-template-columns: 1fr;
     gap: 4px;
+    padding: 1rem;
   }
 
   .member-result-heading,
   .system-box p,
-  .input-action-row {
+  .input-action-row,
+  .form-grid {
     display: grid;
     grid-template-columns: 1fr;
+  }
+
+  .info-grid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .internal-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .two-column {
+    grid-template-columns: 1fr;
+  }
+
+  .capacity-summary {
+    grid-template-columns: 1fr;
+  }
+
+  .member-form-panel {
+    padding: 1rem;
+  }
+
+  .form-panel-title {
+    display: grid;
+    grid-template-columns: 1fr;
+  }
+
+  .form-panel-title h2 {
+    font-size: 1.1rem;
+  }
+
+  .plan-pill {
+    margin-top: 0.5rem;
+  }
+
+  .view-title-block h1 {
+    font-size: 1.5rem;
+  }
+
+  .view-title-block p {
+    font-size: 0.85rem;
+  }
+
+  .stat-value {
+    font-size: 1.8rem;
+  }
+
+  .input-field,
+  .action-btn {
+    min-height: 40px;
+    font-size: 0.9rem;
+  }
+
+  .app-main {
+    padding: 1rem;
+  }
+
+  .view-title-block {
+    margin-bottom: 1.5rem;
+    padding-bottom: 1rem;
+  }
+
+  .corporate-table {
+    min-width: 100%;
+    font-size: 0.85rem;
+  }
+
+  .corporate-table th,
+  .corporate-table td {
+    padding: 0.8rem 0.6rem;
+  }
+
+  .table-frame {
+    border-radius: 4px;
+  }
+}
+
+@media (max-width: 480px) {
+  .hero-copy h1 {
+    font-size: 1.8rem;
+  }
+
+  .panel-heading h2 {
+    font-size: 1.5rem;
+  }
+
+  .view-title-block h1 {
+    font-size: 1.3rem;
+  }
+
+  .login-logo {
+    font-size: 1.5rem;
+  }
+
+  .login-container {
+    width: 100%;
+    padding: 1.2rem;
+    border: none;
+    border-radius: 0;
+  }
+
+  .info-card {
+    padding: 1rem;
+  }
+
+  .info-card h3 {
+    font-size: 0.95rem;
+  }
+
+  .stat-card {
+    padding: 1rem;
+  }
+
+  .stat-value {
+    font-size: 1.5rem;
+  }
+
+  .capacity-panel {
+    padding: 1rem;
+  }
+
+  .summary-value {
+    font-size: 1.3rem;
   }
 }

@@ -6,7 +6,7 @@ class DniService {
             throw new Error("CONSULTADATOS_TOKEN no esta configurado en el backend");
         }
 
-        const response = await fetch(`https://api2.consultadatos.com/api/dni/${dni}`, {
+        const response = await fetch(`https://api.decolecta.com/v1/reniec/dni?numero=${dni}`, {
             method: "GET",
             headers: {
                 Authorization: `Bearer ${CONSULTADATOS_TOKEN}`,
