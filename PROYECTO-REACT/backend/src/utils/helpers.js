@@ -59,25 +59,54 @@ function normalizeDniResponse(raw, dni) {
         try {
             data = JSON.parse(raw);
         } catch {
-            data = { texto: raw };
+            return null;
         }
     }
 
     const source = data.data || data.result || data.persona || data;
     
-    const nombres = source.NOMBRES || source.nombres || source.nombre || source.NOMBRE || source.name || "";
-    const apellidoPaterno = source.AP_PAT || source.apellido_paterno || source.apellidoPaterno || source.paterno || source.PATERNO || "";
-    const apellidoMaterno = source.AP_MAT || source.apellido_crumbs || source.apellido_materno || source.apellidoMaterno || source.materno || source.MATERNO || "";
-    const apellidoCompleto = source.APELLIDOS || source.apellidos || source.apellido || [apellidoPaterno, apellidoMaterno].filter(Boolean).join(" ");
+    //compatibilidad con ambas APIs para evitar errores
+    const nombres =
+        source.first_name ||
+        source.NOMBRES ||
+        source.nombres ||
+        source.nombre ||
+        source.NOMBRE ||
+        source.name ||
+        "";
+
+    const apellidoPaterno =
+        source.first_last_name ||
+        source.AP_PAT ||
+        source.apellido_paterno ||
+        source.apellidoPaterno ||
+        source.paterno ||
+        "";
+
+    const apellidoMaterno =
+        source.second_last_name ||
+        source.AP_MAT ||
+        source.apellido_materno ||
+        source.apellidoMaterno ||
+        source.materno ||
+        "";
+    
+    const apellidoCompleto =
+        source.full_name
+            ? `${apellidoPaterno} ${apellidoMaterno}`.trim()
+            : (source.APELLIDOS ||
+                source.apellidos ||
+                source.apellido ||
+                `${apellidoPaterno} ${apellidoMaterno}`.trim());
 
     if (!nombres && !apellidoCompleto) {
         return null;
     }
 
     return {
-        dni,
-        nombre: String(nombres).trim(),
-        apellido: String(apellidoCompleto).trim(),
+        dni: source.document_number || dni,
+        nombre: nombres.trim(),
+        apellido: apellidoCompleto.trim(),
     };
 }
 

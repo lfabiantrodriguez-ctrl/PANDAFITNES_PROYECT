@@ -6,7 +6,7 @@ const DniService = require('./DniService');
 
 async function probarConsulta() {
     try {
-        const dniDePrueba = "60447035";
+        const dniDePrueba = "72517548";
         console.log(`Iniciando consulta para el DNI: ${dniDePrueba}...`);
         
         const resultado = await DniService.lookup(dniDePrueba);
