@@ -134,6 +134,55 @@ class ReservationModel {
 
         return rows;
     }
+
+    static async getDashboard({ userId = null, startDate = null, endDate = null } = {}) {
+        const conditions = ["WHERE estado IN ('pendiente', 'confirmada')"];
+        const params = [];
+
+        if (userId) {
+            conditions.push("AND usuario_id = ?");
+            params.push(userId);
+        }
+
+        if (startDate) {
+            conditions.push("AND DATE(hora_entrada) >= ?");
+            params.push(startDate);
+        }
+
+        if (endDate) {
+            conditions.push("AND DATE(hora_entrada) <= ?");
+            params.push(endDate);
+        }
+
+        const [rows] = await db.execute(
+            `SELECT
+                HOUR(hora_entrada) AS hour,
+                COUNT(*) AS total
+             FROM reservas
+             ${conditions.join(" ")}
+             GROUP BY HOUR(hora_entrada)
+             ORDER BY total DESC, hour ASC`,
+            params,
+        );
+
+        const hourlyStats = rows.map((row) => ({
+            hour: Number(row.hour),
+            count: Number(row.total),
+        }));
+
+        const maxCount = hourlyStats[0]?.count || 0;
+        const peakHours = hourlyStats.filter((item) => item.count === maxCount).map((item) => item.hour);
+
+        return {
+            startDate: startDate || null,
+            endDate: endDate || null,
+            totalReservations: hourlyStats.reduce((sum, item) => sum + item.count, 0),
+            peakHour: peakHours[0] ?? null,
+            peakHours,
+            peakCount: maxCount,
+            hourlyStats,
+        };
+    }
 }
 
 module.exports = ReservationModel;

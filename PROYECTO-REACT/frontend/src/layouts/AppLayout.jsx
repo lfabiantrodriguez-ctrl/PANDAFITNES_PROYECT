@@ -1,6 +1,7 @@
 import { NavLink, Navigate, Route, Routes, useNavigate } from 'react-router-dom'
 import CapacityView from '../pages/CapacityView'
 import ReservationsView from '../pages/ReservationsView'
+import DashboardReservationsView from '../pages/DashboardReservationsView'
 import CheckInView from '../pages/CheckInView'
 import MembersView from '../pages/MembersView'
 import ProfileView from '../pages/ProfileView'
@@ -15,11 +16,13 @@ export const MENU_ITEMS = {
   admin: [
     { to: '/app/check-in', label: 'Check-in Unico' },
     { to: '/app/socios', label: 'Gestion de Socios' },
+    { to: '/app/dashboard-reservas', label: 'Dashboard de Reservas' },
     { to: '/app/perfil', label: 'Perfil' },
   ],
   cliente: [
     { to: '/app/aforo', label: 'Control de Aforo' },
     { to: '/app/reservas', label: 'Modulo de Reservas' },
+    { to: '/app/dashboard-reservas', label: 'Dashboard de Reservas' },
     { to: '/app/perfil', label: 'Perfil' },
   ],
 }
@@ -73,6 +76,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
           <Route path="/" element={<RoleRedirect user={user} />} />
           <Route path="aforo" element={<RoleGate user={user} roles={['cliente']}><CapacityView /></RoleGate>} />
           <Route path="reservas" element={<RoleGate user={user} roles={['cliente']}><ReservationsView token={token} /></RoleGate>} />
+          <Route path="dashboard-reservas" element={<RoleGate user={user} roles={['admin', 'cliente']}><DashboardReservationsView token={token} /></RoleGate>} />
           <Route path="check-in" element={<RoleGate user={user} roles={['admin']}><CheckInView token={token} /></RoleGate>} />
           <Route path="socios" element={<RoleGate user={user} roles={['admin']}><MembersView token={token} /></RoleGate>} />
           <Route path="perfil" element={<ProfileView user={user} token={token} setUser={setUser} />} />

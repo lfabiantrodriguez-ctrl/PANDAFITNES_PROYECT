@@ -37,6 +37,25 @@ class ReservationController {
         }
     }
 
+    static async getReservationDashboard(req, res) {
+        try {
+            const startDate = String(req.query.startDate || "").trim();
+            const endDate = String(req.query.endDate || "").trim();
+
+            if (startDate && endDate && startDate > endDate) {
+                return res.status(400).json({ message: "La fecha inicial no puede ser mayor que la final" });
+            }
+
+            const userId = req.auth?.rol === "admin" ? null : req.auth.id;
+            const dashboard = await ReservationModel.getDashboard({ userId, startDate, endDate });
+
+            return res.json(dashboard);
+        } catch (error) {
+            console.error("Error generando dashboard de reservas:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
     static async createReservation(req, res) {
         try {
             const { fecha, horaEntrada, duracionMinutos } = req.body;

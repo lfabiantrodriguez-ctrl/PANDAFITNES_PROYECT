@@ -10,6 +10,24 @@ export class ReservationService {
     return data
   }
 
+  static async getReservationDashboard(token, { startDate, endDate } = {}) {
+    const params = new URLSearchParams()
+    if (startDate) params.set('startDate', startDate)
+    if (endDate) params.set('endDate', endDate)
+
+    const queryString = params.toString()
+    const response = await fetch(`/api/reservas/dashboard${queryString ? `?${queryString}` : ''}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudo cargar el dashboard de reservas')
+    }
+
+    return data
+  }
+
   static async createReservation(token, payload) {
     const response = await fetch('/api/reservas', {
       method: 'POST',
