@@ -183,6 +183,19 @@ class ReservationModel {
             hourlyStats,
         };
     }
+
+    static async hasActiveReservationForDay(usuarioId, fecha) {
+        const [rows] = await db.execute(
+            `SELECT COUNT(*) AS total
+             FROM reservas
+             WHERE usuario_id = ?
+               AND DATE(hora_entrada) = ?
+               AND estado IN ('pendiente', 'confirmada')`,
+            [usuarioId, fecha],
+        );
+
+        return rows[0]?.total > 0;
+    }
 }
 
 module.exports = ReservationModel;

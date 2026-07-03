@@ -1,6 +1,7 @@
 const UserModel = require("../models/UserModel");
 const ReservationModel = require("../models/ReservationModel");
 const AttendanceModel = require("../models/AttendanceModel");
+const { sendEmail } = require("../utils/email");
 
 function parseSearchCode(code) {
     const normalized = String(code || "").trim();
@@ -133,6 +134,35 @@ class CheckInController {
             });
 
             await ReservationModel.updateStatus(reservation.id, "confirmada");
+
+            // Send confirmation email
+            const user = await UserModel.findActiveById(reservation.usuarioId);
+            if (user && user.email) {
+                const entryDate = new Date(reservation.horaEntrada);
+                const localTimeStr = entryDate.toLocaleTimeString("es-ES", {
+                    hour: "2-digit",
+                    minute: "2-digit"
+                });
+                const localDateStr = entryDate.toLocaleDateString("es-ES", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric"
+                });
+
+                await sendEmail({
+                    to: user.email,
+                    subject: "Ingreso Confirmado - Panda Fitness",
+                    html: `
+                        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                            <h2 style="color: #16a34a;">¡Hola ${user.nombre}!</h2>
+                            <p>Hemos confirmado tu ingreso al gimnasio el día <strong>${localDateStr}</strong> para tu reserva de las <strong>${localTimeStr}</strong>.</p>
+                            <p>¡Disfruta tu entrenamiento de hoy!</p>
+                            <br/>
+                            <p>Saludos,<br/>El equipo de <strong>Panda Fitness</strong></p>
+                        </div>
+                    `
+                }).catch(err => console.error("Error sending checkin email:", err));
+            }
 
             return res.json({ message: "Entrada confirmada", reservationId: reservation.id });
         } catch (error) {
