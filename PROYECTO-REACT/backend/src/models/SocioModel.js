@@ -1,6 +1,6 @@
 const db = require("../config/database");
 const bcrypt = require("bcrypt");
-const { addDays } = require("../utils/helpers");
+const { addDaysExcludingSundays } = require("../utils/helpers");
 
 class SocioModel {
     static async getAll() {
@@ -85,7 +85,7 @@ class SocioModel {
 
             const passwordHash = await bcrypt.hash(dni, 10);
             const plan = planRows[0];
-            const endDate = addDays(fechaInicio, plan.duracion_dias);
+            const endDate = addDaysExcludingSundays(fechaInicio, plan.duracion_dias);
 
             const [userResult] = await connection.execute(
                 `INSERT INTO usuarios

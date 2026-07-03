@@ -76,6 +76,36 @@ async function runSchemaMigrations() {
             "cancelada_emergencia",
             "TINYINT(1) NOT NULL DEFAULT 0 AFTER duracion_minutos",
         );
+
+        // Add weekly limit column to planes_membresia
+        const colAdded = await ensureColumnExists(
+            "planes_membresia",
+            "limite_semanal",
+            "INT DEFAULT NULL AFTER duracion_dias",
+        );
+
+        if (colAdded) {
+            // Set Interdiario (id=4) to 3 reservations per week
+            await db.execute(
+                "UPDATE planes_membresia SET limite_semanal = 3 WHERE id = 4",
+            );
+            console.log("limite_semanal=3 asignado al plan Interdiario (id=4)");
+        }
+
+        // Add total reservations column to planes_membresia
+        const colAdded2 = await ensureColumnExists(
+            "planes_membresia",
+            "total_reservas",
+            "INT DEFAULT NULL AFTER limite_semanal",
+        );
+
+        if (colAdded2) {
+            // Set Interdiario (id=4) to 15 total reservations
+            await db.execute(
+                "UPDATE planes_membresia SET total_reservas = 15 WHERE id = 4",
+            );
+            console.log("total_reservas=15 asignado al plan Interdiario (id=4)");
+        }
     } catch (error) {
         console.error("Error ejecutando migraciones de esquema:", error);
     }

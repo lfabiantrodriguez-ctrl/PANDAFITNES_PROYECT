@@ -1,5 +1,5 @@
 const db = require("../config/database");
-const { addDays } = require("../utils/helpers");
+const { addDaysExcludingSundays } = require("../utils/helpers");
 
 class MembershipModel {
     static async getClientMembership(userId) {
@@ -114,7 +114,7 @@ class MembershipModel {
             }
 
             const plan = planRows[0];
-            const endDate = addDays(fechaInicio, plan.duracion_dias);
+            const endDate = addDaysExcludingSundays(fechaInicio, plan.duracion_dias);
 
             // Get current active membership to mark it as expired
             const [currentMemberships] = await connection.execute(

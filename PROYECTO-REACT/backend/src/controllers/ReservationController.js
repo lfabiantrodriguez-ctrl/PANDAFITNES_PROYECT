@@ -1,6 +1,7 @@
 const ReservationModel = require("../models/ReservationModel");
 const UserModel = require("../models/UserModel");
 const { sendEmail } = require("../utils/email");
+const { getCurrentWeekRange } = require("../utils/helpers");
 const { checkAndCancelExpiredReservations } = require("../services/cronService");
 
 function buildDatetime(dateValue, timeValue) {
@@ -98,6 +99,50 @@ class ReservationController {
             const hasDailyActive = await ReservationModel.hasActiveReservationForDay(req.auth.id, fecha);
             if (hasDailyActive) {
                 return res.status(400).json({ message: "Ya tienes una reserva registrada para este día y solo se permite una reserva activa por día" });
+            }
+
+            // 1b. Check weekly and total reservation limits based on membership plan
+            const planInfo = await ReservationModel.getUserPlanInfo(req.auth.id);
+            if (planInfo) {
+                const { start: weekStart, end: weekEnd } = getCurrentWeekRange();
+
+                // If plan has total_reservas (e.g. Interdiario = 15)
+                if (planInfo.totalReservas) {
+                    const usedTotal = await ReservationModel.countTotalReservations(req.auth.id, planInfo.fechaInicio);
+                    const remainingTotal = planInfo.totalReservas - usedTotal;
+
+                    if (remainingTotal <= 0) {
+                        return res.status(400).json({
+                            message: `Has agotado tus ${planInfo.totalReservas} reservas del plan. Acercate al gimnasio para renovar tu membresia.`
+                        });
+                    }
+
+                    // If plan also has weekly limit
+                    if (planInfo.limiteSemanal) {
+                        const weeklyCount = await ReservationModel.countWeeklyReservations(req.auth.id, weekStart, weekEnd);
+                        const weeklyRemaining = planInfo.limiteSemanal - weeklyCount;
+                        const allowedThisWeek = Math.min(weeklyRemaining, remainingTotal);
+
+                        if (weeklyRemaining <= 0) {
+                            return res.status(400).json({
+                                message: `Has alcanzado el limite de ${planInfo.limiteSemanal} reservas de esta semana. Vuelve a intentarlo el lunes de la proxima semana.`
+                            });
+                        }
+
+                        if (allowedThisWeek < weeklyRemaining) {
+                            // The remaining total is less than the weekly allowance this week
+                            // This handles the edge case where only a few days remain in the plan
+                        }
+                    }
+                } else if (planInfo.limiteSemanal) {
+                    // Plan only has weekly limit (no total limit)
+                    const weeklyCount = await ReservationModel.countWeeklyReservations(req.auth.id, weekStart, weekEnd);
+                    if (weeklyCount >= planInfo.limiteSemanal) {
+                        return res.status(400).json({
+                            message: `Has alcanzado el limite de ${planInfo.limiteSemanal} reservas semanales de tu plan. Vuelve a intentarlo el lunes de la proxima semana.`
+                        });
+                    }
+                }
             }
 
             // 2. Validate gym opening hours

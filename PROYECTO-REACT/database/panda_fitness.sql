@@ -39,16 +39,18 @@ CREATE TABLE planes_membresia (
     id INT AUTO_INCREMENT PRIMARY KEY,
     nombre VARCHAR(100) NOT NULL,
     duracion_dias INT NOT NULL,
+    limite_semanal INT DEFAULT NULL,
+    total_reservas INT DEFAULT NULL,
     precio DECIMAL(10,2) NOT NULL,
     descripcion TEXT
 ) ENGINE=InnoDB;
 
-INSERT INTO planes_membresia (nombre, duracion_dias, precio, descripcion)
-VALUES ('Mensual', 30, 80, 'Plan mensual'),
-       ('Bimestral', 60, 150, 'Promoción de 2 meses'),
-       ('Trimestral', 90, 200, 'Promoción de 3 meses'),
-       ('Interdiario', 15, 50, 'Un plan especial para principiantes'),
-       ('Anual', 365, 800, 'Super promoción de un año');
+INSERT INTO planes_membresia (nombre, duracion_dias, limite_semanal, total_reservas, precio, descripcion)
+VALUES ('Mensual', 30, NULL, NULL, 80, 'Plan mensual'),
+       ('Bimestral', 60, NULL, NULL, 150, 'Promoción de 2 meses'),
+       ('Trimestral', 90, NULL, NULL, 200, 'Promoción de 3 meses'),
+       ('Interdiario', 15, 3, 15, 50, 'Plan especial con 3 reservas por semana. max 15 días'),
+       ('Anual', 365, NULL, NULL, 800, 'Super promoción de un año');
 
 -- =============================================
 -- 4. Membresías de los clientes

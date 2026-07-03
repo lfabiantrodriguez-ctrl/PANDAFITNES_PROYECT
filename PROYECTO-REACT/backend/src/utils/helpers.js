@@ -52,6 +52,31 @@ function addDays(dateValue, days) {
     return toDateOnly(date);
 }
 
+function addDaysExcludingSundays(dateValue, days) {
+    const date = new Date(`${dateValue}T00:00:00`);
+    let count = 0;
+    while (count < days) {
+        date.setDate(date.getDate() + 1);
+        if (date.getDay() !== 0) {
+            count++;
+        }
+    }
+    return toDateOnly(date);
+}
+
+function getCurrentWeekRange() {
+    const now = new Date();
+    const dayOfWeek = now.getDay();
+    const diffToMonday = dayOfWeek === 0 ? -6 : 1 - dayOfWeek;
+    const monday = new Date(now);
+    monday.setDate(now.getDate() + diffToMonday);
+    monday.setHours(0, 0, 0, 0);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    sunday.setHours(23, 59, 59, 999);
+    return { start: toDateOnly(monday), end: toDateOnly(sunday) };
+}
+
 function normalizeDniResponse(raw, dni) {
     let data = raw;
 
@@ -118,5 +143,7 @@ module.exports = {
     isValidDni,
     toDateOnly,
     addDays,
+    addDaysExcludingSundays,
+    getCurrentWeekRange,
     normalizeDniResponse,
 };

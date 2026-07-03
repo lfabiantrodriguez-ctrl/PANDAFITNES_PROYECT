@@ -229,6 +229,50 @@ class ReservationModel {
 
         return rows[0]?.total > 0;
     }
+
+    static async countWeeklyReservations(usuarioId, weekStart, weekEnd) {
+        const [rows] = await db.execute(
+            `SELECT COUNT(*) AS total
+             FROM reservas
+             WHERE usuario_id = ?
+               AND DATE(hora_entrada) BETWEEN ? AND ?
+               AND estado IN ('pendiente', 'confirmada', 'finalizada', 'no_show')`,
+            [usuarioId, weekStart, weekEnd],
+        );
+
+        return rows[0]?.total || 0;
+    }
+
+    static async getUserPlanInfo(usuarioId) {
+        const [rows] = await db.execute(
+            `SELECT p.limite_semanal AS limiteSemanal,
+                    p.total_reservas AS totalReservas,
+                    m.fecha_inicio AS fechaInicio
+             FROM membresias m
+             INNER JOIN planes_membresia p ON p.id = m.plan_id
+             WHERE m.usuario_id = ?
+               AND m.estado = 'activo'
+               AND m.fecha_fin >= CURDATE()
+             ORDER BY m.id DESC
+             LIMIT 1`,
+            [usuarioId],
+        );
+
+        return rows[0] || null;
+    }
+
+    static async countTotalReservations(usuarioId, fechaInicio) {
+        const [rows] = await db.execute(
+            `SELECT COUNT(*) AS total
+             FROM reservas
+             WHERE usuario_id = ?
+               AND DATE(hora_entrada) >= ?
+               AND estado IN ('pendiente', 'confirmada', 'finalizada', 'no_show')`,
+            [usuarioId, fechaInicio],
+        );
+
+        return rows[0]?.total || 0;
+    }
 }
 
 module.exports = ReservationModel;
