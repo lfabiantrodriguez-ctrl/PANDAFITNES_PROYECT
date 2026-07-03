@@ -57,4 +57,81 @@ async function checkAndCancelExpiredReservations() {
     }
 }
 
-module.exports = { checkAndCancelExpiredReservations };
+async function finalizeEndedAttendances() {
+    try {
+        // Find asistencias with null hora_salida whose reservation hora_salida <= NOW()
+        const [rows] = await db.execute(
+            `SELECT a.id AS asistenciaId, a.reserva_id AS reservaId, r.hora_salida
+             FROM asistencias a
+             INNER JOIN reservas r ON r.id = a.reserva_id
+             WHERE a.hora_salida IS NULL
+               AND r.hora_salida <= NOW()`
+        );
+
+        if (!rows || rows.length === 0) return;
+
+        for (const r of rows) {
+            const exitTime = r.hora_salida || new Date();
+            await db.execute(
+                `UPDATE asistencias SET hora_salida = ? WHERE id = ? AND hora_salida IS NULL`,
+                [exitTime, r.asistenciaId]
+            );
+            // Note: do NOT change reserva.estado to an unsupported enum value; keep estado as-is.
+            console.log(`Asistencia #${r.asistenciaId} finalizada automaticamente al terminar la reserva #${r.reservaId}`);
+        }
+    } catch (error) {
+        console.error('Error en finalizeEndedAttendances:', error);
+    }
+}
+
+async function ensureEstadoEnumSupportsFinalizada() {
+    try {
+        const [rows] = await db.execute(
+            `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservas' AND COLUMN_NAME = 'estado'`
+        );
+        if (!rows || rows.length === 0) return false;
+
+        const columnType = rows[0].COLUMN_TYPE || '';
+        if (columnType.includes("'finalizada'")) {
+            return true;
+        }
+
+        // Add 'finalizada' to enum safely by redefining the enum list (preserve existing values)
+        // Extract existing values from columnType
+        const matches = columnType.match(/enum\((.*)\)/i);
+        const existing = matches && matches[1] ? matches[1] : null;
+        if (!existing) return false;
+
+        // Build new enum including finalizada if not present
+        const values = existing.split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
+        if (!values.includes('finalizada')) values.push('finalizada');
+        const newEnum = values.map((v) => `'${v}'`).join(',');
+
+        await db.execute(`ALTER TABLE reservas MODIFY estado ENUM(${newEnum}) DEFAULT 'pendiente'`);
+        console.log('Columna reservas.estado actualizada para incluir "finalizada" en el enum');
+        return true;
+    } catch (error) {
+        console.error('Error asegurando enum de estado:', error);
+        return false;
+    }
+}
+
+async function finalizeEndedReservations() {
+    try {
+        // Ensure enum supports 'finalizada'
+        await ensureEstadoEnumSupportsFinalizada();
+
+        // Update reservations that were confirmed and whose end time has passed
+        const [result] = await db.execute(
+            `UPDATE reservas SET estado = 'finalizada' WHERE estado = 'confirmada' AND hora_salida <= NOW()`
+        );
+
+        if (result && result.affectedRows > 0) {
+            console.log(`Reservas finalizadas automáticamente: ${result.affectedRows}`);
+        }
+    } catch (error) {
+        console.error('Error en finalizeEndedReservations:', error);
+    }
+}
+
+module.exports = { checkAndCancelExpiredReservations, finalizeEndedAttendances, finalizeEndedReservations };

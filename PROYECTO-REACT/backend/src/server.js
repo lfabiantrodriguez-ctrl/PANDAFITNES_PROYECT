@@ -20,6 +20,21 @@ setInterval(() => {
     });
 }, 30000);
 
+const { finalizeEndedAttendances, finalizeEndedReservations } = require("./services/cronService");
+// Finalizar asistencias cuando la reserva haya terminado (cada 30 segundos)
+setInterval(() => {
+    finalizeEndedAttendances().catch((err) => {
+        console.error("Error en verificador de finalización de asistencias:", err);
+    });
+}, 30000);
+
+// Finalizar reservas confirmadas automáticamente al llegar su hora de fin (cada 30 segundos)
+setInterval(() => {
+    finalizeEndedReservations().catch((err) => {
+        console.error("Error en verificador de finalización automática de reservas:", err);
+    });
+}, 30000);
+
 app.listen(PORT, () => {
     console.log(`Servidor corriendo en puerto ${PORT}`);
 });

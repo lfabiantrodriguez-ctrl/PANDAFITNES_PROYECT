@@ -47,6 +47,19 @@ export default function CheckInView({ token }) {
     }
   }
 
+  async function handleFinalize() {
+    if (!reservation) return
+    setStatus({ loading: true, error: '', success: '' })
+    try {
+      await CheckInService.finalizeReservation(token, reservation.id)
+      setStatus({ loading: false, error: '', success: 'Reserva finalizada correctamente.' })
+      // Refresh lookup to get updated history and reservation state
+      await handleLookup()
+    } catch (error) {
+      setStatus({ loading: false, error: error.message || 'No se pudo finalizar la reserva', success: '' })
+    }
+  }
+
   return (
     <>
       <ViewTitle
@@ -104,6 +117,15 @@ export default function CheckInView({ token }) {
                     disabled={!canConfirm || status.loading}
                   >
                     Confirmar Entrada
+                  </button>
+                  <button
+                    className="action-btn btn-warning btn-full"
+                    type="button"
+                    onClick={handleFinalize}
+                    disabled={status.loading || reservation.estado !== 'confirmada'}
+                    style={{ marginTop: '0.5rem' }}
+                  >
+                    Finalizar Reserva (Salida temprana)
                   </button>
                 </>
               ) : (

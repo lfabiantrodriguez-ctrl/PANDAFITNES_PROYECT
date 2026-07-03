@@ -52,6 +52,27 @@ class AttendanceModel {
 
         return rows[0]?.total || 0;
     }
+
+    static async findByReservationId(reservaId) {
+        const [rows] = await db.execute(
+            `SELECT id, reserva_id AS reservaId, usuario_id AS usuarioId, hora_entrada AS horaEntrada, hora_salida AS horaSalida
+             FROM asistencias
+             WHERE reserva_id = ?
+             LIMIT 1`,
+            [reservaId],
+        );
+
+        return rows[0] || null;
+    }
+
+    static async setExitByReservation(reservaId, horaSalida) {
+        const [result] = await db.execute(
+            `UPDATE asistencias SET hora_salida = ? WHERE reserva_id = ? AND hora_salida IS NULL`,
+            [horaSalida, reservaId],
+        );
+
+        return result.affectedRows > 0;
+    }
 }
 
 module.exports = AttendanceModel;

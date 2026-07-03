@@ -170,6 +170,44 @@ class CheckInController {
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }
+
+    static async finalizeReservation(req, res) {
+        try {
+            const { reservationId } = req.body;
+            if (!reservationId) {
+                return res.status(400).json({ message: "Falta reservationId" });
+            }
+
+            const reservation = await ReservationModel.findById(reservationId);
+            if (!reservation) {
+                return res.status(404).json({ message: "Reserva no encontrada" });
+            }
+
+            if (reservation.estado !== 'confirmada') {
+                return res.status(400).json({ message: "Solo se puede finalizar una reserva confirmada" });
+            }
+
+            const attendance = await AttendanceModel.findByReservationId(reservationId);
+            if (!attendance) {
+                return res.status(400).json({ message: "No hay registro de asistencia para esta reserva" });
+            }
+
+            if (attendance.horaSalida) {
+                return res.status(400).json({ message: "La asistencia ya está finalizada" });
+            }
+
+            const now = new Date();
+            await AttendanceModel.setExitByReservation(reservationId, now);
+
+            // Nota: no actualizamos el campo 'estado' a 'finalizada' porque
+            // el enum actual puede no contener ese valor en la BD.
+            // La marca de finalización queda registrada en asistencias.hora_salida
+            return res.json({ message: 'Reserva finalizada por administrador', reservationId, horaSalida: now.toISOString() });
+        } catch (error) {
+            console.error('Error finalizando reserva manualmente:', error);
+            return res.status(500).json({ message: 'Error interno del servidor' });
+        }
+    }
 }
 
 module.exports = CheckInController;

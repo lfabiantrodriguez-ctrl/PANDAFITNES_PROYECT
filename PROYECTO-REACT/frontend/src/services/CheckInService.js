@@ -25,4 +25,20 @@ export class CheckInService {
     }
     return data
   }
+
+  static async finalizeReservation(token, reservationId) {
+    const response = await fetch('/api/admin/checkin/finalize', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ reservationId }),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudo finalizar la reserva')
+    }
+    return data
+  }
 }
