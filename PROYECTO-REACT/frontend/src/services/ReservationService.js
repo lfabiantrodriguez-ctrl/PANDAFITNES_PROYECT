@@ -43,4 +43,15 @@ export class ReservationService {
     }
     return data
   }
+
+  static async getSocioReservations(token, searchString) {
+    const response = await fetch(`/api/reservas/socio?search=${encodeURIComponent(searchString)}`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudieron buscar las reservas del socio')
+    }
+    return data
+  }
 }

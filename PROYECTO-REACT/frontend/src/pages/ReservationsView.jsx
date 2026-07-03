@@ -253,7 +253,7 @@ export default function ReservationsView({ token }) {
             {/* Show notice if reservation was cancelled due to tolerance expiration today */}
             {cancelledTodayReservation && (
               <div className="system-notice warning-notice" style={{ marginBottom: '20px', padding: '16px', borderRadius: '8px' }}>
-                ⚠️ <strong>Reserva cancelada:</strong> Tu reserva de hoy a las {formatTimeString(cancelledTodayReservation.horaEntrada)} fue cancelada automáticamente porque expiró tu tiempo de tolerancia de 15 minutos. De igual manera, puedes realizar una nueva reserva para hoy en un horario diferente.
+                <strong>Reserva cancelada:</strong> Tu reserva de hoy a las {formatTimeString(cancelledTodayReservation.horaEntrada)} fue cancelada automáticamente porque expiró tu tiempo de tolerancia de 15 minutos. De igual manera, puedes realizar una nueva reserva para hoy en un horario diferente.
               </div>
             )}
 
@@ -309,7 +309,9 @@ export default function ReservationsView({ token }) {
                     >
                       <option value="60">60 minutos (1 hora)</option>
                       <option value="90">90 minutos (1.5 horas)</option>
-                      <option value="120">120 minutos (2 horas - Máximo)</option>
+                      <option value="120">120 minutos (2 horas)</option>
+                      <option value="150">150 minutos (2.5 horas)</option>
+                      <option value="180">180 minutos (3 horas - Máximo)</option>
                     </select>
                   </div>
                 </>

@@ -31,6 +31,51 @@ class CapacityController {
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }
+
+    static async getHistoricalCapacity(req, res) {
+        try {
+            const { fecha, hora } = req.query;
+            if (!fecha || !hora) {
+                return res.status(400).json({ message: "Fecha y hora son requeridas" });
+            }
+
+            const targetDatetime = `${fecha} ${hora}:00`;
+
+            const [configRows] = await db.execute(
+                "SELECT valor FROM configuracion WHERE clave = 'max_capacidad' LIMIT 1",
+            );
+            const maximo = configRows[0] ? Number(configRows[0].valor) : 0;
+
+            const [activeRows] = await db.execute(
+                `SELECT COUNT(*) AS total
+                 FROM asistencias
+                 WHERE hora_entrada <= ?
+                   AND (hora_salida IS NULL OR hora_salida > ?)`,
+                [targetDatetime, targetDatetime]
+            );
+
+            const [reservationRows] = await db.execute(
+                `SELECT COUNT(*) AS total
+                 FROM reservas
+                 WHERE estado IN ('pendiente', 'confirmada')
+                   AND hora_entrada <= ?
+                   AND hora_salida > ?`,
+                [targetDatetime, targetDatetime]
+            );
+
+            const actual = Math.max(Number(activeRows[0]?.total || 0), Number(reservationRows[0]?.total || 0));
+
+            return res.json({
+                actual,
+                maximo,
+                fecha,
+                hora,
+            });
+        } catch (error) {
+            console.error("Error consultando aforo histórico:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
 }
 
 module.exports = CapacityController;

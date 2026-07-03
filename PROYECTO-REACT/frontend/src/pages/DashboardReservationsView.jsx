@@ -5,14 +5,6 @@ import { ReservationService } from '../services/ReservationService'
 import { SocioService } from '../services/SocioService'
 import { AttendanceService } from '../services/AttendanceService'
 
-const emptyDashboard = {
-  totalReservations: 0,
-  peakHour: null,
-  peakHours: [],
-  peakCount: 0,
-  hourlyStats: [],
-}
-
 const sections = [
   { key: 'principal', label: 'Principal' },
   { key: 'aforo', label: 'Aforo' },
@@ -21,12 +13,13 @@ const sections = [
 ]
 
 function formatHourLabel(value) {
+  if (value === null || value === undefined) return 'Sin datos'
   return `${String(Number(value)).padStart(2, '0')}:00`
 }
 
 function formatDateTime(value) {
   if (!value) return ''
-  const date = new Date(value)
+  const date = new Date(value.replace ? value.replace(' ', 'T') : value)
   return new Intl.DateTimeFormat('es-ES', {
     day: '2-digit',
     month: '2-digit',
@@ -36,38 +29,53 @@ function formatDateTime(value) {
   }).format(date)
 }
 
+function formatDateOnly(value) {
+  if (!value) return ''
+  const date = new Date(value.replace ? value.replace(' ', 'T') : value)
+  return new Intl.DateTimeFormat('es-ES', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+  }).format(date)
+}
+
+function formatTimeOnly(value) {
+  if (!value) return ''
+  const date = new Date(value.replace ? value.replace(' ', 'T') : value)
+  return new Intl.DateTimeFormat('es-ES', {
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date)
+}
+
 export default function DashboardReservationsView({ token, user }) {
   const isAdmin = user?.rol === 'admin'
   const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
-  const sevenDaysAgo = useMemo(() => {
-    const date = new Date()
-    date.setDate(date.getDate() - 7)
-    return date.toISOString().slice(0, 10)
-  }, [])
 
+  // State shared/administered
   const [activeSection, setActiveSection] = useState('principal')
-  const [range, setRange] = useState({ startDate: sevenDaysAgo, endDate: today })
-  const [reservationDashboard, setReservationDashboard] = useState(emptyDashboard)
   const [capacity, setCapacity] = useState({ actual: 0, maximo: 0, actualizadoEn: null })
   const [clients, setClients] = useState([])
   const [activeClients, setActiveClients] = useState([])
-  const [attendanceCount, setAttendanceCount] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  const sortedHours = useMemo(() => {
-    return [...reservationDashboard.hourlyStats].sort((a, b) => a.hour - b.hour)
-  }, [reservationDashboard.hourlyStats])
+  // State for Socio
+  const [socioReservations, setSocioReservations] = useState([])
+  const [attendanceCount, setAttendanceCount] = useState(0)
 
-  const peakHoursLabel = useMemo(() => {
-    if (reservationDashboard.peakHours.length) {
-      return reservationDashboard.peakHours.map(formatHourLabel).join(', ')
-    }
-    if (reservationDashboard.peakHour !== null) {
-      return formatHourLabel(reservationDashboard.peakHour)
-    }
-    return 'Sin datos'
-  }, [reservationDashboard])
+  // State for Admin Aforo Historial
+  const [historyFilter, setHistoryFilter] = useState({ fecha: today, hora: '10:00' })
+  const [historyResult, setHistoryResult] = useState(null)
+  const [historyLoading, setHistoryLoading] = useState(false)
+  const [historyError, setHistoryError] = useState('')
+
+  // State for Admin Reservas (Today & search by client)
+  const [todayStats, setTodayStats] = useState({ totalReservations: 0, peakHour: null, peakHours: [] })
+  const [searchQuery, setSearchQuery] = useState('')
+  const [searchResult, setSearchResult] = useState(null) // { user, reservas }
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchError, setSearchError] = useState('')
 
   const occupancyPercent = useMemo(() => {
     if (!capacity.maximo) return 0
@@ -77,47 +85,31 @@ export default function DashboardReservationsView({ token, user }) {
   const totalClients = clients.length
   const totalActiveClients = activeClients.length
 
-  const summaryCards = [
-    {
-      label: 'Clientes totales',
-      value: totalClients,
-      description: 'Número de socios registrados en el gimnasio.',
-    },
-    {
-      label: 'Clientes en sala',
-      value: totalActiveClients,
-      description: 'Usuarios con entrada activa actualmente.',
-    },
-    {
-      label: 'Reservas en rango',
-      value: reservationDashboard.totalReservations,
-      description: 'Reservas confirmadas y pendientes dentro del rango seleccionado.',
-    },
-    {
-      label: 'Ocupación actual',
-      value: `${occupancyPercent}%`,
-      description: `Capacidad utilizada de ${capacity.maximo || 0} personas.`,
-    },
-  ]
+  // Personal peak hour calculation on client side
+  const personalPeakHour = useMemo(() => {
+    if (!socioReservations.length) return 'Sin datos'
+    const hoursCount = {}
+    socioReservations.forEach((r) => {
+      if (!r.horaEntrada || r.estado === 'cancelada' || r.estado === 'no_show') return
+      const date = new Date(r.horaEntrada.replace(' ', 'T'))
+      if (Number.isNaN(date.getTime())) return
+      const hour = date.getHours()
+      hoursCount[hour] = (hoursCount[hour] || 0) + 1
+    })
 
-  const dashboardCards = [
-    {
-      label: 'Reservas totales',
-      value: reservationDashboard.totalReservations,
-      description: 'Cantidad de reservas en el periodo seleccionado.',
-    },
-    {
-      label: 'Hora pico',
-      value: peakHoursLabel,
-      description: 'Horas con mayor número de reservas.',
-    },
-    {
-      label: 'Reservas pico',
-      value: reservationDashboard.peakCount,
-      description: 'Reservas en la hora con mayor demanda.',
-    },
-  ]
+    let maxHour = null
+    let maxCount = 0
+    Object.entries(hoursCount).forEach(([h, count]) => {
+      if (count > maxCount) {
+        maxCount = count
+        maxHour = Number(h)
+      }
+    })
 
+    return maxHour !== null ? `${String(maxHour).padStart(2, '0')}:00` : 'Sin datos'
+  }, [socioReservations])
+
+  // Load all dashboard data
   const loadDashboardData = useCallback(async () => {
     if (!token) return
 
@@ -125,21 +117,13 @@ export default function DashboardReservationsView({ token, user }) {
     setError('')
 
     try {
-      const reservationData = await ReservationService.getReservationDashboard(token, range)
-
-      setReservationDashboard({
-        totalReservations: reservationData.totalReservations ?? 0,
-        peakHour: reservationData.peakHour ?? null,
-        peakHours: Array.isArray(reservationData.peakHours) ? reservationData.peakHours : [],
-        peakCount: reservationData.peakCount ?? 0,
-        hourlyStats: Array.isArray(reservationData.hourlyStats) ? reservationData.hourlyStats : [],
-      })
-
       if (isAdmin) {
-        const [capacityData, socioData, attendanceData] = await Promise.all([
+        // Load admin general parameters
+        const [capacityData, socioData, attendanceData, todayReservationsData] = await Promise.all([
           CapacityService.getCapacity(),
           SocioService.getSocios(token),
           AttendanceService.getActiveClients(token),
+          ReservationService.getReservationDashboard(token, { startDate: today, endDate: today }),
         ])
 
         setCapacity({
@@ -150,8 +134,21 @@ export default function DashboardReservationsView({ token, user }) {
 
         setClients(Array.isArray(socioData.socios) ? socioData.socios : [])
         setActiveClients(Array.isArray(attendanceData.clients) ? attendanceData.clients : [])
+        
+        // Reservas de hoy stats
+        setTodayStats({
+          totalReservations: todayReservationsData.totalReservations ?? 0,
+          peakHour: todayReservationsData.peakHour ?? null,
+          peakHours: Array.isArray(todayReservationsData.peakHours) ? todayReservationsData.peakHours : [],
+        })
       } else {
-        const attendanceSummary = await AttendanceService.getUserAttendanceSummary(token)
+        // Load socio specific data
+        const [reservationsData, attendanceSummary] = await Promise.all([
+          ReservationService.getMyReservations(token),
+          AttendanceService.getUserAttendanceSummary(token),
+        ])
+
+        setSocioReservations(Array.isArray(reservationsData.reservas) ? reservationsData.reservas : [])
         setAttendanceCount(Number(attendanceSummary.attendanceCount || 0))
       }
     } catch (loadError) {
@@ -159,331 +156,292 @@ export default function DashboardReservationsView({ token, user }) {
     } finally {
       setLoading(false)
     }
-  }, [token, range])
+  }, [token, isAdmin, today])
 
   useEffect(() => {
     loadDashboardData()
   }, [loadDashboardData])
 
-  const clientSummaryCards = [
-    {
-      label: 'Reservas totales',
-      value: reservationDashboard.totalReservations,
-      description: 'Reservas realizadas por ti en el rango seleccionado.',
-    },
-    {
-      label: 'Veces asistido',
-      value: attendanceCount,
-      description: 'Accesos registrados al gimnasio como socio.',
-    },
-    {
-      label: 'Hora pico personal',
-      value: peakHoursLabel,
-      description: 'Horas con más reservas personales.',
-    },
-  ]
+  // Admin historical capacity handler
+  async function handleHistoryQuery(event) {
+    event.preventDefault()
+    if (!historyFilter.fecha || !historyFilter.hora) {
+      setHistoryError('Por favor seleccione una fecha y hora válidas')
+      return
+    }
 
-  function renderPrincipal() {
+    setHistoryLoading(true)
+    setHistoryError('')
+    setHistoryResult(null)
+
+    try {
+      const data = await CapacityService.getHistoricalCapacity(historyFilter.fecha, historyFilter.hora)
+      setHistoryResult(data)
+    } catch (err) {
+      setHistoryError(err.message || 'Error al consultar el aforo histórico')
+    } finally {
+      setHistoryLoading(false)
+    }
+  }
+
+  // Admin search reservations by client DNI or Name handler
+  async function handleSearchClient(event) {
+    event.preventDefault()
+    const query = searchQuery.trim()
+    if (!query) {
+      setSearchError('Por favor ingrese el DNI o nombre del socio')
+      return
+    }
+
+    setSearchLoading(true)
+    setSearchError('')
+    setSearchResult(null)
+
+    try {
+      const data = await ReservationService.getSocioReservations(token, query)
+      setSearchResult({
+        user: data.user,
+        reservas: Array.isArray(data.reservas) ? data.reservas : [],
+      })
+    } catch (err) {
+      setSearchError(err.message || 'No se encontraron reservas para el socio ingresado')
+    } finally {
+      setSearchLoading(false)
+    }
+  }
+
+  // Map state tags
+  function getDisplayStatus(estado) {
+    if (estado === 'confirmada') {
+      return { label: 'Finalizada', className: 'badge-valid' }
+    }
+    if (estado === 'pendiente') {
+      return { label: 'Pendiente', className: 'badge-warning', style: { background: '#fef3c7', color: '#d97706' } }
+    }
+    return { label: 'Cancelada', className: 'badge-alert' }
+  }
+
+  // Calculate duration in minutes
+  function getDurationInMinutes(entryStr, exitStr) {
+    if (!entryStr || !exitStr) return 'N/A'
+    const entry = new Date(entryStr.replace(' ', 'T'))
+    const exit = new Date(exitStr.replace(' ', 'T'))
+    if (Number.isNaN(entry.getTime()) || Number.isNaN(exit.getTime())) return 'N/A'
+    const diffMs = exit.getTime() - entry.getTime()
+    return `${Math.round(diffMs / 60000)} min`
+  }
+
+  // -----------------------------------------------------------------
+  // ADMIN RENDER VIEWS
+  // -----------------------------------------------------------------
+
+  function renderPrincipalAdmin() {
     return (
-      <>
-        <div className="dashboard-cards-row dashboard-summary-row">
-          {summaryCards.map((card) => (
-            <article key={card.label} className="dashboard-info-card">
-              <span className="dashboard-info-label">{card.label}</span>
-              <strong className="dashboard-info-value">{card.value}</strong>
-              <p className="dashboard-info-text">{card.description}</p>
-            </article>
-          ))}
-        </div>
+      <div className="dashboard-cards-row dashboard-summary-row" style={{ marginTop: '16px' }}>
+        <article className="dashboard-info-card">
+          <span className="dashboard-info-label">Clientes Totales</span>
+          <strong className="dashboard-info-value">{totalClients}</strong>
+          <p className="dashboard-info-text">Socios registrados en la base de datos.</p>
+        </article>
 
-        <div className="dashboard-panel dashboard-panel-top">
-          <div className="dashboard-panel-header">
-            <div>
-              <h2 className="dashboard-panel-title">Resumen de actividad</h2>
-              <p className="dashboard-panel-subtitle">
-                Estos indicadores muestran el estado del gimnasio en el rango seleccionado.
-              </p>
-            </div>
-          </div>
+        <article className="dashboard-info-card">
+          <span className="dashboard-info-label">Clientes en Sala</span>
+          <strong className="dashboard-info-value">{totalActiveClients}</strong>
+          <p className="dashboard-info-text">Usuarios entrenando en sala en este momento.</p>
+        </article>
 
-          <div className="dashboard-range-picker dashboard-range-picker-full">
-            <div className="dashboard-range-item">
-              <span className="element-label">Fecha inicial</span>
-              <input
-                className="input-field"
-                type="date"
-                value={range.startDate}
-                onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))}
-              />
-            </div>
-            <div className="dashboard-range-item">
-              <span className="element-label">Fecha final</span>
-              <input
-                className="input-field"
-                type="date"
-                value={range.endDate}
-                onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="dashboard-grid">
-          <section className="dashboard-chart-panel">
-            <div className="dashboard-panel-header dashboard-chart-panel-header">
-              <div>
-                <h2 className="dashboard-panel-title">Tendencia de reservas por hora</h2>
-                <p className="dashboard-panel-subtitle">
-                  El comportamiento por hora muestra la carga de reservas en el periodo seleccionado.
-                </p>
-              </div>
-            </div>
-
-            {loading ? (
-              <p className="form-error">Cargando datos...</p>
-            ) : sortedHours.length ? (
-              <div className="dashboard-chart">
-                {sortedHours.map((item) => (
-                  <div key={item.hour} className="dashboard-chart-row">
-                    <span className="dashboard-chart-label">{formatHourLabel(item.hour)}</span>
-                    <div className="dashboard-chart-bar-wrapper">
-                      <div
-                        className="dashboard-chart-bar"
-                        style={{ width: `${Math.max(12, (item.count / Math.max(reservationDashboard.peakCount, 1)) * 100)}%` }}
-                      />
-                    </div>
-                    <strong className="dashboard-chart-value">{item.count}</strong>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className="form-error">No hay datos para esta vista.</p>
-            )}
-          </section>
-
-          <aside className="dashboard-metrics-panel">
-            <div className="dashboard-panel-header">
-              <h2 className="dashboard-panel-title">Indicadores clave</h2>
-            </div>
-            <div className="dashboard-detail-block">
-              <span className="dashboard-detail-label">Clientes activos ahora</span>
-              <p className="dashboard-detail-value">{totalActiveClients}</p>
-            </div>
-            <div className="dashboard-detail-block">
-              <span className="dashboard-detail-label">Capacidad actual</span>
-              <p className="dashboard-detail-value">{capacity.actual}/{capacity.maximo}</p>
-            </div>
-            <div className="dashboard-detail-block">
-              <span className="dashboard-detail-label">Ultima actualización</span>
-              <p className="dashboard-detail-text">{capacity.actualizadoEn ? formatDateTime(capacity.actualizadoEn) : 'Sin datos'}</p>
-            </div>
-          </aside>
-        </div>
-      </>
+        <article className="dashboard-info-card">
+          <span className="dashboard-info-label">Ocupación Actual</span>
+          <strong className="dashboard-info-value">{occupancyPercent}%</strong>
+          <p className="dashboard-info-text">Capacidad utilizada de {capacity.maximo} personas.</p>
+        </article>
+      </div>
     )
   }
 
-  function renderAforo() {
+  function renderAforoAdmin() {
+    const historicalPercent = historyResult && historyResult.maximo 
+      ? Math.min(100, Math.round((historyResult.actual / historyResult.maximo) * 100))
+      : 0;
+
     return (
-      <>
-        <div className="dashboard-panel dashboard-panel-top">
-          <div className="dashboard-panel-header">
-            <div>
-              <h2 className="dashboard-panel-title">Aforo y ocupación</h2>
-              <p className="dashboard-panel-subtitle">
-                Consulta cuántas personas hay dentro del gimnasio y cómo se comporta la demanda a lo largo del día.
-              </p>
-            </div>
-            <div className="dashboard-summary-meta">
-              <span>Actual: {capacity.actual}</span>
-              <span> / </span>
-              <span>Máximo: {capacity.maximo}</span>
-            </div>
-          </div>
+      <div style={{ display: 'grid', gap: '24px', marginTop: '16px' }}>
+        {/* Real-time capacity */}
+        <section className="dashboard-panel">
+          <h2 className="dashboard-panel-title">Aforo en tiempo real</h2>
+          <p className="dashboard-panel-subtitle">Control actual de afluencia de personas en el local.</p>
 
-          <div className="dashboard-range-picker dashboard-range-picker-full">
+          <div className="dashboard-cards-row" style={{ marginTop: '12px' }}>
+            <article className="dashboard-info-card">
+              <span className="dashboard-info-label">Ocupación Total</span>
+              <strong className="dashboard-info-value">{capacity.actual} / {capacity.maximo}</strong>
+              <p className="dashboard-info-text">Personas activas en sala en este instante.</p>
+            </article>
+
+            <article className="dashboard-info-card">
+              <span className="dashboard-info-label">Porcentaje de Uso</span>
+              <strong className="dashboard-info-value">{occupancyPercent}%</strong>
+              <p className="dashboard-info-text">Porcentaje de aforo máximo alcanzado.</p>
+            </article>
+          </div>
+        </section>
+
+        {/* Historical capacity */}
+        <section className="dashboard-panel">
+          <h2 className="dashboard-panel-title">Historial de Aforo</h2>
+          <p className="dashboard-panel-subtitle">Consulta cuánta ocupación hubo en una fecha y hora específicas.</p>
+
+          <form onSubmit={handleHistoryQuery} className="dashboard-range-picker" style={{ margin: '16px 0', gap: '16px' }}>
             <div className="dashboard-range-item">
-              <span className="element-label">Fecha inicial</span>
+              <span className="element-label">Día</span>
               <input
                 className="input-field"
                 type="date"
-                value={range.startDate}
-                onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))}
+                value={historyFilter.fecha}
+                onChange={(event) => setHistoryFilter(prev => ({ ...prev, fecha: event.target.value }))}
+                required
               />
             </div>
             <div className="dashboard-range-item">
-              <span className="element-label">Fecha final</span>
+              <span className="element-label">Hora</span>
               <input
                 className="input-field"
-                type="date"
-                value={range.endDate}
-                onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))}
+                type="time"
+                value={historyFilter.hora}
+                onChange={(event) => setHistoryFilter(prev => ({ ...prev, hora: event.target.value }))}
+                required
               />
             </div>
-          </div>
-        </div>
+            <button className="action-btn btn-dark" type="submit" disabled={historyLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
+              {historyLoading ? 'Consultando...' : 'Consultar'}
+            </button>
+          </form>
 
-        <div className="dashboard-cards-row">
-          <article className="dashboard-info-card">
-            <span className="dashboard-info-label">Ocupación total</span>
-            <strong className="dashboard-info-value">{capacity.actual}/{capacity.maximo}</strong>
-            <p className="dashboard-info-text">Personas dentro del gimnasio en este momento.</p>
-          </article>
-          <article className="dashboard-info-card">
-            <span className="dashboard-info-label">Porcentaje de uso</span>
-            <strong className="dashboard-info-value">{occupancyPercent}%</strong>
-            <p className="dashboard-info-text">Porcentaje de la capacidad disponible utilizada actualmente.</p>
-          </article>
-          <article className="dashboard-info-card">
-            <span className="dashboard-info-label">Clientes registrados</span>
-            <strong className="dashboard-info-value">{totalClients}</strong>
-            <p className="dashboard-info-text">Número total de socios en la base de datos.</p>
-          </article>
-        </div>
+          {historyError && <p className="form-error">{historyError}</p>}
 
-        <div className="dashboard-panel">
-          <div className="dashboard-panel-header dashboard-chart-panel-header">
-            <div>
-              <h2 className="dashboard-panel-title">Actividad de reserva por hora</h2>
-              <p className="dashboard-panel-subtitle">
-                El gráfico muestra las reservas confirmadas y pendientes dentro del rango seleccionado.
+          {historyResult && (
+            <div className="system-notice success-notice" style={{ marginTop: '12px', padding: '16px', borderRadius: '8px' }}>
+              <h4>📊 Aforo en el momento seleccionado:</h4>
+              <p style={{ fontSize: '1.2em', margin: '8px 0 0 0' }}>
+                Ocupación registrada: <strong>{historyResult.actual} / {historyResult.maximo}</strong> personas (<strong>{historicalPercent}%</strong>).
               </p>
             </div>
-          </div>
-
-          {loading ? (
-            <p className="form-error">Cargando datos de aforo...</p>
-          ) : sortedHours.length ? (
-            <div className="dashboard-chart">
-              {sortedHours.map((item) => (
-                <div key={item.hour} className="dashboard-chart-row">
-                  <span className="dashboard-chart-label">{formatHourLabel(item.hour)}</span>
-                  <div className="dashboard-chart-bar-wrapper">
-                    <div
-                      className="dashboard-chart-bar"
-                      style={{ width: `${Math.max(12, (item.count / Math.max(reservationDashboard.peakCount, 1)) * 100)}%` }}
-                    />
-                  </div>
-                  <strong className="dashboard-chart-value">{item.count}</strong>
-                </div>
-              ))}
-            </div>
-          ) : (
-            <p className="form-error">No hay reservas activas en ese rango.</p>
           )}
-        </div>
-      </>
+        </section>
+      </div>
     )
   }
 
-  function renderReservas() {
+  function renderReservasAdmin() {
+    const formattedPeakHour = todayStats.peakHours.length > 0
+      ? todayStats.peakHours.map(formatHourLabel).join(', ')
+      : todayStats.peakHour !== null
+        ? formatHourLabel(todayStats.peakHour)
+        : 'Sin datos';
+
     return (
-      <>
-        <div className="dashboard-panel dashboard-panel-top">
-          <div className="dashboard-panel-header">
-            <div>
-              <h2 className="dashboard-panel-title">Reservas</h2>
-              <p className="dashboard-panel-subtitle">
-                Visualiza el detalle de horas pico y el comportamiento de las reservas.
-              </p>
-            </div>
-          </div>
+      <div style={{ display: 'grid', gap: '24px', marginTop: '16px' }}>
+        {/* Today stats */}
+        <section className="dashboard-panel">
+          <h2 className="dashboard-panel-title">Reservas para el día de hoy</h2>
+          <p className="dashboard-panel-subtitle">Resumen diario del flujo programado de visitas.</p>
 
-          <div className="dashboard-range-picker dashboard-range-picker-full">
-            <div className="dashboard-range-item">
-              <span className="element-label">Fecha inicial</span>
-              <input
-                className="input-field"
-                type="date"
-                value={range.startDate}
-                onChange={(event) => setRange((current) => ({ ...current, startDate: event.target.value }))}
-              />
-            </div>
-            <div className="dashboard-range-item">
-              <span className="element-label">Fecha final</span>
-              <input
-                className="input-field"
-                type="date"
-                value={range.endDate}
-                onChange={(event) => setRange((current) => ({ ...current, endDate: event.target.value }))}
-              />
-            </div>
-          </div>
-        </div>
-
-        <div className="dashboard-cards-row">
-          {dashboardCards.map((card) => (
-            <article key={card.label} className="dashboard-info-card">
-              <span className="dashboard-info-label">{card.label}</span>
-              <strong className="dashboard-info-value">{card.value}</strong>
-              <p className="dashboard-info-text">{card.description}</p>
+          <div className="dashboard-cards-row" style={{ marginTop: '12px' }}>
+            <article className="dashboard-info-card">
+              <span className="dashboard-info-label">Reservas Totales Hoy</span>
+              <strong className="dashboard-info-value">{todayStats.totalReservations}</strong>
+              <p className="dashboard-info-text">Cantidad de reservas activas o realizadas para el día de hoy.</p>
             </article>
-          ))}
-        </div>
 
-        <div className="dashboard-grid">
-          <section className="dashboard-chart-panel">
-            {loading ? (
-              <p className="form-error">Cargando reservas...</p>
-            ) : sortedHours.length ? (
-              <div className="dashboard-chart">
-                {sortedHours.map((item) => (
-                  <div key={item.hour} className="dashboard-chart-row">
-                    <span className="dashboard-chart-label">{formatHourLabel(item.hour)}</span>
-                    <div className="dashboard-chart-bar-wrapper">
-                      <div
-                        className="dashboard-chart-bar"
-                        style={{ width: `${Math.max(12, (item.count / Math.max(reservationDashboard.peakCount, 1)) * 100)}%` }}
-                      />
-                    </div>
-                    <strong className="dashboard-chart-value">{item.count}</strong>
-                  </div>
-                ))}
+            <article className="dashboard-info-card">
+              <span className="dashboard-info-label">Hora Pico</span>
+              <strong className="dashboard-info-value">{formattedPeakHour}</strong>
+              <p className="dashboard-info-text">Horas con mayor cantidad de visitas reservadas.</p>
+            </article>
+          </div>
+        </section>
+
+        {/* History by client */}
+        <section className="dashboard-panel">
+          <h2 className="dashboard-panel-title">Historial de reserva por cliente</h2>
+          <p className="dashboard-panel-subtitle">Busca todas las reservas realizadas por un socio en el sistema.</p>
+
+          <form onSubmit={handleSearchClient} className="dashboard-range-picker" style={{ margin: '16px 0', gap: '16px' }}>
+            <div className="dashboard-range-item" style={{ flex: 1 }}>
+              <span className="element-label">DNI o Nombre del socio</span>
+              <input
+                className="input-field"
+                type="text"
+                placeholder="Ingrese DNI (8 dígitos) o nombre completo del socio"
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                required
+              />
+            </div>
+            <button className="action-btn btn-dark" type="submit" disabled={searchLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
+              {searchLoading ? 'Buscando...' : 'Buscar'}
+            </button>
+          </form>
+
+          {searchError && <p className="form-error">{searchError}</p>}
+
+          {searchResult && (
+            <div style={{ marginTop: '16px', display: 'grid', gap: '16px' }}>
+              {/* Socio card detail (Sugerencia implementada) */}
+              <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px' }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#111827' }}>Socio Encontrado:</h4>
+                <p style={{ margin: '4px 0' }}><strong>Nombre:</strong> {searchResult.user.nombre} {searchResult.user.apellido}</p>
+                <p style={{ margin: '4px 0' }}><strong>DNI:</strong> {searchResult.user.dni} | <strong>Email:</strong> {searchResult.user.email}</p>
               </div>
-            ) : (
-              <p className="form-error">No hay datos de reservas para ese rango.</p>
-            )}
-          </section>
 
-          <aside className="dashboard-metrics-panel">
-            <div className="dashboard-panel-header">
-              <h2 className="dashboard-panel-title">Detalle de picos</h2>
+              {/* Table */}
+              <div className="table-frame">
+                <table className="corporate-table">
+                  <thead>
+                    <tr>
+                      <th>Día</th>
+                      <th>Hora Ingreso</th>
+                      <th>Hora Salida</th>
+                      <th>Duración</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {searchResult.reservas.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '12px' }}>El socio no registra reservas históricas.</td>
+                      </tr>
+                    ) : (
+                      searchResult.reservas.map((r) => {
+                        const statusObj = getDisplayStatus(r.estado)
+                        return (
+                          <tr key={r.id}>
+                            <td>{formatDateOnly(r.horaEntrada)}</td>
+                            <td>{formatTimeOnly(r.horaEntrada)}</td>
+                            <td>{formatTimeOnly(r.horaSalida)}</td>
+                            <td>{getDurationInMinutes(r.horaEntrada, r.horaSalida)}</td>
+                            <td>
+                              <span className={`badge-status ${statusObj.className}`} style={statusObj.style || {}}>
+                                {statusObj.label}
+                              </span>
+                            </td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-
-            <div className="dashboard-detail-block">
-              <span className="dashboard-detail-label">Horas pico</span>
-              <p className="dashboard-detail-value">{peakHoursLabel}</p>
-            </div>
-
-            <div className="dashboard-detail-block">
-              <span className="dashboard-detail-label">Reservas en hora pico</span>
-              <p className="dashboard-detail-value">{reservationDashboard.peakCount}</p>
-            </div>
-
-            <div className="dashboard-detail-block">
-              <span className="dashboard-detail-label">Rango analizado</span>
-              <p className="dashboard-detail-text">{range.startDate} → {range.endDate}</p>
-            </div>
-          </aside>
-        </div>
-      </>
+          )}
+        </section>
+      </div>
     )
   }
 
-  function renderClientes() {
+  function renderClientesAdmin() {
     return (
-      <>
-        <div className="dashboard-panel dashboard-panel-top">
-          <div className="dashboard-panel-header">
-            <div>
-              <h2 className="dashboard-panel-title">Clientes en sala</h2>
-              <p className="dashboard-panel-subtitle">
-                Usuarios que actualmente se encuentran dentro del gimnasio con su hora de ingreso.
-              </p>
-            </div>
-          </div>
-        </div>
-
+      <div style={{ marginTop: '16px' }}>
         <div className="dashboard-panel dashboard-panel-top">
           <div className="table-frame">
             <table className="corporate-table">
@@ -518,9 +476,94 @@ export default function DashboardReservationsView({ token, user }) {
             </table>
           </div>
         </div>
-      </>
+      </div>
     )
   }
+
+  // -----------------------------------------------------------------
+  // SOCIO RENDER VIEWS
+  // -----------------------------------------------------------------
+
+  function renderSocioView() {
+    return (
+      <div style={{ display: 'grid', gap: '24px', marginTop: '16px' }}>
+        {/* KPI Cards summary */}
+        <div className="dashboard-cards-row dashboard-summary-row">
+          <article className="dashboard-info-card">
+            <span className="dashboard-info-label">Total de Reservas</span>
+            <strong className="dashboard-info-value">{socioReservations.length}</strong>
+            <p className="dashboard-info-text">Reservas totales agendadas en tu historial.</p>
+          </article>
+
+          <article className="dashboard-info-card">
+            <span className="dashboard-info-label">Veces Asistido</span>
+            <strong className="dashboard-info-value">{attendanceCount}</strong>
+            <p className="dashboard-info-text">Accesos confirmados en la recepción del gimnasio.</p>
+          </article>
+
+          <article className="dashboard-info-card">
+            <span className="dashboard-info-label">Hora Pico Personal</span>
+            <strong className="dashboard-info-value">{personalPeakHour}</strong>
+            <p className="dashboard-info-text">Tu horario preferido para entrenar.</p>
+          </article>
+        </div>
+
+        {/* Reservas list table */}
+        <section className="dashboard-panel">
+          <h2 className="dashboard-panel-title">Mis Reservas</h2>
+          <p className="dashboard-panel-subtitle">Historial completo y estado de tus agendas registradas.</p>
+
+          <div className="table-frame" style={{ marginTop: '16px' }}>
+            <table className="corporate-table">
+              <thead>
+                <tr>
+                  <th>Día</th>
+                  <th>Hora Ingreso</th>
+                  <th>Hora Salida</th>
+                  <th>Duración</th> {/* Sugerencia implementada */}
+                  <th>Creado el</th> {/* Sugerencia implementada */}
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                {loading ? (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '12px' }}>Cargando reservas...</td>
+                  </tr>
+                ) : socioReservations.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '12px' }}>Aún no has registrado ninguna reserva.</td>
+                  </tr>
+                ) : (
+                  socioReservations.map((r) => {
+                    const statusObj = getDisplayStatus(r.estado)
+                    return (
+                      <tr key={r.id}>
+                        <td>{formatDateOnly(r.horaEntrada)}</td>
+                        <td>{formatTimeOnly(r.horaEntrada)}</td>
+                        <td>{formatTimeOnly(r.horaSalida)}</td>
+                        <td>{getDurationInMinutes(r.horaEntrada, r.horaSalida)}</td>
+                        <td>{formatDateTime(r.creadoEn)}</td>
+                        <td>
+                          <span className={`badge-status ${statusObj.className}`} style={statusObj.style || {}}>
+                            {statusObj.label}
+                          </span>
+                        </td>
+                      </tr>
+                    )
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    )
+  }
+
+  // -----------------------------------------------------------------
+  // MAIN RETURN RENDER
+  // -----------------------------------------------------------------
 
   return (
     <>
@@ -550,77 +593,13 @@ export default function DashboardReservationsView({ token, user }) {
               ))}
             </div>
 
-            {activeSection === 'principal' && renderPrincipal()}
-            {activeSection === 'aforo' && renderAforo()}
-            {activeSection === 'reservas' && renderReservas()}
-            {activeSection === 'clientes' && renderClientes()}
+            {activeSection === 'principal' && renderPrincipalAdmin()}
+            {activeSection === 'aforo' && renderAforoAdmin()}
+            {activeSection === 'reservas' && renderReservasAdmin()}
+            {activeSection === 'clientes' && renderClientesAdmin()}
           </>
         ) : (
-          <>
-            <div className="dashboard-cards-row dashboard-summary-row">
-              {clientSummaryCards.map((card) => (
-                <article key={card.label} className="dashboard-info-card">
-                  <span className="dashboard-info-label">{card.label}</span>
-                  <strong className="dashboard-info-value">{card.value}</strong>
-                  <p className="dashboard-info-text">{card.description}</p>
-                </article>
-              ))}
-            </div>
-
-            <div className="dashboard-panel dashboard-panel-top">
-              <div className="dashboard-panel-header">
-                <div>
-                  <h2 className="dashboard-panel-title">Tu actividad personal</h2>
-                  <p className="dashboard-panel-subtitle">
-                    Estas métricas son solo de tus reservas y tu asistencia.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="dashboard-grid">
-              <section className="dashboard-chart-panel">
-                {loading ? (
-                  <p className="form-error">Cargando datos...</p>
-                ) : sortedHours.length ? (
-                  <div className="dashboard-chart">
-                    {sortedHours.map((item) => (
-                      <div key={item.hour} className="dashboard-chart-row">
-                        <span className="dashboard-chart-label">{formatHourLabel(item.hour)}</span>
-                        <div className="dashboard-chart-bar-wrapper">
-                          <div
-                            className="dashboard-chart-bar"
-                            style={{ width: `${Math.max(12, (item.count / Math.max(reservationDashboard.peakCount, 1)) * 100)}%` }}
-                          />
-                        </div>
-                        <strong className="dashboard-chart-value">{item.count}</strong>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="form-error">Aun no tienes reservas en el rango seleccionado.</p>
-                )}
-              </section>
-
-              <aside className="dashboard-metrics-panel">
-                <div className="dashboard-panel-header">
-                  <h2 className="dashboard-panel-title">Tu historial</h2>
-                </div>
-                <div className="dashboard-detail-block">
-                  <span className="dashboard-detail-label">Total de reservas</span>
-                  <p className="dashboard-detail-value">{reservationDashboard.totalReservations}</p>
-                </div>
-                <div className="dashboard-detail-block">
-                  <span className="dashboard-detail-label">Veces asistido</span>
-                  <p className="dashboard-detail-value">{attendanceCount}</p>
-                </div>
-                <div className="dashboard-detail-block">
-                  <span className="dashboard-detail-label">Horas pico</span>
-                  <p className="dashboard-detail-text">{peakHoursLabel}</p>
-                </div>
-              </aside>
-            </div>
-          </>
+          renderSocioView()
         )}
       </section>
     </>
