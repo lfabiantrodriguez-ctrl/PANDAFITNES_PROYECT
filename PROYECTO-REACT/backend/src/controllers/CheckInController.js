@@ -22,7 +22,7 @@ function parseSearchCode(code) {
         return { type: "id", value: numeric };
     }
 
-    return null;
+    return { type: "name", value: normalized };
 }
 
 function getStatus(now, entryTime, exitTime) {
@@ -69,16 +69,21 @@ class CheckInController {
                 return res.status(400).json({ message: "Codigo de socio o DNI invalido" });
             }
 
-            const user = lookup.type === "dni"
-                ? await UserModel.findActiveByDni(lookup.value)
-                : await UserModel.findActiveById(Number(lookup.value));
+            let user = null;
+            if (lookup.type === "dni") {
+                user = await UserModel.findActiveByDni(lookup.value);
+            } else if (lookup.type === "id") {
+                user = await UserModel.findActiveById(Number(lookup.value));
+            } else {
+                user = await UserModel.findActiveByName(lookup.value);
+            }
 
             if (!user) {
                 return res.status(404).json({ message: "Socio no encontrado" });
             }
 
             const reservation = await ReservationModel.findActiveForCheckIn(user.id);
-            const history = await ReservationModel.findRecentByUser(user.id, 5);
+            const history = await ReservationModel.getByUser(user.id);
 
             if (!reservation && history.length === 0) {
                 return res.status(404).json({ message: "No hay reservas activas ni historial para este socio" });

@@ -55,14 +55,14 @@ export default function CheckInView({ token }) {
       />
       <div className="two-column">
         <section className="stat-card">
-          <label className="element-label" htmlFor="member-search">Escanear codigo de socio o DNI</label>
+          <label className="element-label" htmlFor="member-search">Escanear DNI o nombre</label>
           <input
             id="member-search"
             className="input-field"
             type="text"
             value={code}
             onChange={(event) => setCode(event.target.value)}
-            placeholder="DNI o codigo de socio"
+            placeholder="DNI o nombre completo"
           />
           <button className="action-btn btn-dark btn-full" type="button" disabled={status.loading || !code.trim()} onClick={handleLookup}>
             {status.loading ? 'Buscando...' : 'Consultar Reserva'}
@@ -72,56 +72,88 @@ export default function CheckInView({ token }) {
         </section>
 
         <section className="stat-card highlighted">
-          {reservation && user ? (
+          {user ? (
             <>
               <div className="member-result-heading">
                 <div>
                   <h3>{user.nombre} {user.apellido}</h3>
                   <span>Socio ID: #{user.id}</span>
                 </div>
-                <span className={`badge-status ${checkInStatus?.valid ? 'badge-valid' : 'badge-warning'}`}>
-                  {checkInStatus?.label}
-                </span>
+                {reservation ? (
+                  <span className={`badge-status ${checkInStatus?.valid ? 'badge-valid' : 'badge-warning'}`}>
+                    {checkInStatus?.label}
+                  </span>
+                ) : (
+                  <span className="badge-status badge-warning">
+                    Sin reserva activa
+                  </span>
+                )}
               </div>
-              <div className="system-box">
-                <p>Hora programada: <strong>{new Date(reservation.horaEntrada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</strong></p>
-                <p>Hora actual: <strong>{new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</strong></p>
-                <p>Estado de tolerancia: <strong className={checkInStatus?.valid ? 'text-success' : 'text-warning'}>{checkInStatus?.detail}</strong></p>
-              </div>
-              <button
-                className="action-btn btn-emerald btn-full"
-                type="button"
-                onClick={handleConfirm}
-                disabled={!canConfirm || status.loading}
-              >
-                Confirmar Entrada
-              </button>
 
-              {history.length > 0 && (
-                <section className="history-panel">
-                  <h3 className="section-title">Historial de Reservas</h3>
-                  <div className="history-list">
-                    {history.map((item) => (
-                      <div key={item.id} className="history-item">
-                        <strong>{new Date(item.horaEntrada).toLocaleDateString('es-PE')} {new Date(item.horaEntrada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</strong>
-                        <span>{new Date(item.horaSalida).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</span>
-                        <span className={`history-status ${item.estado === 'confirmada' ? 'text-success' : item.estado === 'pendiente' ? 'text-warning' : 'text-danger'}`}>
-                          {item.estado}
-                        </span>
-                      </div>
-                    ))}
+              {reservation ? (
+                <>
+                  <div className="system-box">
+                    <p>Hora programada: <strong>{new Date(reservation.horaEntrada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</strong></p>
+                    <p>Hora actual: <strong>{new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</strong></p>
+                    <p>Estado de tolerancia: <strong className={checkInStatus?.valid ? 'text-success' : 'text-warning'}>{checkInStatus?.detail}</strong></p>
                   </div>
-                </section>
+                  <button
+                    className="action-btn btn-emerald btn-full"
+                    type="button"
+                    onClick={handleConfirm}
+                    disabled={!canConfirm || status.loading}
+                  >
+                    Confirmar Entrada
+                  </button>
+                </>
+              ) : (
+                <div className="system-box">
+                  <p>No se encontró una reserva activa para este socio.</p>
+                  <p>Revisa su historial de reservas o intenta con otro código.</p>
+                </div>
               )}
+
             </>
           ) : (
             <div className="system-box">
               <p>No hay datos de reserva cargados.</p>
-              <p>Busca un socio por DNI o codigo para ver su reserva.</p>
+              <p>Busca un socio por DNI para ver su reserva.</p>
             </div>
           )}
         </section>
       </div>
+
+      <section className="stat-card table-frame">
+        <h3 className="section-title">Historial completo de reservas</h3>
+        {history.length > 0 ? (
+          <table className="corporate-table">
+            <thead>
+              <tr>
+                <th>Fecha</th>
+                <th>Hora inicio</th>
+                <th>Hora fin</th>
+                <th>Estado</th>
+              </tr>
+            </thead>
+            <tbody>
+              {history.map((item) => (
+                <tr key={item.id}>
+                  <td>{new Date(item.horaEntrada).toLocaleDateString('es-PE')}</td>
+                  <td>{new Date(item.horaEntrada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td>{new Date(item.horaSalida).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</td>
+                  <td className={item.estado === 'confirmada' ? 'text-success' : item.estado === 'pendiente' ? 'text-warning' : 'text-danger'}>
+                    {item.estado}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : (
+          <div className="system-box">
+            <p>No se encontraron reservas para este usuario.</p>
+          </div>
+        )}
+      </section>
     </>
   )
 }

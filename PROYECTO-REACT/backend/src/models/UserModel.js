@@ -43,6 +43,27 @@ class UserModel {
         return rows[0] || null;
     }
 
+    static async findActiveByName(name) {
+        const [rows] = await db.execute(
+            `SELECT
+                u.id,
+                u.nombre,
+                u.apellido,
+                u.dni,
+                u.email,
+                u.password_hash,
+                u.telefono,
+                r.nombre AS rol
+            FROM usuarios u
+            INNER JOIN roles r ON r.id = u.rol_id
+            WHERE CONCAT(u.nombre, ' ', u.apellido) LIKE ? AND u.activo = 1
+            LIMIT 1`,
+            [`%${name}%`],
+        );
+
+        return rows[0] || null;
+    }
+
     static async updateProfile(id, { nombre, apellido, email, telefono }) {
         const [result] = await db.execute(
             `UPDATE usuarios SET nombre = ?, apellido = ?, email = ?, telefono = ? WHERE id = ?`,

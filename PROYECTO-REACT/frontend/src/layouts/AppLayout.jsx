@@ -76,7 +76,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
           <Route path="/" element={<RoleRedirect user={user} />} />
           <Route path="aforo" element={<RoleGate user={user} roles={['cliente']}><CapacityView /></RoleGate>} />
           <Route path="reservas" element={<RoleGate user={user} roles={['cliente']}><ReservationsView token={token} /></RoleGate>} />
-          <Route path="dashboard-reservas" element={<RoleGate user={user} roles={['admin', 'cliente']}><DashboardReservationsView token={token} /></RoleGate>} />
+          <Route path="dashboard-reservas" element={<RoleGate user={user} roles={['admin', 'cliente']}><DashboardReservationsView token={token} user={user} /></RoleGate>} />
           <Route path="check-in" element={<RoleGate user={user} roles={['admin']}><CheckInView token={token} /></RoleGate>} />
           <Route path="socios" element={<RoleGate user={user} roles={['admin']}><MembersView token={token} /></RoleGate>} />
           <Route path="perfil" element={<ProfileView user={user} token={token} setUser={setUser} />} />

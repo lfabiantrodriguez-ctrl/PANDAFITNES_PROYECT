@@ -314,6 +314,37 @@ img {
   margin: 0 auto;
 }
 
+.dashboard-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  background: rgba(255, 255, 255, 0.9);
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  padding: 12px;
+  box-shadow: 0 14px 40px rgba(15, 23, 42, 0.06);
+}
+
+.dashboard-tab-button {
+  flex: 1 1 auto;
+  min-width: 140px;
+  border: 0;
+  border-radius: 12px;
+  background: transparent;
+  color: var(--panda-gray-dark);
+  font-weight: 700;
+  padding: 14px 18px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.dashboard-tab-button:hover,
+.dashboard-tab-button.active {
+  background: var(--panda-emerald);
+  color: #ffffff;
+  box-shadow: 0 12px 24px rgba(15, 118, 110, 0.18);
+}
+
 .dashboard-panel {
   background: var(--panda-card-bg);
   border: 1px solid var(--panda-gray-light);
@@ -366,8 +397,8 @@ img {
 
 .dashboard-info-card {
   background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), var(--panda-card-bg));
-  border: 1px solid rgba(34, 197, 94, 0.15);
-  border-radius: 18px;
+  border: 1px solid rgba(34, 197, 94, 0.12);
+  border-radius: 20px;
   padding: 24px;
   min-height: 150px;
 }
