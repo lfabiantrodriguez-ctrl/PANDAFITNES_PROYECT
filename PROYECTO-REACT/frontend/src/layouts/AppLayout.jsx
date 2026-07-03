@@ -4,6 +4,7 @@ import ReservationsView from '../pages/ReservationsView'
 import DashboardReservationsView from '../pages/DashboardReservationsView'
 import CheckInView from '../pages/CheckInView'
 import MembersView from '../pages/MembersView'
+import MembershipsView from '../pages/MembershipsView'
 import ProfileView from '../pages/ProfileView'
 import HamburgerMenu from '../components/HamburgerMenu'
 
@@ -16,6 +17,7 @@ export const MENU_ITEMS = {
   admin: [
     { to: '/app/check-in', label: 'Check-in Unico' },
     { to: '/app/socios', label: 'Gestion de Socios' },
+    { to: '/app/membresias', label: 'Gestion de Membresias' },
     { to: '/app/dashboard-reservas', label: 'Dashboard de Reservas' },
     { to: '/app/perfil', label: 'Perfil' },
   ],
@@ -79,6 +81,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
           <Route path="dashboard-reservas" element={<RoleGate user={user} roles={['admin', 'cliente']}><DashboardReservationsView token={token} user={user} /></RoleGate>} />
           <Route path="check-in" element={<RoleGate user={user} roles={['admin']}><CheckInView token={token} /></RoleGate>} />
           <Route path="socios" element={<RoleGate user={user} roles={['admin']}><MembersView token={token} /></RoleGate>} />
+          <Route path="membresias" element={<RoleGate user={user} roles={['admin']}><MembershipsView token={token} /></RoleGate>} />
           <Route path="perfil" element={<ProfileView user={user} token={token} setUser={setUser} />} />
         </Routes>
       </main>

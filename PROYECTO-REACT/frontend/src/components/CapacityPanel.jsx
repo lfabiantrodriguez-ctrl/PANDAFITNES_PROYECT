@@ -48,8 +48,11 @@ export default function CapacityPanel() {
 
     loadCapacity()
 
+    const timer = setInterval(loadCapacity, 15000)
+
     return () => {
       isMounted = false
+      clearInterval(timer)
     }
   }, [])
 

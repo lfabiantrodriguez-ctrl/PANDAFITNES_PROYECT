@@ -1,5 +1,6 @@
 const SocioModel = require("../models/SocioModel");
 const { isValidDni, toDateOnly } = require("../utils/helpers");
+const { sendEmail } = require("../utils/email");
 
 class SocioController {
     static async getSocios(req, res) {
@@ -55,6 +56,47 @@ class SocioController {
                 planId,
                 fechaInicio: startDate,
                 metodoPago,
+            });
+
+            // Send welcome email with credentials
+            const planRow = await (async () => {
+                const db = require("../config/database");
+                const [rows] = await db.execute("SELECT nombre FROM planes_membresia WHERE id = ?", [planId]);
+                return rows[0] || { nombre: "Membresia" };
+            })();
+
+            await sendEmail({
+                to: cleanEmail,
+                subject: "Bienvenido a Panda Fitness - Acceso a la App",
+                html: `
+                    <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f8fafc;border-radius:12px;">
+                        <div style="background:#111827;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
+                            <h1 style="color:#ffffff;margin:0;font-size:24px;">PANDA FITNESS</h1>
+                        </div>
+                        <div style="background:#ffffff;padding:30px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;">
+                            <h2 style="color:#111827;margin:0 0 16px;">¡Bienvenido a Panda Fitness!</h2>
+                            <p style="color:#4b5563;font-size:15px;line-height:1.6;">Hola <strong>${cleanName} ${cleanLastName}</strong>, nos complace darte la bienvenida a nuestro gimnasio.</p>
+                            <p style="color:#4b5563;font-size:15px;line-height:1.6;">Tu membresia <strong>${planRow.nombre}</strong> ha sido activada exitosamente.</p>
+                            <div style="background:#f3f4f6;padding:20px;border-radius:8px;margin:16px 0;">
+                                <h3 style="color:#111827;margin:0 0 12px;font-size:16px;">Datos de Acceso a la App</h3>
+                                <p style="color:#4b5563;font-size:15px;margin:6px 0;"><strong>DNI:</strong> ${cleanDni}</p>
+                                <p style="color:#4b5563;font-size:15px;margin:6px 0;"><strong>Contrasena temporal:</strong> ${cleanDni}</p>
+                            </div>
+                            <p style="color:#4b5563;font-size:14px;line-height:1.6;">Tu DNI es tu contrasena temporal. Por motivos de seguridad, te recomendamos cambiar tu contrasena al iniciar sesion por primera vez desde la seccion de <strong>Perfil</strong> en la aplicacion.</p>
+                            <p style="color:#4b5563;font-size:14px;line-height:1.6;">Puedes acceder a la app desde cualquier dispositivo para:</p>
+                            <ul style="color:#4b5563;font-size:14px;line-height:1.8;">
+                                <li>Reservar tu turno en el gimnasio</li>
+                                <li>Consultar el aforo en tiempo real</li>
+                                <li>Revisar tu plan de membresia y pagos</li>
+                                <li>Actualizar tus datos personales</li>
+                            </ul>
+                            <p style="color:#4b5563;font-size:14px;">¡Te esperamos para entrenar juntos!</p>
+                        </div>
+                        <div style="text-align:center;padding:16px;color:#9ca3af;font-size:12px;">
+                            <p>Panda Fitness Gym © ${new Date().getFullYear()}</p>
+                        </div>
+                    </div>
+                `,
             });
 
             return res.status(201).json({

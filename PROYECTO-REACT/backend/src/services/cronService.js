@@ -10,6 +10,7 @@ async function checkAndCancelExpiredReservations() {
              FROM reservas r
              INNER JOIN usuarios u ON u.id = r.usuario_id
              WHERE r.estado = 'pendiente'
+               AND r.tipo = 'normal'
                AND DATE_ADD(r.hora_entrada, INTERVAL 15 MINUTE) < NOW()`
         );
 
@@ -92,23 +93,23 @@ async function ensureEstadoEnumSupportsFinalizada() {
         if (!rows || rows.length === 0) return false;
 
         const columnType = rows[0].COLUMN_TYPE || '';
-        if (columnType.includes("'finalizada'")) {
+        const required = ['finalizada', 'cancelada_emergencia'];
+        if (required.every((value) => columnType.includes(`'${value}'`))) {
             return true;
         }
 
-        // Add 'finalizada' to enum safely by redefining the enum list (preserve existing values)
-        // Extract existing values from columnType
         const matches = columnType.match(/enum\((.*)\)/i);
         const existing = matches && matches[1] ? matches[1] : null;
         if (!existing) return false;
 
-        // Build new enum including finalizada if not present
         const values = existing.split(',').map((s) => s.trim().replace(/^'|'$/g, ''));
-        if (!values.includes('finalizada')) values.push('finalizada');
+        for (const value of required) {
+            if (!values.includes(value)) values.push(value);
+        }
         const newEnum = values.map((v) => `'${v}'`).join(',');
 
         await db.execute(`ALTER TABLE reservas MODIFY estado ENUM(${newEnum}) DEFAULT 'pendiente'`);
-        console.log('Columna reservas.estado actualizada para incluir "finalizada" en el enum');
+        console.log('Columna reservas.estado actualizada para incluir estados extendidos');
         return true;
     } catch (error) {
         console.error('Error asegurando enum de estado:', error);
@@ -125,6 +126,19 @@ async function finalizeEndedReservations() {
         const [result] = await db.execute(
             `UPDATE reservas SET estado = 'finalizada' WHERE estado = 'confirmada' AND hora_salida <= NOW()`
         );
+
+        // Expire unused reintegro reservations at end of day
+        const [expiredReintegros] = await db.execute(
+            `UPDATE reservas
+             SET estado = 'cancelada'
+             WHERE tipo = 'reintegro_emergencia'
+               AND estado = 'pendiente'
+               AND DATE(hora_entrada) < CURDATE()`
+        );
+
+        if (expiredReintegros && expiredReintegros.affectedRows > 0) {
+            console.log(`Reintegros expirados por no uso: ${expiredReintegros.affectedRows}`);
+        }
 
         if (result && result.affectedRows > 0) {
             console.log(`Reservas finalizadas automáticamente: ${result.affectedRows}`);

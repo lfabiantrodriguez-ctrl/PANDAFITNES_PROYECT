@@ -102,6 +102,8 @@ export default function ReservationsView({ token }) {
     return myReservations.find(r => r.estado === 'pendiente' || r.estado === 'confirmada')
   }, [myReservations])
 
+  const isReintegroActive = activeReservation?.tipo === 'reintegro_emergencia'
+
   const cancelledTodayReservation = useMemo(() => {
     if (activeReservation) return null
     return myReservations.find(r => {
@@ -225,22 +227,46 @@ export default function ReservationsView({ token }) {
           <div style={{ display: 'grid', gap: '16px', marginTop: '10px' }}>
             <div className="system-notice success-notice" style={{ padding: '24px', borderRadius: '12px' }}>
               <h3 style={{ margin: '0 0 12px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
-                Tienes una Reserva Activa
+                {isReintegroActive ? 'Tienes un Reintegro por Emergencia' : 'Tienes una Reserva Activa'}
               </h3>
               <div style={{ display: 'grid', gap: '8px', fontSize: '1.05em' }}>
-                <p style={{ margin: 0 }}><strong>Fecha:</strong> {formatDateTimeString(activeReservation.horaEntrada)}</p>
-                <p style={{ margin: 0 }}>
-                  <strong>Horario:</strong> {formatTimeString(activeReservation.horaEntrada)} - {formatTimeString(activeReservation.horaSalida)}
-                </p>
-                <p style={{ margin: 0 }}>
-                  <strong>Estado:</strong> <span style={{ textTransform: 'capitalize', fontWeight: 'bold' }}>{activeReservation.estado}</span>
-                </p>
+                {isReintegroActive ? (
+                  <>
+                    <p style={{ margin: 0 }}>
+                      <strong>Tiempo de reintegro:</strong> {Math.floor((activeReservation.duracionMinutos || 60) / 60)}h
+                      {(activeReservation.duracionMinutos || 0) % 60 > 0 ? ` ${(activeReservation.duracionMinutos || 0) % 60}min` : ''}
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      <strong>Estado:</strong> <span style={{ textTransform: 'capitalize', fontWeight: 'bold' }}>
+                        {activeReservation.estado === 'pendiente' ? 'Pendiente de reincorporacion' : activeReservation.estado}
+                      </span>
+                    </p>
+                  </>
+                ) : (
+                  <>
+                    <p style={{ margin: 0 }}><strong>Fecha:</strong> {formatDateTimeString(activeReservation.horaEntrada)}</p>
+                    <p style={{ margin: 0 }}>
+                      <strong>Horario:</strong> {formatTimeString(activeReservation.horaEntrada)} - {formatTimeString(activeReservation.horaSalida)}
+                    </p>
+                    <p style={{ margin: 0 }}>
+                      <strong>Estado:</strong> <span style={{ textTransform: 'capitalize', fontWeight: 'bold' }}>{activeReservation.estado}</span>
+                    </p>
+                  </>
+                )}
               </div>
               
               <hr style={{ margin: '16px 0', border: 'none', borderTop: '1px solid rgba(0,0,0,0.1)' }} />
               
               <p style={{ margin: 0, fontSize: '0.92em', lineHeight: '1.5em', color: '#1f2937' }}>
-                <strong>Aviso de Tolerancia:</strong> Cuentas con un máximo de <strong>15 minutos de tolerancia</strong> desde tu hora programada para confirmar tu ingreso en recepción. Si transcurre ese plazo sin registrar tu entrada, la reserva será cancelada automáticamente y liberada para otros socios.
+                {isReintegroActive ? (
+                  <>
+                    <strong>Reintegro por emergencia:</strong> Tu reserva original fue cancelada en recepcion. Al regresar al gimnasio, presentate en recepcion para que el administrador registre tu reincorporacion. No necesitas crear una nueva reserva.
+                  </>
+                ) : (
+                  <>
+                    <strong>Aviso de Tolerancia:</strong> Cuentas con un máximo de <strong>15 minutos de tolerancia</strong> desde tu hora programada para confirmar tu ingreso en recepción. Si transcurre ese plazo sin registrar tu entrada, la reserva será cancelada automáticamente y liberada para otros socios.
+                  </>
+                )}
               </p>
             </div>
             <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '0.9em' }}>

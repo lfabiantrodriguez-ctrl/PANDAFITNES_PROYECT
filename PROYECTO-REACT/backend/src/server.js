@@ -35,6 +35,10 @@ setInterval(() => {
     });
 }, 30000);
 
-app.listen(PORT, () => {
-    console.log(`Servidor corriendo en puerto ${PORT}`);
+const { runSchemaMigrations } = require("./services/schemaMigration");
+
+runSchemaMigrations().then(() => {
+    app.listen(PORT, () => {
+        console.log(`Servidor corriendo en puerto ${PORT}`);
+    });
 });

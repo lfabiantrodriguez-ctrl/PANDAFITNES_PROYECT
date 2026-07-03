@@ -1,5 +1,18 @@
 const db = require("../config/database");
 
+const RESERVATION_FIELDS = `
+    id,
+    usuario_id AS usuarioId,
+    hora_entrada AS horaEntrada,
+    hora_salida AS horaSalida,
+    estado,
+    tipo,
+    reserva_origen_id AS reservaOrigenId,
+    duracion_minutos AS duracionMinutos,
+    cancelada_emergencia AS canceladaEmergencia,
+    creado_en AS creadoEn
+`;
+
 class ReservationModel {
     static async getMaxCapacity() {
         const [rows] = await db.execute(
@@ -14,6 +27,7 @@ class ReservationModel {
             `SELECT COUNT(*) AS total
              FROM reservas
              WHERE estado IN ('pendiente', 'confirmada')
+               AND tipo = 'normal'
                AND hora_entrada < ?
                AND hora_salida > ?`,
             [salida, entrada],
@@ -28,6 +42,7 @@ class ReservationModel {
              FROM reservas
              WHERE usuario_id = ?
                AND estado IN ('pendiente', 'confirmada')
+               AND tipo = 'normal'
                AND hora_entrada < ?
                AND hora_salida > ?`,
             [usuarioId, salida, entrada],
@@ -36,12 +51,12 @@ class ReservationModel {
         return rows[0]?.total > 0;
     }
 
-    static async create({ usuarioId, horaEntrada, horaSalida }) {
+    static async create({ usuarioId, horaEntrada, horaSalida, tipo = "normal", reservaOrigenId = null, duracionMinutos = null }) {
         const [result] = await db.execute(
             `INSERT INTO reservas
-             (usuario_id, hora_entrada, hora_salida)
-             VALUES (?, ?, ?)`,
-            [usuarioId, horaEntrada, horaSalida],
+             (usuario_id, hora_entrada, hora_salida, tipo, reserva_origen_id, duracion_minutos)
+             VALUES (?, ?, ?, ?, ?, ?)`,
+            [usuarioId, horaEntrada, horaSalida, tipo, reservaOrigenId, duracionMinutos],
         );
 
         return {
@@ -50,22 +65,37 @@ class ReservationModel {
             horaEntrada,
             horaSalida,
             estado: "pendiente",
+            tipo,
+            reservaOrigenId,
+            duracionMinutos,
         };
     }
 
     static async findActiveForCheckIn(usuarioId) {
+        const [reintegroRows] = await db.execute(
+            `SELECT ${RESERVATION_FIELDS}
+             FROM reservas
+             WHERE usuario_id = ?
+               AND tipo = 'reintegro_emergencia'
+               AND estado = 'pendiente'
+               AND DATE(hora_entrada) = CURDATE()
+             ORDER BY creado_en DESC
+             LIMIT 1`,
+            [usuarioId],
+        );
+
+        if (reintegroRows[0]) {
+            return reintegroRows[0];
+        }
+
         const [rows] = await db.execute(
-            `SELECT
-                r.id,
-                r.usuario_id AS usuarioId,
-                r.hora_entrada AS horaEntrada,
-                r.hora_salida AS horaSalida,
-                r.estado
-             FROM reservas r
-             WHERE r.usuario_id = ?
-               AND r.estado IN ('pendiente', 'confirmada')
-               AND r.hora_salida >= NOW()
-             ORDER BY r.hora_entrada ASC
+            `SELECT ${RESERVATION_FIELDS}
+             FROM reservas
+             WHERE usuario_id = ?
+               AND tipo = 'normal'
+               AND estado IN ('pendiente', 'confirmada')
+               AND hora_salida >= NOW()
+             ORDER BY hora_entrada ASC
              LIMIT 1`,
             [usuarioId],
         );
@@ -75,12 +105,7 @@ class ReservationModel {
 
     static async findById(reservationId) {
         const [rows] = await db.execute(
-            `SELECT
-                id,
-                usuario_id AS usuarioId,
-                hora_entrada AS horaEntrada,
-                hora_salida AS horaSalida,
-                estado
+            `SELECT ${RESERVATION_FIELDS}
              FROM reservas
              WHERE id = ?
              LIMIT 1`,
@@ -93,12 +118,7 @@ class ReservationModel {
     static async findRecentByUser(usuarioId, limit = 5) {
         const sanitizedLimit = Number(limit) || 5;
         const [rows] = await db.execute(
-            `SELECT
-                id,
-                hora_entrada AS horaEntrada,
-                hora_salida AS horaSalida,
-                estado,
-                creado_en AS creadoEn
+            `SELECT ${RESERVATION_FIELDS}
              FROM reservas
              WHERE usuario_id = ?
              ORDER BY hora_entrada DESC
@@ -118,14 +138,27 @@ class ReservationModel {
         );
     }
 
+    static async markEmergencyCancellation(reservationId) {
+        await db.execute(
+            `UPDATE reservas
+             SET estado = 'cancelada_emergencia', cancelada_emergencia = 1
+             WHERE id = ?`,
+            [reservationId],
+        );
+    }
+
+    static async updateSchedule(reservationId, horaEntrada, horaSalida) {
+        await db.execute(
+            `UPDATE reservas
+             SET hora_entrada = ?, hora_salida = ?
+             WHERE id = ?`,
+            [horaEntrada, horaSalida, reservationId],
+        );
+    }
+
     static async getByUser(usuarioId) {
         const [rows] = await db.execute(
-            `SELECT
-                id,
-                hora_entrada AS horaEntrada,
-                hora_salida AS horaSalida,
-                estado,
-                creado_en AS creadoEn
+            `SELECT ${RESERVATION_FIELDS}
              FROM reservas
              WHERE usuario_id = ?
              ORDER BY hora_entrada DESC`,
@@ -136,7 +169,7 @@ class ReservationModel {
     }
 
     static async getDashboard({ userId = null, startDate = null, endDate = null } = {}) {
-        const conditions = ["WHERE estado IN ('pendiente', 'confirmada')"];
+        const conditions = ["WHERE estado IN ('pendiente', 'confirmada')", "AND tipo = 'normal'"];
         const params = [];
 
         if (userId) {
