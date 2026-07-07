@@ -14,10 +14,8 @@ class CapacityController {
             const [reservationRows] = await db.execute(
                 `SELECT COUNT(*) AS total
                  FROM reservas
-                 WHERE (
-                    (tipo = 'normal' AND estado IN ('pendiente', 'confirmada'))
-                    OR (tipo = 'reintegro_emergencia' AND estado = 'confirmada')
-                 )
+                 WHERE tipo = 'normal'
+                   AND estado IN ('pendiente', 'confirmada')
                    AND hora_entrada <= NOW()
                    AND hora_salida > NOW()`,
             );
@@ -60,10 +58,8 @@ class CapacityController {
             const [reservationRows] = await db.execute(
                 `SELECT COUNT(*) AS total
                  FROM reservas
-                 WHERE (
-                    (tipo = 'normal' AND estado IN ('pendiente', 'confirmada'))
-                    OR (tipo = 'reintegro_emergencia' AND estado = 'confirmada')
-                 )
+                 WHERE tipo = 'normal'
+                   AND estado IN ('pendiente', 'confirmada')
                    AND hora_entrada <= ?
                    AND hora_salida > ?`,
                 [targetDatetime, targetDatetime]

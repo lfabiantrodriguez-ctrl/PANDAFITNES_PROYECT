@@ -41,20 +41,4 @@ export class CheckInService {
     }
     return data
   }
-
-  static async cancelEmergency(token, reservationId) {
-    const response = await fetch('/api/admin/checkin/cancel-emergency', {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify({ reservationId }),
-    })
-    const data = await response.json()
-    if (!response.ok) {
-      throw new Error(data.message || 'No se pudo cancelar la reserva por emergencia')
-    }
-    return data
-  }
 }

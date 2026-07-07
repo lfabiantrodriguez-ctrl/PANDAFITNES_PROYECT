@@ -54,28 +54,7 @@ async function ensureEstadoEnumValues(requiredValues) {
 
 async function runSchemaMigrations() {
     try {
-        await ensureEstadoEnumValues(["finalizada", "cancelada_emergencia"]);
-
-        await ensureColumnExists(
-            "reservas",
-            "tipo",
-            "ENUM('normal', 'reintegro_emergencia') NOT NULL DEFAULT 'normal' AFTER estado",
-        );
-        await ensureColumnExists(
-            "reservas",
-            "reserva_origen_id",
-            "INT NULL AFTER tipo",
-        );
-        await ensureColumnExists(
-            "reservas",
-            "duracion_minutos",
-            "INT NULL AFTER reserva_origen_id",
-        );
-        await ensureColumnExists(
-            "reservas",
-            "cancelada_emergencia",
-            "TINYINT(1) NOT NULL DEFAULT 0 AFTER duracion_minutos",
-        );
+        await ensureEstadoEnumValues(["finalizada"]);
 
         // Add weekly limit column to planes_membresia
         const colAdded = await ensureColumnExists(
