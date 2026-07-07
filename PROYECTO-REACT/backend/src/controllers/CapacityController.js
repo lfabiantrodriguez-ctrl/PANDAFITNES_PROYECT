@@ -11,18 +11,15 @@ class CapacityController {
             const [activeRows] = await db.execute(
                 "SELECT COUNT(*) AS total FROM asistencias WHERE hora_salida IS NULL",
             );
-            const [reservationRows] = await db.execute(
+            const [guestRows] = await db.execute(
                 `SELECT COUNT(*) AS total
-                 FROM reservas
-                 WHERE (
-                    (tipo = 'normal' AND estado IN ('pendiente', 'confirmada'))
-                    OR (tipo = 'reintegro_emergencia' AND estado = 'confirmada')
-                 )
-                   AND hora_entrada <= NOW()
-                   AND hora_salida > NOW()`,
+                 FROM usuarios_invitados
+                 WHERE estado = 'activo'
+                   AND fecha_inicio <= NOW()
+                   AND fecha_fin > NOW()`,
             );
 
-            const actual = Math.max(Number(activeRows[0]?.total || 0), Number(reservationRows[0]?.total || 0));
+            const actual = Number(activeRows[0]?.total || 0) + Number(guestRows[0]?.total || 0);
 
             return res.json({
                 actual,
@@ -57,19 +54,16 @@ class CapacityController {
                 [targetDatetime, targetDatetime]
             );
 
-            const [reservationRows] = await db.execute(
+            const [guestRows] = await db.execute(
                 `SELECT COUNT(*) AS total
-                 FROM reservas
-                 WHERE (
-                    (tipo = 'normal' AND estado IN ('pendiente', 'confirmada'))
-                    OR (tipo = 'reintegro_emergencia' AND estado = 'confirmada')
-                 )
-                   AND hora_entrada <= ?
-                   AND hora_salida > ?`,
-                [targetDatetime, targetDatetime]
+                 FROM usuarios_invitados
+                 WHERE estado = 'activo'
+                   AND fecha_inicio <= ?
+                   AND fecha_fin > ?`,
+                [targetDatetime, targetDatetime],
             );
 
-            const actual = Math.max(Number(activeRows[0]?.total || 0), Number(reservationRows[0]?.total || 0));
+            const actual = Number(activeRows[0]?.total || 0) + Number(guestRows[0]?.total || 0);
 
             return res.json({
                 actual,

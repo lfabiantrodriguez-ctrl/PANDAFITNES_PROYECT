@@ -12,7 +12,8 @@ app.use(express.json());
 // Mount central router
 app.use("/api", apiRoutes);
 
-const { checkAndCancelExpiredReservations } = require("./services/cronService");
+const { checkAndCancelExpiredReservations, finalizeEndedAttendances, finalizeEndedReservations, finalizeEndedGuests } = require("./services/cronService");
+
 // Iniciar verificador de tolerancia de reservas (cada 30 segundos)
 setInterval(() => {
     checkAndCancelExpiredReservations().catch((err) => {
@@ -20,7 +21,6 @@ setInterval(() => {
     });
 }, 30000);
 
-const { finalizeEndedAttendances, finalizeEndedReservations } = require("./services/cronService");
 // Finalizar asistencias cuando la reserva haya terminado (cada 30 segundos)
 setInterval(() => {
     finalizeEndedAttendances().catch((err) => {
@@ -32,6 +32,13 @@ setInterval(() => {
 setInterval(() => {
     finalizeEndedReservations().catch((err) => {
         console.error("Error en verificador de finalización automática de reservas:", err);
+    });
+}, 30000);
+
+// Finalizar invitados activos automáticamente cuando su hora de fin se cumple (cada 30 segundos)
+setInterval(() => {
+    finalizeEndedGuests().catch((err) => {
+        console.error("Error en verificador de finalización automática de invitados:", err);
     });
 }, 30000);
 

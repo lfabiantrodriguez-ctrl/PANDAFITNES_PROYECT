@@ -17,9 +17,15 @@ function authenticateToken(req, res, next) {
     }
 }
 
-function requireRole(role) {
+function verifyToken(req, res, next) {
+    return authenticateToken(req, res, next);
+}
+
+function requireRole(roleOrRoles) {
+    const roles = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
+
     return (req, res, next) => {
-        if (req.auth?.rol !== role) {
+        if (!roles.includes(req.auth?.rol)) {
             return res.status(403).json({ message: "No tiene permisos para esta accion" });
         }
 
@@ -29,5 +35,6 @@ function requireRole(role) {
 
 module.exports = {
     authenticateToken,
+    verifyToken,
     requireRole,
 };

@@ -148,4 +148,26 @@ async function finalizeEndedReservations() {
     }
 }
 
-module.exports = { checkAndCancelExpiredReservations, finalizeEndedAttendances, finalizeEndedReservations };
+async function finalizeEndedGuests() {
+    try {
+        const [result] = await db.execute(
+            `UPDATE usuarios_invitados
+             SET estado = 'finalizado'
+             WHERE estado = 'activo'
+               AND fecha_fin <= NOW()`
+        );
+
+        if (result && result.affectedRows > 0) {
+            console.log(`Invitados finalizados automáticamente: ${result.affectedRows}`);
+        }
+    } catch (error) {
+        console.error('Error en finalizeEndedGuests:', error);
+    }
+}
+
+module.exports = {
+    checkAndCancelExpiredReservations,
+    finalizeEndedAttendances,
+    finalizeEndedReservations,
+    finalizeEndedGuests,
+};

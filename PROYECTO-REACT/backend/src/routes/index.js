@@ -8,6 +8,7 @@ const capacityRoutes = require("./capacityRoutes");
 const checkInRoutes = require("./checkInRoutes");
 const attendanceRoutes = require("./attendanceRoutes");
 const membershipRoutes = require("./membershipRoutes");
+const guestRoutes = require("./guestRoutes");
 
 const router = express.Router();
 
@@ -25,5 +26,6 @@ router.use("/aforo", capacityRoutes);
 router.use("/reservas", reservationRoutes);
 router.use("/admin/checkin", checkInRoutes);
 router.use("/membresias", membershipRoutes);
+router.use("/invitados", guestRoutes);
 
 module.exports = router;

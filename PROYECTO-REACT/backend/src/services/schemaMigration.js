@@ -52,9 +52,32 @@ async function ensureEstadoEnumValues(requiredValues) {
     return true;
 }
 
+async function ensureGuestTableExists() {
+    await db.execute(`
+        CREATE TABLE IF NOT EXISTS usuarios_invitados (
+            id INT AUTO_INCREMENT PRIMARY KEY,
+            nombre VARCHAR(100) NOT NULL,
+            apellido VARCHAR(100) NULL,
+            dni VARCHAR(20) NULL,
+            telefono VARCHAR(20) NULL,
+            fecha_inicio DATETIME NOT NULL,
+            fecha_fin DATETIME NOT NULL,
+            metodo_pago VARCHAR(50) NOT NULL DEFAULT 'efectivo',
+            monto DECIMAL(10,2) NOT NULL DEFAULT 7.00,
+            estado VARCHAR(30) NOT NULL DEFAULT 'activo',
+            creado_por_admin_id INT NULL,
+            creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+            INDEX idx_usuarios_invitados_estado_fecha (estado, fecha_inicio, fecha_fin)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+    `);
+    console.log("Tabla usuarios_invitados verificada");
+}
+
 async function runSchemaMigrations() {
     try {
         await ensureEstadoEnumValues(["finalizada", "cancelada_emergencia"]);
+        await ensureGuestTableExists();
 
         await ensureColumnExists(
             "reservas",

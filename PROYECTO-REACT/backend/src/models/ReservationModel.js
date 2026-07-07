@@ -169,7 +169,7 @@ class ReservationModel {
     }
 
     static async getDashboard({ userId = null, startDate = null, endDate = null } = {}) {
-        const conditions = ["WHERE estado IN ('pendiente', 'confirmada')", "AND tipo = 'normal'"];
+        const conditions = ["WHERE estado IN ('pendiente', 'confirmada')"];
         const params = [];
 
         if (userId) {
@@ -187,7 +187,7 @@ class ReservationModel {
             params.push(endDate);
         }
 
-        const [rows] = await db.execute(
+        const [hourlyRows] = await db.execute(
             `SELECT
                 HOUR(hora_entrada) AS hour,
                 COUNT(*) AS total
@@ -198,18 +198,26 @@ class ReservationModel {
             params,
         );
 
-        const hourlyStats = rows.map((row) => ({
+        const [totalRows] = await db.execute(
+            `SELECT COUNT(*) AS totalReservations
+             FROM reservas
+             ${conditions.join(" ")}`,
+            params,
+        );
+
+        const hourlyStats = hourlyRows.map((row) => ({
             hour: Number(row.hour),
             count: Number(row.total),
         }));
 
+        const totalReservations = Number(totalRows[0]?.totalReservations || 0);
         const maxCount = hourlyStats[0]?.count || 0;
         const peakHours = hourlyStats.filter((item) => item.count === maxCount).map((item) => item.hour);
 
         return {
             startDate: startDate || null,
             endDate: endDate || null,
-            totalReservations: hourlyStats.reduce((sum, item) => sum + item.count, 0),
+            totalReservations,
             peakHour: peakHours[0] ?? null,
             peakHours,
             peakCount: maxCount,
