@@ -2,21 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import ViewTitle from '../components/ViewTitle'
 import { CheckInService } from '../services/CheckInService'
 
-function formatDurationLabel(minutes) {
-  if (!minutes) return ''
-  const hours = Math.floor(minutes / 60)
-  const mins = minutes % 60
-  if (mins === 0) return `${hours}h`
-  return `${hours}h ${mins}min`
-}
-
 function formatEstadoLabel(item) {
-  if (item.tipo === 'reintegro_emergencia') {
-    if (item.estado === 'pendiente') return 'Reintegro pendiente'
-    if (item.estado === 'confirmada') return 'Reintegro activo'
-    if (item.estado === 'finalizada') return 'Reintegro finalizado'
-  }
-  if (item.estado === 'cancelada_emergencia') return 'Cancelada (emergencia)'
   return item.estado
 }
 
@@ -26,14 +12,9 @@ export default function CheckInView({ token }) {
   const [user, setUser] = useState(null)
   const [history, setHistory] = useState([])
   const [checkInStatus, setCheckInStatus] = useState(null)
-  const [cancelWindow, setCancelWindow] = useState(null)
   const [status, setStatus] = useState({ loading: false, error: '', success: '' })
 
-  const isReintegro = reservation?.tipo === 'reintegro_emergencia'
   const canConfirm = useMemo(() => checkInStatus?.valid, [checkInStatus])
-  const canCancel = useMemo(() => {
-    return cancelWindow?.canCancel && reservation?.tipo !== 'reintegro_emergencia'
-  }, [cancelWindow, reservation])
 
   async function handleLookup(silent = false) {
     if (!silent) {
@@ -50,7 +31,6 @@ export default function CheckInView({ token }) {
       setUser(data.user)
       setHistory(data.history || [])
       setCheckInStatus(data.checkInStatus || null)
-      setCancelWindow(data.cancelWindow || null)
       if (!silent) {
         setStatus({ loading: false, error: '', success: '' })
       }
@@ -77,36 +57,11 @@ export default function CheckInView({ token }) {
     setStatus({ loading: true, error: '', success: '' })
 
     try {
-      const result = await CheckInService.confirmEntry(token, reservation.id)
-      const successMessage = result.tipo === 'reintegro_emergencia'
-        ? 'Reincorporacion registrada correctamente.'
-        : 'Entrada confirmada correctamente.'
-      setStatus({ loading: false, error: '', success: successMessage })
+      await CheckInService.confirmEntry(token, reservation.id)
+      setStatus({ loading: false, error: '', success: 'Entrada confirmada correctamente.' })
       await handleLookup(true)
     } catch (error) {
       setStatus({ loading: false, error: error.message || 'No se pudo confirmar la entrada', success: '' })
-    }
-  }
-
-  async function handleCancelEmergency() {
-    if (!reservation || !canCancel) return
-
-    const confirmed = window.confirm(
-      '¿Confirmar cancelacion por emergencia? Se generara una reserva de reintegro para el socio.'
-    )
-    if (!confirmed) return
-
-    setStatus({ loading: true, error: '', success: '' })
-    try {
-      const result = await CheckInService.cancelEmergency(token, reservation.id)
-      setStatus({
-        loading: false,
-        error: '',
-        success: `Reserva cancelada. Reintegro de ${result.refundLabel} generado para el socio.`,
-      })
-      await handleLookup(true)
-    } catch (error) {
-      setStatus({ loading: false, error: error.message || 'No se pudo cancelar la reserva', success: '' })
     }
   }
 
@@ -167,29 +122,10 @@ export default function CheckInView({ token }) {
 
               {reservation ? (
                 <>
-                  {isReintegro && reservation.estado === 'pendiente' && (
-                    <div className="system-notice warning-notice" style={{ marginBottom: '12px' }}>
-                      <strong>Reserva de reintegro por emergencia.</strong> El socio puede reincorporarse hoy sin crear una nueva reserva. Tiempo disponible: {formatDurationLabel(reservation.duracionMinutos)}.
-                    </div>
-                  )}
-
                   <div className="system-box">
-                    {isReintegro ? (
-                      <>
-                        <p>Tipo: <strong>Reintegro por cancelacion de emergencia</strong></p>
-                        <p>Tiempo de reintegro: <strong>{formatDurationLabel(reservation.duracionMinutos)}</strong></p>
-                        <p>Estado: <strong>{formatEstadoLabel(reservation)}</strong></p>
-                      </>
-                    ) : (
-                      <>
-                        <p>Hora programada: <strong>{new Date(reservation.horaEntrada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</strong></p>
-                        <p>Hora actual: <strong>{new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</strong></p>
-                        <p>Estado de tolerancia: <strong className={checkInStatus?.valid ? 'text-success' : 'text-warning'}>{checkInStatus?.detail}</strong></p>
-                        {cancelWindow && (
-                          <p>Ventana cancelacion emergencia: <strong className={canCancel ? 'text-success' : 'text-warning'}>{cancelWindow.detail}</strong></p>
-                        )}
-                      </>
-                    )}
+                    <p>Hora programada: <strong>{new Date(reservation.horaEntrada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</strong></p>
+                    <p>Hora actual: <strong>{new Date().toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })} hrs</strong></p>
+                    <p>Estado de tolerancia: <strong className={checkInStatus?.valid ? 'text-success' : 'text-warning'}>{checkInStatus?.detail}</strong></p>
                   </div>
 
                   <button
@@ -198,20 +134,8 @@ export default function CheckInView({ token }) {
                     onClick={handleConfirm}
                     disabled={!canConfirm || status.loading || reservation.estado === 'confirmada'}
                   >
-                    {isReintegro ? 'Registrar Reincorporacion' : 'Confirmar Entrada'}
+                    Confirmar Entrada
                   </button>
-
-                  {canCancel && (
-                    <button
-                      className="action-btn btn-warning btn-full"
-                      type="button"
-                      onClick={handleCancelEmergency}
-                      disabled={status.loading}
-                      style={{ marginTop: '0.5rem' }}
-                    >
-                      Cancelar Reserva (Emergencia)
-                    </button>
-                  )}
 
                   <button
                     className="action-btn btn-dark btn-full"
@@ -259,7 +183,7 @@ export default function CheckInView({ token }) {
                   <td>{new Date(item.horaEntrada).toLocaleDateString('es-PE')}</td>
                   <td>{new Date(item.horaEntrada).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</td>
                   <td>{new Date(item.horaSalida).toLocaleTimeString('es-PE', { hour: '2-digit', minute: '2-digit' })}</td>
-                  <td>{item.tipo === 'reintegro_emergencia' ? 'Reintegro' : 'Normal'}</td>
+                  <td>Normal</td>
                   <td className={item.estado === 'confirmada' ? 'text-success' : item.estado === 'pendiente' ? 'text-warning' : 'text-danger'}>
                     {formatEstadoLabel(item)}
                   </td>

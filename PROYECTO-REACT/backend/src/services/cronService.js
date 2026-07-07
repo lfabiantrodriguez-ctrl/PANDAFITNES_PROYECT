@@ -93,7 +93,7 @@ async function ensureEstadoEnumSupportsFinalizada() {
         if (!rows || rows.length === 0) return false;
 
         const columnType = rows[0].COLUMN_TYPE || '';
-        const required = ['finalizada', 'cancelada_emergencia'];
+        const required = ['finalizada'];
         if (required.every((value) => columnType.includes(`'${value}'`))) {
             return true;
         }
@@ -126,19 +126,6 @@ async function finalizeEndedReservations() {
         const [result] = await db.execute(
             `UPDATE reservas SET estado = 'finalizada' WHERE estado = 'confirmada' AND hora_salida <= NOW()`
         );
-
-        // Expire unused reintegro reservations at end of day
-        const [expiredReintegros] = await db.execute(
-            `UPDATE reservas
-             SET estado = 'cancelada'
-             WHERE tipo = 'reintegro_emergencia'
-               AND estado = 'pendiente'
-               AND DATE(hora_entrada) < CURDATE()`
-        );
-
-        if (expiredReintegros && expiredReintegros.affectedRows > 0) {
-            console.log(`Reintegros expirados por no uso: ${expiredReintegros.affectedRows}`);
-        }
 
         if (result && result.affectedRows > 0) {
             console.log(`Reservas finalizadas automáticamente: ${result.affectedRows}`);

@@ -9,7 +9,6 @@ const RESERVATION_FIELDS = `
     tipo,
     reserva_origen_id AS reservaOrigenId,
     duracion_minutos AS duracionMinutos,
-    cancelada_emergencia AS canceladaEmergencia,
     creado_en AS creadoEn
 `;
 
@@ -72,22 +71,6 @@ class ReservationModel {
     }
 
     static async findActiveForCheckIn(usuarioId) {
-        const [reintegroRows] = await db.execute(
-            `SELECT ${RESERVATION_FIELDS}
-             FROM reservas
-             WHERE usuario_id = ?
-               AND tipo = 'reintegro_emergencia'
-               AND estado = 'pendiente'
-               AND DATE(hora_entrada) = CURDATE()
-             ORDER BY creado_en DESC
-             LIMIT 1`,
-            [usuarioId],
-        );
-
-        if (reintegroRows[0]) {
-            return reintegroRows[0];
-        }
-
         const [rows] = await db.execute(
             `SELECT ${RESERVATION_FIELDS}
              FROM reservas
@@ -135,15 +118,6 @@ class ReservationModel {
              SET estado = ?
              WHERE id = ?`,
             [estado, reservationId],
-        );
-    }
-
-    static async markEmergencyCancellation(reservationId) {
-        await db.execute(
-            `UPDATE reservas
-             SET estado = 'cancelada_emergencia', cancelada_emergencia = 1
-             WHERE id = ?`,
-            [reservationId],
         );
     }
 
