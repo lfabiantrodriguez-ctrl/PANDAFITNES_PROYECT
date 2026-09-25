@@ -1,2 +1,2 @@
 # Panda-Fitness-gym
-aplicación web para el gimnasio Panda :v
+Aplicacion web para la gestion del gimnasio Panda Fitness.
