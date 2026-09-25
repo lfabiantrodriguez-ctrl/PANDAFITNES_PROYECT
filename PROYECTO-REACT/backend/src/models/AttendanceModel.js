@@ -6,12 +6,12 @@ class AttendanceModel {
             `INSERT INTO asistencias
              (reserva_id, usuario_id, hora_entrada)
              VALUES (?, ?, ?)`,
-            [reservaId, usuarioId, horaEntrada],
+            [reservaId || null, usuarioId, horaEntrada],
         );
 
         return {
             id: result.insertId,
-            reservaId,
+            reservaId: reservaId || null,
             usuarioId,
             horaEntrada,
         };
@@ -51,6 +51,39 @@ class AttendanceModel {
         );
 
         return rows[0]?.total || 0;
+    }
+
+    static async getByUser(usuarioId) {
+        const [rows] = await db.execute(
+            `SELECT
+                a.id,
+                a.reserva_id AS reservaId,
+                u.nombre,
+                u.apellido,
+                u.dni,
+                a.hora_entrada AS horaEntrada,
+                a.hora_salida AS horaSalida,
+                CASE
+                    WHEN a.hora_salida IS NULL THEN 'activo'
+                    ELSE 'finalizada'
+                END AS estado
+             FROM asistencias a
+             INNER JOIN usuarios u ON u.id = a.usuario_id
+             WHERE a.usuario_id = ?
+             ORDER BY a.hora_entrada DESC`,
+            [usuarioId],
+        );
+
+        return rows.map((row) => ({
+            id: row.id,
+            reservaId: row.reservaId,
+            nombre: row.nombre,
+            apellido: row.apellido,
+            dni: row.dni,
+            horaEntrada: row.horaEntrada,
+            horaSalida: row.horaSalida,
+            estado: row.estado,
+        }));
     }
 
     static async findByReservationId(reservaId) {

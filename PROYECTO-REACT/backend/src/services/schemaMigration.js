@@ -52,6 +52,42 @@ async function ensureEstadoEnumValues(requiredValues) {
     return true;
 }
 
+async function ensureTipoEnumValues(requiredValues) {
+    const [rows] = await db.execute(
+        `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'reservas' AND COLUMN_NAME = 'tipo'`,
+    );
+
+    if (!rows || rows.length === 0) {
+        return false;
+    }
+
+    const columnType = rows[0].COLUMN_TYPE || "";
+    const matches = columnType.match(/enum\((.*)\)/i);
+    if (!matches || !matches[1]) {
+        return false;
+    }
+
+    const values = matches[1].split(",").map((item) => item.trim().replace(/^'|'$/g, ""));
+    let changed = false;
+
+    for (const value of requiredValues) {
+        if (!values.includes(value)) {
+            values.push(value);
+            changed = true;
+        }
+    }
+
+    if (!changed) {
+        return true;
+    }
+
+    const newEnum = values.map((value) => `'${value}'`).join(",");
+    await db.execute(`ALTER TABLE reservas MODIFY tipo ENUM(${newEnum}) NOT NULL DEFAULT 'normal'`);
+    console.log(`Enum reservas.tipo actualizado: ${values.join(", ")}`);
+    return true;
+}
+
 async function ensureGuestTableExists() {
     await db.execute(`
         CREATE TABLE IF NOT EXISTS usuarios_invitados (
@@ -77,6 +113,10 @@ async function ensureGuestTableExists() {
 async function runSchemaMigrations() {
     try {
         await ensureEstadoEnumValues(["finalizada"]);
+        await ensureTipoEnumValues(["checkin_directo"]);
+
+        // Ensure guest table exists before altering it
+        await ensureGuestTableExists();
 
         // Add weekly limit column to planes_membresia
         const colAdded = await ensureColumnExists(
@@ -107,6 +147,12 @@ async function runSchemaMigrations() {
             );
             console.log("total_reservas=15 asignado al plan Interdiario (id=4)");
         }
+        // Ensure guest surcharge flag exists
+        await ensureColumnExists(
+            "usuarios_invitados",
+            "recargo_aplicado",
+            "TINYINT(1) DEFAULT 0 AFTER monto",
+        );
     } catch (error) {
         console.error("Error ejecutando migraciones de esquema:", error);
     }

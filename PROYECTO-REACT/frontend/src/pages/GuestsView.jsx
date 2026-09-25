@@ -13,6 +13,16 @@ function formatToLocalTime(date) {
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`
 }
 
+function parseLocalDateTime(value) {
+  if (!value) return null
+  const normalized = value.replace(' ', 'T')
+  const [datePart, timePart] = normalized.split('T')
+  if (!datePart || !timePart) return null
+  const [year, month, day] = datePart.split('-').map(Number)
+  const [hour, minute, second] = timePart.split(':').map(Number)
+  return new Date(year, month - 1, day, hour || 0, minute || 0, second || 0)
+}
+
 function isWithinOpeningHours(date) {
   const day = date.getDay()
   const hours = date.getHours()
@@ -71,6 +81,7 @@ export default function GuestsView({ token }) {
     horaInicio: defaultSchedule.horaInicio,
     fechaFin: defaultSchedule.fechaFin,
     duracionHoras: '1',
+    testMode: false,
   })
 
   const loadGuests = useCallback(async () => {
@@ -100,7 +111,7 @@ export default function GuestsView({ token }) {
   useEffect(() => {
     if (!gymOpenNow && showForm) {
       setShowForm(false)
-      setMessage('El gimnasio está cerrado. Los registros de invitados solo se permiten en horario de atención.')
+      setMessage('El gimnasio está cerrado. Los registros de clientes diarios solo se permiten en horario de atención.')
     }
   }, [gymOpenNow, showForm])
 
@@ -153,7 +164,7 @@ export default function GuestsView({ token }) {
     setMessage('')
 
     if (!isGymOpenNow()) {
-      setFormStatus({ loading: false, error: 'No se puede registrar invitados fuera del horario de atención.' })
+      setFormStatus({ loading: false, error: 'No se puede registrar clientes diarios fuera del horario de atención.' })
       return
     }
 
@@ -189,11 +200,13 @@ export default function GuestsView({ token }) {
         telefono: form.telefono,
         fechaInicio: `${form.fecha}T${form.horaInicio}:00`,
         fechaFin: form.fechaFin,
+        duracionHoras: Number(form.duracionHoras),
+        bypassSchedule: !!form.testMode,
       })
       await loadGuests()
       resetForm()
       setShowForm(false)
-      setMessage('Invitado registrado correctamente. Se considerará en aforo y pago diario.')
+      setMessage('Cliente diario registrado correctamente. Se considerará en aforo y tarifa correspondiente.')
     } catch (error) {
       setFormStatus({ loading: false, error: error.message })
     } finally {
@@ -205,8 +218,8 @@ export default function GuestsView({ token }) {
     <>
       <div className="view-header-row">
         <ViewTitle
-          title="Gestión de Invitados"
-          text="Registra ingresos diarios de usuarios sin membresía y controla el pago de S/. 7.00."
+          title="Clientes diarios"
+          text="Registra ingresos diarios de usuarios sin membresía y aplica tarifas según duración seleccionada."
         />
         <button
           className="action-btn btn-emerald"
@@ -214,14 +227,14 @@ export default function GuestsView({ token }) {
           onClick={() => setShowForm((value) => !value)}
           disabled={!gymOpenNow}
         >
-          {showForm ? 'Ocultar Formulario' : 'Nuevo Invitado'}
+          {showForm ? 'Ocultar Formulario' : 'Nuevo Cliente Diario'}
         </button>
       </div>
 
       {!gymOpenNow && (
         <div className="system-notice compact-notice warning-notice">
-          El gimnasio está cerrado. Solo se pueden registrar invitados dentro del horario de atención.
-        </div>
+            El gimnasio está cerrado. Solo se pueden registrar clientes diarios dentro del horario de atención.
+          </div>
       )}
 
       {message && <div className="system-notice compact-notice">{message}</div>}
@@ -231,9 +244,9 @@ export default function GuestsView({ token }) {
           <div className="form-panel-title">
             <div>
               <p className="stat-label">Registro diario</p>
-              <h2>Nuevo Invitado</h2>
+              <h2>Nuevo Cliente Diario</h2>
             </div>
-            <span className="plan-pill">Pago diario S/. 7.00</span>
+            <span className="plan-pill">Tarifas: 1h S/.5 • 2h S/.8 • 3h S/.11 (tolerancia 10 min)</span>
           </div>
 
           <form onSubmit={handleCreateGuest}>
@@ -284,27 +297,38 @@ export default function GuestsView({ token }) {
               </div>
 
                       <div className="form-element">
-                <label className="element-label" htmlFor="duracion-invitado">Duración</label>
-                <select
-                  id="duracion-invitado"
-                  className="input-field"
-                  value={form.duracionHoras}
-                  onChange={(event) => updateField('duracionHoras', event.target.value)}
-                >
-                  <option value="1">1 hora</option>
-                  <option value="1.5">1:30 horas</option>
-                  <option value="2">2 horas</option>
-                  <option value="2.5">2:30 horas</option>
-                  <option value="3">3 horas</option>
-                </select>
-              </div>
+                        <label className="element-label" htmlFor="duracion-invitado">Duración (horas)</label>
+                        <select
+                          id="duracion-invitado"
+                          className="input-field"
+                          value={form.duracionHoras}
+                          onChange={(event) => updateField('duracionHoras', event.target.value)}
+                        >
+                          <option value="1">1 hora</option>
+                          <option value="2">2 horas</option>
+                          <option value="3">3 horas</option>
+                        </select>
+                      </div>
+
+                      <div className="form-element">
+                        <label className="element-label" htmlFor="test-mode">Modo prueba</label>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                          <input
+                            id="test-mode"
+                            type="checkbox"
+                            checked={form.testMode}
+                            onChange={(e) => updateField('testMode', e.target.checked)}
+                          />
+                          <small>Ignorar validación de horario (solo para pruebas)</small>
+                        </div>
+                      </div>
             </div>
 
             {formStatus.error && <p className="form-error">{formStatus.error}</p>}
 
             <div className="form-actions">
               <button className="action-btn btn-emerald" type="submit" disabled={formStatus.loading}>
-                {formStatus.loading ? 'Guardando...' : 'Registrar Invitado'}
+                {formStatus.loading ? 'Guardando...' : 'Registrar Cliente Diario'}
               </button>
               <button className="action-btn btn-light" type="button" onClick={resetForm}>
                 Limpiar
@@ -318,9 +342,11 @@ export default function GuestsView({ token }) {
         <table className="corporate-table">
           <thead>
             <tr>
-              <th>Invitado</th>
+              <th>Cliente</th>
               <th>Teléfono</th>
-              <th>Horario</th>
+              <th>Fecha</th>
+              <th>Hora Inicio</th>
+              <th>Hora Salida</th>
               <th>Duración</th>
               <th>Estado</th>
             </tr>
@@ -328,29 +354,41 @@ export default function GuestsView({ token }) {
           <tbody>
             {loading && (
               <tr>
-                <td colSpan="5">Cargando invitados...</td>
+                <td colSpan="7">Cargando clientes diarios...</td>
               </tr>
             )}
             {!loading && guests.length === 0 && (
               <tr>
-                <td colSpan="5">No hay invitados registrados.</td>
+                <td colSpan="7">No hay clientes diarios registrados.</td>
               </tr>
             )}
             {!loading && guests.map((guest) => {
-              const start = guest.fechaInicio ? new Date(guest.fechaInicio) : null
-              const end = guest.fechaFin ? new Date(guest.fechaFin) : null
+              const start = guest.fechaInicio ? parseLocalDateTime(guest.fechaInicio) : null
+              const end = guest.fechaFin ? parseLocalDateTime(guest.fechaFin) : null
               const duration = start && end ? Math.round((end - start) / (1000 * 60)) : null
               const durationLabel = duration
                 ? `${Math.floor(duration / 60)}h${duration % 60 === 0 ? '' : `:${String(duration % 60).padStart(2, '0')}`}`
                 : '-'
 
+              const now = new Date()
+              let displayState = guest.estado || 'activo'
+              if ((end && now >= end) || guest.estado === 'finalizado') {
+                displayState = 'finalizado'
+              }
+
+              const displayDate = start ? start.toLocaleDateString('es-ES') : '-'
+              const displayStart = start ? start.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true }) : '-'
+              const displayEnd = end ? end.toLocaleTimeString('es-ES', { hour: 'numeric', minute: '2-digit', hour12: true }) : '-'
+
               return (
                 <tr key={guest.id}>
                   <td>{guest.nombre || '-'}</td>
                   <td>{guest.telefono || '-'}</td>
-                  <td>{guest.fechaInicio && guest.fechaFin ? `${guest.fechaInicio} → ${guest.fechaFin}` : '-'}</td>
+                  <td>{displayDate}</td>
+                  <td>{displayStart}</td>
+                  <td>{displayEnd}</td>
                   <td>{durationLabel}</td>
-                  <td>{guest.estado || 'activo'}</td>
+                  <td>{displayState}</td>
                 </tr>
               )
             })}

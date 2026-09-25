@@ -17,16 +17,16 @@ export const ROLE_HOME = {
 export const MENU_ITEMS = {
   admin: [
     { to: '/app/check-in', label: 'Check-in Unico' },
-    { to: '/app/invitados', label: 'Gestion de Invitados' },
+    { to: '/app/invitados', label: 'Clientes diarios' },
     { to: '/app/socios', label: 'Gestion de Socios' },
     { to: '/app/membresias', label: 'Gestion de Membresias' },
-    { to: '/app/dashboard-reservas', label: 'Dashboard de Reservas' },
+    { to: '/app/dashboard-reservas', label: 'Dashboard de Control' },
     { to: '/app/perfil', label: 'Perfil' },
   ],
   cliente: [
     { to: '/app/aforo', label: 'Control de Aforo' },
     { to: '/app/reservas', label: 'Modulo de Reservas' },
-    { to: '/app/dashboard-reservas', label: 'Dashboard de Reservas' },
+    { to: '/app/dashboard-reservas', label: 'Dashboard de Control' },
     { to: '/app/perfil', label: 'Perfil' },
   ],
 }

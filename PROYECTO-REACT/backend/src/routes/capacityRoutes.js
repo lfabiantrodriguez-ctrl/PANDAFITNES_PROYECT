@@ -5,5 +5,6 @@ const router = express.Router();
 
 router.get("/", CapacityController.getCapacity);
 router.get("/historial", CapacityController.getHistoricalCapacity);
+router.get("/rango", CapacityController.getCapacityRange);
 
 module.exports = router;

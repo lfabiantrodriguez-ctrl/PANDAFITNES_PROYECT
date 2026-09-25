@@ -43,9 +43,29 @@ function formatMysqlDatetime(date) {
     )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
+function isValidGymSchedule(dateTime, durationMinutes) {
+    const dayOfWeek = dateTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
+    if (dayOfWeek === 0) return false; // Closed Sunday
+
+    const entryHour = dateTime.getHours();
+    const entryMinutes = entryHour * 60 + dateTime.getMinutes();
+    const exitMinutes = entryMinutes + Number(durationMinutes || 0);
+
+    if (dayOfWeek === 6) {
+        // Saturday: 7:00 AM to 12:00 PM (420 to 720 minutes)
+        return entryMinutes >= 420 && exitMinutes <= 720;
+    } else {
+        // Monday to Friday: 6:30 AM to 11:00 AM (390 to 660) and 4:00 PM to 10:00 PM (960 to 1320)
+        const inMorningShift = entryMinutes >= 390 && exitMinutes <= 660;
+        const inEveningShift = entryMinutes >= 960 && exitMinutes <= 1320;
+        return inMorningShift || inEveningShift;
+    }
+}
+
 module.exports = {
     TOLERANCE_MINUTES,
     formatDurationLabel,
     getEndOfGymDay,
+    isValidGymSchedule,
     formatMysqlDatetime,
 };

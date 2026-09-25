@@ -75,7 +75,7 @@ class ReservationModel {
             `SELECT ${RESERVATION_FIELDS}
              FROM reservas
              WHERE usuario_id = ?
-               AND tipo = 'normal'
+              AND tipo IN ('normal','checkin_directo')
                AND estado IN ('pendiente', 'confirmada')
                AND hora_salida >= NOW()
              ORDER BY hora_entrada ASC
@@ -143,7 +143,7 @@ class ReservationModel {
     }
 
     static async getDashboard({ userId = null, startDate = null, endDate = null } = {}) {
-        const conditions = ["WHERE estado IN ('pendiente', 'confirmada')"];
+        const conditions = ["WHERE estado IN ('pendiente', 'confirmada', 'finalizada', 'no_show')"];
         const params = [];
 
         if (userId) {
@@ -179,6 +179,26 @@ class ReservationModel {
             params,
         );
 
+        const [reservationRows] = await db.execute(
+            `SELECT
+                r.id,
+                r.usuario_id AS usuarioId,
+                u.nombre,
+                u.apellido,
+                u.dni,
+                r.hora_entrada AS horaEntrada,
+                r.hora_salida AS horaSalida,
+                r.estado,
+                r.tipo,
+                r.duracion_minutos AS duracionMinutos,
+                r.creado_en AS creadoEn
+             FROM reservas r
+             INNER JOIN usuarios u ON u.id = r.usuario_id
+             ${conditions.join(" ")}
+             ORDER BY r.hora_entrada DESC`,
+            params,
+        );
+
         const hourlyStats = hourlyRows.map((row) => ({
             hour: Number(row.hour),
             count: Number(row.total),
@@ -196,6 +216,7 @@ class ReservationModel {
             peakHours,
             peakCount: maxCount,
             hourlyStats,
+            reservas: reservationRows,
         };
     }
 
@@ -254,6 +275,39 @@ class ReservationModel {
         );
 
         return rows[0]?.total || 0;
+    }
+
+    static async getAccessHistory(usuarioId) {
+        const [rows] = await db.execute(
+            `SELECT
+                r.id,
+                r.hora_entrada AS horaEntrada,
+                r.hora_salida AS horaSalida,
+                r.estado,
+                CASE WHEN r.tipo = 'checkin_directo' THEN 'checkin_directo' ELSE 'reserva' END AS tipo
+             FROM reservas r
+             WHERE r.usuario_id = ?
+
+             UNION ALL
+
+             SELECT
+                a.id,
+                a.hora_entrada AS horaEntrada,
+                a.hora_salida AS horaSalida,
+                CASE
+                    WHEN a.hora_salida IS NOT NULL THEN 'finalizada'
+                    ELSE 'activo'
+                END AS estado,
+                'checkin_directo' AS tipo
+             FROM asistencias a
+             WHERE a.usuario_id = ?
+               AND a.reserva_id IS NULL
+
+             ORDER BY horaEntrada DESC`,
+            [usuarioId, usuarioId],
+        );
+
+        return rows;
     }
 }
 

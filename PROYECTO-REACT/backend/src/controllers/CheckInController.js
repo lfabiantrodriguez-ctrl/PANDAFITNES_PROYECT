@@ -5,6 +5,7 @@ const { sendEmail } = require("../utils/email");
 const {
     getEndOfGymDay,
     formatMysqlDatetime,
+    isValidGymSchedule,
     TOLERANCE_MINUTES,
 } = require("../utils/reservationHelpers");
 
@@ -70,6 +71,7 @@ function getStatus(now, entryTime, exitTime, reservation = null) {
 class CheckInController {
     static async lookupReservation(req, res) {
         try {
+            const MembershipModel = require("../models/MembershipModel");
             const lookup = parseSearchCode(req.params.code);
             if (!lookup) {
                 return res.status(400).json({ message: "Codigo de socio o DNI invalido" });
@@ -89,10 +91,15 @@ class CheckInController {
             }
 
             const reservation = await ReservationModel.findActiveForCheckIn(user.id);
-            const history = await ReservationModel.getByUser(user.id);
+            const history = await ReservationModel.getAccessHistory(user.id);
+            const membership = await MembershipModel.getClientMembership(user.id);
 
-            if (!reservation && history.length === 0) {
-                return res.status(404).json({ message: "No hay reservas activas ni historial para este socio" });
+            const isValidMembership = membership &&
+                membership.estado === 'activo' &&
+                new Date(membership.fechaFin) >= new Date();
+
+            if (!reservation && !isValidMembership) {
+                return res.status(404).json({ message: "No hay reservas activas ni membresia activa para este socio" });
             }
 
             const now = new Date();
@@ -101,8 +108,10 @@ class CheckInController {
             return res.json({
                 user,
                 reservation,
+                membership: isValidMembership ? membership : null,
                 history,
                 checkInStatus: status,
+                canDirectCheckIn: !reservation && isValidMembership,
                 currentTime: now.toISOString(),
             });
         } catch (error) {
@@ -212,6 +221,112 @@ class CheckInController {
             });
         } catch (error) {
             console.error("Error finalizando reserva manualmente:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async confirmDirectEntry(req, res) {
+        try {
+            const { userId, durationMinutes } = req.body;
+            const MembershipModel = require("../models/MembershipModel");
+
+            if (!userId) {
+                return res.status(400).json({ message: "Falta userId" });
+            }
+
+            const user = await UserModel.findActiveById(userId);
+            if (!user) {
+                return res.status(404).json({ message: "Usuario no encontrado" });
+            }
+
+            const membership = await MembershipModel.getClientMembership(userId);
+            const isValidMembership = membership &&
+                membership.estado === 'activo' &&
+                new Date(membership.fechaFin) >= new Date();
+
+            if (!isValidMembership) {
+                return res.status(400).json({ message: "El usuario no tiene una membresía activa" });
+            }
+
+            const now = new Date();
+            const duration = Number(durationMinutes) || 60;
+            const allowed = [60, 90, 120, 150, 180];
+            const dur = allowed.includes(duration) ? duration : 60;
+
+            const horaEntrada = formatMysqlDatetime(now);
+            const salidaDate = new Date(now.getTime() + dur * 60 * 1000);
+            const horaSalida = formatMysqlDatetime(salidaDate);
+
+            // Validar que el ingreso y la salida estén dentro del horario de atención del gimnasio
+            if (!isValidGymSchedule(now, dur)) {
+                return res.status(400).json({
+                    message: "No se puede realizar el registro porque el gimnasio está fuera del horario de atención",
+                });
+            }
+
+            // Crear una reserva temporal para el check-in directo y marcarla confirmada
+            const reservation = await ReservationModel.create({
+                usuarioId: userId,
+                horaEntrada,
+                horaSalida,
+                tipo: 'checkin_directo',
+                reservaOrigenId: null,
+                duracionMinutos: dur,
+            });
+
+            // Marcar la reserva como confirmada
+            await ReservationModel.updateStatus(reservation.id, 'confirmada');
+
+            // Crear asistencia vinculada a la reserva (hora_salida se dejará NULL y el cron la finalizará)
+            const attendance = await AttendanceModel.create({
+                reservaId: reservation.id,
+                usuarioId: userId,
+                horaEntrada,
+            });
+
+            if (user.email) {
+                const localTimeStr = now.toLocaleTimeString("es-ES", {
+                    hour: "2-digit",
+                    minute: "2-digit",
+                });
+                const localDateStr = now.toLocaleDateString("es-ES", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                });
+
+                await sendEmail({
+                    to: user.email,
+                    subject: "Check-in Directo Registrado - Panda Fitness",
+                    html: `
+                        <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                            <h2 style="color: #16a34a;">¡Hola ${user.nombre}!</h2>
+                            <p>Tu ingreso directo al gimnasio ha sido registrado el <strong>${localDateStr}</strong> a las <strong>${localTimeStr}</strong>.</p>
+                            <p>Plan activo: <strong>${membership.planNombre}</strong></p>
+                            <p>¡Disfruta tu entrenamiento!</p>
+                            <br/>
+                            <p>Saludos,<br/>El equipo de <strong>Panda Fitness</strong></p>
+                        </div>
+                    `,
+                }).catch((err) => console.error("Error sending direct checkin email:", err));
+            }
+
+            return res.json({
+                message: "Check-in directo confirmado",
+                reservation: {
+                    id: reservation.id,
+                    horaEntrada: reservation.horaEntrada,
+                    horaSalida: reservation.horaSalida,
+                    duracionMinutos: reservation.duracionMinutos,
+                },
+                attendance: {
+                    id: attendance.id,
+                    usuarioId: attendance.usuarioId,
+                    horaEntrada: attendance.horaEntrada,
+                },
+            });
+        } catch (error) {
+            console.error("Error en check-in directo:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }

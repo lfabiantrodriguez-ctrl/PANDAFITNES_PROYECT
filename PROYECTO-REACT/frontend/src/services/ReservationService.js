@@ -54,4 +54,16 @@ export class ReservationService {
     }
     return data
   }
+
+  static async cancelReservation(token, reservationId) {
+    const response = await fetch(`/api/reservas/${reservationId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudo cancelar la reserva')
+    }
+    return data
+  }
 }

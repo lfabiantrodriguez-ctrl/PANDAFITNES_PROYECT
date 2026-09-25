@@ -55,6 +55,7 @@ export default function ReservationsView({ token }) {
   
   const [myReservations, setMyReservations] = useState([])
   const [myReservationsLoading, setMyReservationsLoading] = useState(false)
+  const [cancelingId, setCancelingId] = useState(null)
 
   // Fetch reservations history and active ones
   async function loadMyReservations() {
@@ -64,6 +65,24 @@ export default function ReservationsView({ token }) {
       setMyReservations(Array.isArray(data.reservas) ? data.reservas : [])
     } catch (err) {
       console.error('Error al cargar mis reservas:', err)
+    }
+  }
+
+  async function handleCancelReservation(reservationId) {
+    if (!token) return
+    const ok = window.confirm('¿Deseas cancelar esta reserva?')
+    if (!ok) return
+
+    try {
+      setCancelingId(reservationId)
+      await ReservationService.cancelReservation(token, reservationId)
+      await loadMyReservations()
+      await loadDashboard()
+      setStatus({ loading: false, error: '', success: 'Reserva cancelada correctamente.' })
+    } catch (err) {
+      setStatus({ loading: false, error: err.message || 'No se pudo cancelar la reserva', success: '' })
+    } finally {
+      setCancelingId(null)
     }
   }
 
@@ -333,8 +352,52 @@ export default function ReservationsView({ token }) {
 
         <hr style={{ margin: '32px 0', border: 'none', borderTop: '1px solid #e5e7eb' }} />
 
-        {/* Dashboard and Stats section */}
-        
+        {/* Mis reservas */}
+        <section style={{ marginTop: '18px' }}>
+          <h3>Mis Reservas</h3>
+          <div className="table-frame" style={{ marginTop: '8px' }}>
+            <table className="corporate-table">
+              <thead>
+                <tr>
+                  <th>Día</th>
+                  <th>Ingreso</th>
+                  <th>Salida</th>
+                  <th>Duración</th>
+                  <th>Estado</th>
+                  <th>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {myReservations.length === 0 ? (
+                  <tr>
+                    <td colSpan="6" style={{ textAlign: 'center', padding: '12px' }}>No tienes reservas registradas.</td>
+                  </tr>
+                ) : (
+                  myReservations.map(r => (
+                    <tr key={r.id}>
+                      <td>{formatDateTimeString(r.horaEntrada)}</td>
+                      <td>{formatTimeString(r.horaEntrada)}</td>
+                      <td>{formatTimeString(r.horaSalida)}</td>
+                      <td>{Math.round((new Date(r.horaSalida.replace(' ', 'T')).getTime() - new Date(r.horaEntrada.replace(' ', 'T')).getTime()) / 60000)} min</td>
+                      <td style={{ textTransform: 'capitalize', fontWeight: 700 }}>{r.estado}</td>
+                      <td>
+                        {(r.estado === 'pendiente' || r.estado === 'confirmada') && (
+                          <button
+                            className="action-btn btn-danger"
+                            onClick={() => handleCancelReservation(r.id)}
+                            disabled={cancelingId === r.id}
+                          >
+                            {cancelingId === r.id ? 'Cancelando...' : 'Cancelar'}
+                          </button>
+                        )}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </section>
       </section>
     </>
   )

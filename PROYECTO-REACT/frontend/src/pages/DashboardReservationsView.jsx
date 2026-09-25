@@ -71,17 +71,26 @@ export default function DashboardReservationsView({ token, user }) {
   const [attendanceCount, setAttendanceCount] = useState(0)
 
   // State for Admin Aforo Historial
-  const [historyFilter, setHistoryFilter] = useState({ fecha: today, hora: '10:00' })
-  const [historyResult, setHistoryResult] = useState(null)
-  const [historyLoading, setHistoryLoading] = useState(false)
-  const [historyError, setHistoryError] = useState('')
+  const [capacityRangeFilter, setCapacityRangeFilter] = useState({ startDate: today, endDate: today })
+  const [capacityRangeResult, setCapacityRangeResult] = useState(null)
+  const [capacityRangeLoading, setCapacityRangeLoading] = useState(false)
+  const [capacityRangeError, setCapacityRangeError] = useState('')
 
   // State for Admin Reservas (Today & search by client)
   const [todayStats, setTodayStats] = useState({ totalReservations: 0, peakHour: null, peakHours: [] })
+  const [historyReservationFilter, setHistoryReservationFilter] = useState({ startDate: today, endDate: today })
+  const [historyReservationResult, setHistoryReservationResult] = useState(null)
+  const [historyReservationLoading, setHistoryReservationLoading] = useState(false)
+  const [historyReservationError, setHistoryReservationError] = useState('')
   const [searchQuery, setSearchQuery] = useState('')
   const [searchResult, setSearchResult] = useState(null) // { user, reservas }
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchError, setSearchError] = useState('')
+
+  const [attendanceSearchQuery, setAttendanceSearchQuery] = useState('')
+  const [attendanceSearchResult, setAttendanceSearchResult] = useState(null) // { user, asistencias }
+  const [attendanceSearchLoading, setAttendanceSearchLoading] = useState(false)
+  const [attendanceSearchError, setAttendanceSearchError] = useState('')
 
   const occupancyPercent = useMemo(() => {
     if (!capacity.maximo) return 0
@@ -147,6 +156,11 @@ export default function DashboardReservationsView({ token, user }) {
           peakHour: todayReservationsData.peakHour ?? null,
           peakHours: Array.isArray(todayReservationsData.peakHours) ? todayReservationsData.peakHours : [],
         })
+
+        setHistoryReservationResult({
+          ...todayReservationsData,
+          reservas: Array.isArray(todayReservationsData.reservas) ? todayReservationsData.reservas : [],
+        })
       } else {
         // Load socio specific data
         const [reservationsData, attendanceSummary] = await Promise.all([
@@ -179,24 +193,59 @@ export default function DashboardReservationsView({ token, user }) {
   }, [isAdmin, loadDashboardData])
 
   // Admin historical capacity handler
-  async function handleHistoryQuery(event) {
+  async function handleCapacityRangeQuery(event) {
     event.preventDefault()
-    if (!historyFilter.fecha || !historyFilter.hora) {
-      setHistoryError('Por favor seleccione una fecha y hora válidas')
+    const { startDate, endDate } = capacityRangeFilter
+
+    if (!startDate || !endDate) {
+      setCapacityRangeError('Por favor ingrese un rango de fechas válido')
       return
     }
 
-    setHistoryLoading(true)
-    setHistoryError('')
-    setHistoryResult(null)
+    if (startDate > endDate) {
+      setCapacityRangeError('La fecha de inicio no puede ser mayor que la fecha de fin')
+      return
+    }
+
+    setCapacityRangeLoading(true)
+    setCapacityRangeError('')
+    setCapacityRangeResult(null)
 
     try {
-      const data = await CapacityService.getHistoricalCapacity(historyFilter.fecha, historyFilter.hora)
-      setHistoryResult(data)
+      const data = await CapacityService.getCapacityRange(startDate, endDate)
+      setCapacityRangeResult(data)
     } catch (err) {
-      setHistoryError(err.message || 'Error al consultar el aforo histórico')
+      setCapacityRangeError(err.message || 'Error al consultar el historial de aforo')
     } finally {
-      setHistoryLoading(false)
+      setCapacityRangeLoading(false)
+    }
+  }
+
+  async function handleReservationHistoryQuery(event) {
+    event.preventDefault()
+    const { startDate, endDate } = historyReservationFilter
+
+    if (!startDate || !endDate) {
+      setHistoryReservationError('Por favor ingrese un rango de fechas válido')
+      return
+    }
+
+    if (startDate > endDate) {
+      setHistoryReservationError('La fecha de inicio no puede ser mayor que la fecha de fin')
+      return
+    }
+
+    setHistoryReservationLoading(true)
+    setHistoryReservationError('')
+    setHistoryReservationResult(null)
+
+    try {
+      const data = await ReservationService.getReservationDashboard(token, { startDate, endDate })
+      setHistoryReservationResult(data)
+    } catch (err) {
+      setHistoryReservationError(err.message || 'Error al consultar el historial de reservas')
+    } finally {
+      setHistoryReservationLoading(false)
     }
   }
 
@@ -226,15 +275,46 @@ export default function DashboardReservationsView({ token, user }) {
     }
   }
 
+  async function handleSearchAttendance(event) {
+    event.preventDefault()
+    const query = attendanceSearchQuery.trim()
+    if (!query) {
+      setAttendanceSearchError('Por favor ingrese el DNI o nombre del socio')
+      return
+    }
+
+    setAttendanceSearchLoading(true)
+    setAttendanceSearchError('')
+    setAttendanceSearchResult(null)
+
+    try {
+      const data = await AttendanceService.searchBySocio(token, query)
+      setAttendanceSearchResult({
+        user: data.user,
+        asistencias: Array.isArray(data.asistencias) ? data.asistencias : [],
+      })
+    } catch (err) {
+      setAttendanceSearchError(err.message || 'No se encontraron asistencias para el socio ingresado')
+    } finally {
+      setAttendanceSearchLoading(false)
+    }
+  }
+
   // Map state tags
   function getDisplayStatus(estado) {
-    if (estado === 'confirmada') {
+    if (estado === 'finalizada') {
       return { label: 'Finalizada', className: 'badge-valid' }
+    }
+    if (estado === 'confirmada') {
+      return { label: 'Confirmada', className: 'badge-valid' }
     }
     if (estado === 'pendiente') {
       return { label: 'Pendiente', className: 'badge-warning', style: { background: '#fef3c7', color: '#d97706' } }
     }
-    return { label: 'Cancelada', className: 'badge-alert' }
+    if (estado === 'cancelada') {
+      return { label: 'Cancelada', className: 'badge-alert' }
+    }
+    return { label: String(estado).charAt(0).toUpperCase() + String(estado).slice(1), className: 'badge-warning' }
   }
 
   // Calculate duration in minutes
@@ -276,10 +356,6 @@ export default function DashboardReservationsView({ token, user }) {
   }
 
   function renderAforoAdmin() {
-    const historicalPercent = historyResult && historyResult.maximo 
-      ? Math.min(100, Math.round((historyResult.actual / historyResult.maximo) * 100))
-      : 0;
-
     return (
       <div style={{ display: 'grid', gap: '24px', marginTop: '16px' }}>
         {/* Real-time capacity */}
@@ -305,42 +381,133 @@ export default function DashboardReservationsView({ token, user }) {
         {/* Historical capacity */}
         <section className="dashboard-panel">
           <h2 className="dashboard-panel-title">Historial de Aforo</h2>
-          <p className="dashboard-panel-subtitle">Consulta cuánta ocupación hubo en una fecha y hora específicas.</p>
+          <p className="dashboard-panel-subtitle">Consulta cuánta ocupación hubo en un rango de fechas.</p>
 
-          <form onSubmit={handleHistoryQuery} className="dashboard-range-picker" style={{ margin: '16px 0', gap: '16px' }}>
+          <form onSubmit={handleCapacityRangeQuery} className="dashboard-range-picker" style={{ display: 'grid', gap: '16px', margin: '16px 0' }}>
             <div className="dashboard-range-item">
-              <span className="element-label">Día</span>
+              <span className="element-label">Desde</span>
               <input
                 className="input-field"
                 type="date"
-                value={historyFilter.fecha}
-                onChange={(event) => setHistoryFilter(prev => ({ ...prev, fecha: event.target.value }))}
+                value={capacityRangeFilter.startDate}
+                onChange={(event) => setCapacityRangeFilter(prev => ({ ...prev, startDate: event.target.value }))}
                 required
               />
             </div>
             <div className="dashboard-range-item">
-              <span className="element-label">Hora</span>
+              <span className="element-label">Hasta</span>
               <input
                 className="input-field"
-                type="time"
-                value={historyFilter.hora}
-                onChange={(event) => setHistoryFilter(prev => ({ ...prev, hora: event.target.value }))}
+                type="date"
+                value={capacityRangeFilter.endDate}
+                onChange={(event) => setCapacityRangeFilter(prev => ({ ...prev, endDate: event.target.value }))}
                 required
               />
             </div>
-            <button className="action-btn btn-dark" type="submit" disabled={historyLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
-              {historyLoading ? 'Consultando...' : 'Consultar'}
+            <button className="action-btn btn-dark" type="submit" disabled={capacityRangeLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
+              {capacityRangeLoading ? 'Consultando...' : 'Consultar rango'}
             </button>
           </form>
 
-          {historyError && <p className="form-error">{historyError}</p>}
+          {capacityRangeError && <p className="form-error">{capacityRangeError}</p>}
 
-          {historyResult && (
+          {capacityRangeResult && (
             <div className="system-notice success-notice" style={{ marginTop: '12px', padding: '16px', borderRadius: '8px' }}>
-              <h4>📊 Aforo en el momento seleccionado:</h4>
-              <p style={{ fontSize: '1.2em', margin: '8px 0 0 0' }}>
-                Ocupación registrada: <strong>{historyResult.actual} / {historyResult.maximo}</strong> personas (<strong>{historicalPercent}%</strong>).
+              <h4>📊 Aforo en el rango seleccionado:</h4>
+              <p style={{ margin: '8px 0 0 0' }}>
+                Rango: <strong>{capacityRangeResult.startDate}</strong> hasta <strong>{capacityRangeResult.endDate}</strong>
               </p>
+              <div className="table-frame" style={{ marginTop: '16px' }}>
+                <table className="corporate-table">
+                  <thead>
+                    <tr>
+                      <th>Fecha</th>
+                      <th>Asistentes</th>
+                      <th>Clientes diarios</th>
+                      <th>Total</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {capacityRangeResult.dailySummary.map((row) => (
+                      <tr key={row.fecha}>
+                        <td>{row.fecha}</td>
+                        <td>{row.attendances}</td>
+                        <td>{row.guests}</td>
+                        <td>{row.total}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="dashboard-panel">
+          <h2 className="dashboard-panel-title">Historial de Asistencias</h2>
+          <p className="dashboard-panel-subtitle">Busca las asistencias registradas de un socio por DNI o nombre.</p>
+
+          <form onSubmit={handleSearchAttendance} className="dashboard-range-picker" style={{ margin: '16px 0', gap: '16px' }}>
+            <div className="dashboard-range-item" style={{ flex: 1 }}>
+              <span className="element-label">DNI o Nombre del socio</span>
+              <input
+                className="input-field"
+                type="text"
+                placeholder="Ingrese DNI (8 dígitos) o nombre completo"
+                value={attendanceSearchQuery}
+                onChange={(event) => setAttendanceSearchQuery(event.target.value)}
+                required
+              />
+            </div>
+            <button className="action-btn btn-dark" type="submit" disabled={attendanceSearchLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
+              {attendanceSearchLoading ? 'Buscando...' : 'Buscar'}
+            </button>
+          </form>
+
+          {attendanceSearchError && <p className="form-error">{attendanceSearchError}</p>}
+
+          {attendanceSearchResult && (
+            <div style={{ marginTop: '16px', display: 'grid', gap: '16px' }}>
+              <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px' }}>
+                <h4 style={{ margin: '0 0 8px 0', color: '#111827' }}>Socio</h4>
+                <p style={{ margin: '4px 0' }}><strong>Nombre:</strong> {attendanceSearchResult.user.nombre} {attendanceSearchResult.user.apellido}</p>
+                <p style={{ margin: '4px 0' }}><strong>DNI:</strong> {attendanceSearchResult.user.dni} | <strong>Email:</strong> {attendanceSearchResult.user.email}</p>
+                <p style={{ margin: '4px 0' }}><strong>Total Asistencias:</strong> {attendanceSearchResult.asistencias.length}</p>
+              </div>
+
+              <div className="table-frame">
+                <table className="corporate-table">
+                  <thead>
+                    <tr>
+                      <th>Día</th>
+                      <th>Ingreso</th>
+                      <th>Salida</th>
+                      <th>Duración</th>
+                      <th>Estado</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {attendanceSearchResult.asistencias.length === 0 ? (
+                      <tr>
+                        <td colSpan="5" style={{ textAlign: 'center', padding: '12px' }}>No se encontraron asistencias para este socio.</td>
+                      </tr>
+                    ) : (
+                      attendanceSearchResult.asistencias.map((asistencia) => {
+                        const duration = getDurationInMinutes(asistencia.horaEntrada, asistencia.horaSalida)
+                        return (
+                          <tr key={`att-${asistencia.id}`}>
+                            <td>{formatDateOnly(asistencia.horaEntrada)}</td>
+                            <td>{formatTimeOnly(asistencia.horaEntrada)}</td>
+                            <td>{asistencia.horaSalida ? formatTimeOnly(asistencia.horaSalida) : 'En curso'}</td>
+                            <td>{duration}</td>
+                            <td>{asistencia.estado === 'activo' ? 'Activo' : 'Finalizada'}</td>
+                          </tr>
+                        )
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
           )}
         </section>
@@ -378,6 +545,83 @@ export default function DashboardReservationsView({ token, user }) {
         </section>
 
         {/* History by client */}
+        <section className="dashboard-panel">
+          <h2 className="dashboard-panel-title">Reservas de Socios</h2>
+          <p className="dashboard-panel-subtitle">Listado de todas las reservas hechas por socios dentro del rango seleccionado.</p>
+
+          <form onSubmit={handleReservationHistoryQuery} className="dashboard-range-picker" style={{ display: 'grid', gap: '16px', margin: '16px 0' }}>
+            <div className="dashboard-range-item">
+              <span className="element-label">Desde</span>
+              <input
+                className="input-field"
+                type="date"
+                value={historyReservationFilter.startDate}
+                onChange={(event) => setHistoryReservationFilter(prev => ({ ...prev, startDate: event.target.value }))}
+                required
+              />
+            </div>
+            <div className="dashboard-range-item">
+              <span className="element-label">Hasta</span>
+              <input
+                className="input-field"
+                type="date"
+                value={historyReservationFilter.endDate}
+                onChange={(event) => setHistoryReservationFilter(prev => ({ ...prev, endDate: event.target.value }))}
+                required
+              />
+            </div>
+            <button className="action-btn btn-dark" type="submit" disabled={historyReservationLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
+              {historyReservationLoading ? 'Consultando...' : 'Consultar reservas'}
+            </button>
+          </form>
+
+          {historyReservationError && <p className="form-error">{historyReservationError}</p>}
+
+          {historyReservationResult && (
+            <div className="table-frame" style={{ marginTop: '16px' }}>
+              <table className="corporate-table">
+                <thead>
+                  <tr>
+                    <th>Socio</th>
+                    <th>DNI</th>
+                    <th>Fecha</th>
+                    <th>Ingreso</th>
+                    <th>Salida</th>
+                    <th>Duración</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(!Array.isArray(historyReservationResult.reservas) || historyReservationResult.reservas.length === 0) ? (
+                    <tr>
+                      <td colSpan="7" style={{ textAlign: 'center', padding: '12px' }}>No hay reservas de socios para el rango seleccionado.</td>
+                    </tr>
+                  ) : (
+                    historyReservationResult.reservas.map((reserva) => {
+                      const statusObj = getDisplayStatus(reserva.estado)
+                      return (
+                        <tr key={reserva.id}>
+                          <td>{reserva.nombre} {reserva.apellido}</td>
+                          <td>{reserva.dni}</td>
+                          <td>{formatDateOnly(reserva.horaEntrada)}</td>
+                          <td>{formatTimeOnly(reserva.horaEntrada)}</td>
+                          <td>{formatTimeOnly(reserva.horaSalida)}</td>
+                          <td>{getDurationInMinutes(reserva.horaEntrada, reserva.horaSalida)}</td>
+                          <td>
+                            <span className={`badge-status ${statusObj.className}`} style={statusObj.style || {}}>
+                              {statusObj.label}
+                            </span>
+                          </td>
+                        </tr>
+                      )
+                    })
+                  )}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </section>
+
         <section className="dashboard-panel">
           <h2 className="dashboard-panel-title">Historial de reserva por cliente</h2>
           <p className="dashboard-panel-subtitle">Busca todas las reservas realizadas por un socio en el sistema.</p>
@@ -584,7 +828,7 @@ export default function DashboardReservationsView({ token, user }) {
   return (
     <>
       <ViewTitle
-        title={isAdmin ? 'Dashboard Administrativo' : 'Mi Dashboard'}
+        title={isAdmin ? 'Dashboard de Control' : 'Mi Dashboard'}
         text={isAdmin
           ? 'Resumen de los indicadores clave del gimnasio: aforo, reservas y clientes activos.'
           : 'Resumen de tus reservas y asistencias como socio.'

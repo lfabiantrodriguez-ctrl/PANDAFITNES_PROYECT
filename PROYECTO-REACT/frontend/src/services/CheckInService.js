@@ -26,6 +26,22 @@ export class CheckInService {
     return data
   }
 
+  static async confirmDirectEntry(token, userId, durationMinutes = 60) {
+    const response = await fetch('/api/admin/checkin/confirm-direct', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ userId, durationMinutes }),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudo registrar el check-in directo')
+    }
+    return data
+  }
+
   static async finalizeReservation(token, reservationId) {
     const response = await fetch('/api/admin/checkin/finalize', {
       method: 'POST',

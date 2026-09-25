@@ -8,7 +8,7 @@ export class GuestService {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || 'No se pudieron cargar los invitados')
+      throw new Error(errorData.message || 'No se pudieron cargar los clientes diarios')
     }
 
     return response.json()
@@ -26,7 +26,7 @@ export class GuestService {
 
     if (!response.ok) {
       const errorData = await response.json().catch(() => ({}))
-      throw new Error(errorData.message || 'No se pudo crear el invitado')
+      throw new Error(errorData.message || 'No se pudo crear el cliente diario')
     }
 
     return response.json()

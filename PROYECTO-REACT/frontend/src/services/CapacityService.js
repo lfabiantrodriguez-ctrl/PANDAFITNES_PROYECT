@@ -16,4 +16,13 @@ export class CapacityService {
     const data = await response.json()
     return data
   }
+
+  static async getCapacityRange(startDate, endDate) {
+    const response = await fetch(`/api/aforo/rango?startDate=${startDate}&endDate=${endDate}`)
+    if (!response.ok) {
+      throw new Error('No se pudo consultar el historial de aforo')
+    }
+    const data = await response.json()
+    return data
+  }
 }

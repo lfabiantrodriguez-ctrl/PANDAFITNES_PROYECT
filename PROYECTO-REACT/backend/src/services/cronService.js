@@ -137,15 +137,30 @@ async function finalizeEndedReservations() {
 
 async function finalizeEndedGuests() {
     try {
+        // First, apply surcharge and finalize guests who exceeded the 10-minute tolerance
+        const [overdueResult] = await db.execute(
+            `UPDATE usuarios_invitados
+             SET monto = monto + 2.50, recargo_aplicado = 1, estado = 'finalizado'
+             WHERE estado = 'activo'
+               AND DATE_ADD(fecha_fin, INTERVAL 10 MINUTE) < NOW()
+               AND recargo_aplicado = 0`
+        );
+
+        if (overdueResult && overdueResult.affectedRows > 0) {
+            console.log(`Invitados con recargo finalizados automáticamente: ${overdueResult.affectedRows}`);
+        }
+
+        // Then finalize guests whose end time passed but are still within the 10-minute tolerance (no surcharge)
         const [result] = await db.execute(
             `UPDATE usuarios_invitados
              SET estado = 'finalizado'
              WHERE estado = 'activo'
-               AND fecha_fin <= NOW()`
+               AND fecha_fin <= NOW()
+               AND DATE_ADD(fecha_fin, INTERVAL 10 MINUTE) >= NOW()`
         );
 
         if (result && result.affectedRows > 0) {
-            console.log(`Invitados finalizados automáticamente: ${result.affectedRows}`);
+            console.log(`Invitados finalizados automáticamente sin recargo: ${result.affectedRows}`);
         }
     } catch (error) {
         console.error('Error en finalizeEndedGuests:', error);

@@ -260,6 +260,33 @@ class ReservationController {
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }
+
+    static async cancelReservation(req, res) {
+        try {
+            const reservationId = Number(req.params.id);
+            if (!reservationId) return res.status(400).json({ message: 'Id de reserva inválido' });
+
+            const reserva = await ReservationModel.findById(reservationId);
+            if (!reserva) return res.status(404).json({ message: 'Reserva no encontrada' });
+
+            // Only owner can cancel their reservation
+            if (reserva.usuarioId !== req.auth.id) {
+                return res.status(403).json({ message: 'No autorizado para cancelar esta reserva' });
+            }
+
+            // Only allow cancellation if still pending/confirmada
+            if (!['pendiente', 'confirmada'].includes(reserva.estado)) {
+                return res.status(400).json({ message: 'Solo se pueden cancelar reservas pendientes o confirmadas' });
+            }
+
+            await ReservationModel.updateStatus(reservationId, 'cancelada');
+
+            return res.json({ message: 'Reserva cancelada correctamente' });
+        } catch (error) {
+            console.error('Error cancelando reserva:', error);
+            return res.status(500).json({ message: 'Error interno del servidor' });
+        }
+    }
 }
 
 module.exports = ReservationController;

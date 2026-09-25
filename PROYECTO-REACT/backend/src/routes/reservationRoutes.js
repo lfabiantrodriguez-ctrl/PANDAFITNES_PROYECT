@@ -8,5 +8,6 @@ router.get("/dashboard", authenticateToken, ReservationController.getReservation
 router.get("/socio", authenticateToken, requireRole("admin"), ReservationController.getSocioReservations);
 router.get("/", authenticateToken, requireRole("cliente"), ReservationController.getMyReservations);
 router.post("/", authenticateToken, requireRole("cliente"), ReservationController.createReservation);
+router.delete("/:id", authenticateToken, requireRole("cliente"), ReservationController.cancelReservation);
 
 module.exports = router;

@@ -1,16 +1,33 @@
 const GuestModel = require("../models/GuestModel");
 
+function parseLocalDateTime(value) {
+    if (!value) {
+        return null;
+    }
+
+    const normalized = value.replace(' ', 'T');
+    const parts = normalized.split(/[-T:\.]/).map((part) => Number(part));
+    if (parts.length >= 6 && parts.every((n) => !Number.isNaN(n))) {
+        const [year, month, day, hour, minute, second] = parts;
+        return new Date(year, month - 1, day, hour, minute, second || 0);
+    }
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+}
+
 function normalizeDateTime(value) {
     if (!value) {
         return null;
     }
 
-    const date = new Date(value);
-    if (Number.isNaN(date.getTime())) {
+    const date = typeof value === 'string' ? parseLocalDateTime(value) : new Date(value);
+    if (!date || Number.isNaN(date.getTime())) {
         return value;
     }
 
-    return date.toISOString().slice(0, 19).replace("T", " ");
+    const pad = (value) => String(value).padStart(2, '0');
+    return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function isWithinOpeningHours(date) {
@@ -36,7 +53,7 @@ function isWithinOpeningHours(date) {
     return false;
 }
 
-function validateGuestSchedule(startDate, endDate) {
+function validateGuestSchedule(startDate, endDate, bypassSchedule = false) {
     if (startDate.getTime() >= endDate.getTime()) {
         return "La fecha de fin debe ser posterior a la fecha de inicio";
     }
@@ -50,12 +67,14 @@ function validateGuestSchedule(startDate, endDate) {
         return "El ingreso y la salida deben ser el mismo día";
     }
 
-    if (!isWithinOpeningHours(startDate)) {
-        return "La hora de inicio debe estar dentro del horario de atención del gimnasio";
-    }
+    if (!bypassSchedule) {
+        if (!isWithinOpeningHours(startDate)) {
+            return "La hora de inicio debe estar dentro del horario de atención del gimnasio";
+        }
 
-    if (!isWithinOpeningHours(endDate)) {
-        return "La hora de salida debe estar dentro del horario de atención del gimnasio";
+        if (!isWithinOpeningHours(endDate)) {
+            return "La hora de salida debe estar dentro del horario de atención del gimnasio";
+        }
     }
 
     return null;
@@ -64,20 +83,20 @@ function validateGuestSchedule(startDate, endDate) {
 class GuestController {
     static async createGuest(req, res) {
         try {
-            const { nombre, telefono, fechaInicio, fechaFin, monto } = req.body;
+            const { nombre, telefono, fechaInicio, fechaFin, monto, duracionHoras } = req.body;
             const adminId = req.auth?.id || req.user?.id;
 
             if (!nombre || !telefono || !fechaInicio || !fechaFin) {
                 return res.status(400).json({ message: "Nombre, teléfono, fecha de inicio y fecha de fin son requeridos" });
             }
 
-            const startDate = new Date(fechaInicio);
-            const endDate = new Date(fechaFin);
-            if (Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
+            const startDate = parseLocalDateTime(fechaInicio);
+            const endDate = parseLocalDateTime(fechaFin);
+            if (!startDate || !endDate || Number.isNaN(startDate.getTime()) || Number.isNaN(endDate.getTime())) {
                 return res.status(400).json({ message: "Fechas inválidas" });
             }
-
-            const validationMessage = validateGuestSchedule(startDate, endDate);
+            const bypass = !!req.body.bypassSchedule;
+            const validationMessage = validateGuestSchedule(startDate, endDate, bypass);
             if (validationMessage) {
                 return res.status(400).json({ message: validationMessage });
             }
@@ -87,6 +106,7 @@ class GuestController {
                 telefono,
                 fechaInicio: normalizeDateTime(startDate),
                 fechaFin: normalizeDateTime(endDate),
+                duracionHoras: duracionHoras != null ? Number(duracionHoras) : null,
                 monto,
                 adminId,
             });
