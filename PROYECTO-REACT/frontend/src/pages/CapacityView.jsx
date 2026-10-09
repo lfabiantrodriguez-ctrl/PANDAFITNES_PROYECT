@@ -6,7 +6,7 @@ export default function CapacityView() {
     <>
       <ViewTitle
         title="Monitoreo de Capacidad Instalada"
-        text="Metricas predictivas basadas en las reservas y permanencias declaradas por los socios."
+        text="Métricas en tiempo real y permanencias de socios en sala."
       />
       <div className="internal-grid">
         <CapacityPanel />

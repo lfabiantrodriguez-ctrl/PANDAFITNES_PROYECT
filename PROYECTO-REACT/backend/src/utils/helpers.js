@@ -4,6 +4,19 @@ const bcrypt = require("bcrypt");
 const JWT_SECRET = process.env.JWT_SECRET || "panda_fitness_dev_secret";
 
 function publicUser(row) {
+    let parsedPreferencias = null;
+    if (row.preferencias) {
+        if (typeof row.preferencias === "object") {
+            parsedPreferencias = row.preferencias;
+        } else {
+            try {
+                parsedPreferencias = JSON.parse(row.preferencias);
+            } catch (_) {
+                parsedPreferencias = null;
+            }
+        }
+    }
+
     return {
         id: row.id,
         nombre: row.nombre,
@@ -12,6 +25,14 @@ function publicUser(row) {
         email: row.email,
         telefono: row.telefono,
         rol: row.rol,
+        fecha_nacimiento: row.fecha_nacimiento || null,
+        direccion: row.direccion || null,
+        contacto_emergencia: row.contacto_emergencia || null,
+        telefono_emergencia: row.telefono_emergencia || null,
+        avatar_url: row.avatar_url || null,
+        preferencias: parsedPreferencias,
+        dias_objetivo: row.dias_objetivo || null,
+        fecha_registro: row.fecha_registro || null,
     };
 }
 

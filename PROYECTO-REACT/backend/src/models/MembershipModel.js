@@ -64,13 +64,22 @@ class MembershipModel {
                 m.fecha_fin AS fechaFin,
                 CASE
                     WHEN m.estado = 'activo' AND m.fecha_fin < CURDATE() THEN 'expirado'
-                    ELSE m.estado
+                    ELSE COALESCE(m.estado, 'sin_plan')
                 END AS estadoMembresia,
+                CASE
+                    WHEN m.estado = 'activo' AND m.fecha_fin < CURDATE() THEN 'expirado'
+                    ELSE COALESCE(m.estado, 'sin_plan')
+                END AS estado,
+                u.fecha_registro AS fechaRegistro,
+                DATEDIFF(CURDATE(), u.fecha_registro) AS antiguedadDias,
                 p.id AS planId,
                 p.nombre AS planNombre,
                 p.duracion_dias AS duracionDias,
                 p.precio AS planPrecio,
-                DATEDIFF(m.fecha_fin, CURDATE()) AS diasRestantes
+                DATEDIFF(m.fecha_fin, CURDATE()) AS diasRestantes,
+                (SELECT COUNT(*) FROM membresias mm WHERE mm.usuario_id = u.id) AS totalMatriculas,
+                (SELECT COUNT(*) FROM asistencias aa WHERE aa.usuario_id = u.id) AS totalAsistencias,
+                (SELECT COUNT(*) FROM ofertas_socios oo WHERE (oo.usuario_id = u.id OR oo.usuario_id IS NULL) AND oo.estado = 'activo') AS ofertasDisponibles
             FROM usuarios u
             INNER JOIN roles r ON r.id = u.rol_id
             LEFT JOIN membresias m ON m.id = (
@@ -95,7 +104,51 @@ class MembershipModel {
         query += ` ORDER BY u.id DESC`;
 
         const [rows] = await db.execute(query, params);
-        return rows;
+
+        return rows.map((s) => {
+            const diasRest = s.diasRestantes !== null ? Number(s.diasRestantes) : -999;
+            const matriculas = Number(s.totalMatriculas || 0);
+            const antiguedad = Number(s.antiguedadDias || 0);
+            const esActivo = s.estadoMembresia === 'activo' && diasRest >= 0;
+
+            let segmentoKey = 'inactivo';
+            let segmentoLabel = 'Inactivo';
+            let segmentoBadge = 'Inactivo';
+
+            if (matriculas >= 2 || (antiguedad > 60 && Number(s.totalAsistencias) >= 8)) {
+                segmentoKey = 'vip';
+                segmentoLabel = 'Socio VIP Frecuente';
+                segmentoBadge = 'VIP';
+            } else if (antiguedad <= 30 && matriculas <= 1) {
+                segmentoKey = 'nuevo';
+                segmentoLabel = 'Socio Nuevo';
+                segmentoBadge = 'Nuevo';
+            } else if (esActivo && diasRest <= 7) {
+                segmentoKey = 'por_vencer';
+                segmentoLabel = 'Por Vencer';
+                segmentoBadge = 'Por Vencer';
+            } else if (esActivo) {
+                segmentoKey = 'activo';
+                segmentoLabel = 'Activo';
+                segmentoBadge = 'Activo';
+            } else {
+                segmentoKey = 'inactivo';
+                segmentoLabel = 'Sin Plan / Vencido';
+                segmentoBadge = 'Vencido';
+            }
+
+            return {
+                ...s,
+                estado: s.estadoMembresia,
+                segmentoKey,
+                segmentoLabel,
+                segmentoBadge,
+                isVip: segmentoKey === 'vip',
+                isNuevo: segmentoKey === 'nuevo',
+                isPorVencer: diasRest <= 7 && diasRest >= 0 && esActivo,
+                isInactivo: !esActivo,
+            };
+        });
     }
 
     static async renewMembership({ userId, planId, fechaInicio, metodoPago }) {

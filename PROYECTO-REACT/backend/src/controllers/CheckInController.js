@@ -1,3 +1,4 @@
+const db = require("../config/database");
 const UserModel = require("../models/UserModel");
 const ReservationModel = require("../models/ReservationModel");
 const AttendanceModel = require("../models/AttendanceModel");
@@ -74,7 +75,7 @@ class CheckInController {
             const MembershipModel = require("../models/MembershipModel");
             const lookup = parseSearchCode(req.params.code);
             if (!lookup) {
-                return res.status(400).json({ message: "Codigo de socio o DNI invalido" });
+                return res.status(400).json({ message: "Código de socio o DNI inválido" });
             }
 
             let user = null;
@@ -90,94 +91,59 @@ class CheckInController {
                 return res.status(404).json({ message: "Socio no encontrado" });
             }
 
-            const reservation = await ReservationModel.findActiveForCheckIn(user.id);
-            const history = await ReservationModel.getAccessHistory(user.id);
+            const history = await AttendanceModel.getByUser(user.id);
             const membership = await MembershipModel.getClientMembership(user.id);
+            const activeAttendance = await AttendanceModel.findActiveByUser(user.id);
 
             const isValidMembership = membership &&
                 membership.estado === 'activo' &&
                 new Date(membership.fechaFin) >= new Date();
 
-            if (!reservation && !isValidMembership) {
-                return res.status(404).json({ message: "No hay reservas activas ni membresia activa para este socio" });
-            }
-
             const now = new Date();
-            const status = reservation ? getStatus(now, reservation.horaEntrada, reservation.horaSalida, reservation) : null;
 
             return res.json({
                 user,
-                reservation,
                 membership: isValidMembership ? membership : null,
-                history,
-                checkInStatus: status,
-                canDirectCheckIn: !reservation && isValidMembership,
+                membershipStatus: isValidMembership ? 'activa' : (membership ? 'vencida' : 'sin_membresia'),
+                history: history ? history.slice(0, 5) : [],
+                activeAttendance,
+                canDirectCheckIn: isValidMembership && !activeAttendance,
+                isInside: !!activeAttendance,
                 currentTime: now.toISOString(),
             });
         } catch (error) {
-            console.error("Error buscando reserva:", error);
+            console.error("Error buscando socio:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }
 
     static async confirmEntry(req, res) {
         try {
-            const { reservationId } = req.body;
-            const reservation = await ReservationModel.findById(reservationId);
+            const { userId, reservationId } = req.body;
+            const targetId = userId || reservationId;
 
-            if (!reservation) {
-                return res.status(404).json({ message: "Reserva no encontrada" });
+            if (!targetId) {
+                return res.status(400).json({ message: "Se requiere el ID del socio" });
             }
 
-            if (reservation.estado === "cancelada" || reservation.estado === "no_show") {
-                return res.status(400).json({ message: "No se puede confirmar esta reserva" });
+            const user = await UserModel.findActiveById(targetId);
+            if (!user) {
+                return res.status(404).json({ message: "Socio no encontrado" });
+            }
+
+            const active = await AttendanceModel.findActiveByUser(user.id);
+            if (active) {
+                return res.status(400).json({ message: "El socio ya tiene un ingreso activo en sala" });
             }
 
             const now = new Date();
-            const entry = new Date(reservation.horaEntrada);
-            const toleranceEnd = new Date(entry.getTime() + TOLERANCE_MINUTES * 60 * 1000);
-
-            if (now < entry || now > toleranceEnd) {
-                return res.status(400).json({ message: "La reserva no esta dentro del rango de ingreso permitido" });
-            }
-
-            await AttendanceModel.create({
-                reservaId: reservation.id,
-                usuarioId: reservation.usuarioId,
+            const attendance = await AttendanceModel.create({
+                usuarioId: user.id,
                 horaEntrada: formatMysqlDatetime(now),
+                metodoRegistro: "manual",
             });
 
-            await ReservationModel.updateStatus(reservation.id, "confirmada");
-
-            const user = await UserModel.findActiveById(reservation.usuarioId);
-            if (user && user.email) {
-                const entryDate = new Date(reservation.horaEntrada);
-                const localTimeStr = entryDate.toLocaleTimeString("es-ES", {
-                    hour: "2-digit",
-                    minute: "2-digit",
-                });
-                const localDateStr = entryDate.toLocaleDateString("es-ES", {
-                    day: "2-digit",
-                    month: "2-digit",
-                    year: "numeric",
-                });
-
-                await sendEmail({
-                    to: user.email,
-                    subject: "Ingreso Confirmado - Panda Fitness",
-                    html: `
-                        <div style="font-family: sans-serif; padding: 20px; color: #333;">
-                            <h2 style="color: #16a34a;">¡Hola ${user.nombre}!</h2>
-                            <p>Hemos confirmado tu ingreso al gimnasio el día <strong>${localDateStr}</strong> para tu reserva de las <strong>${localTimeStr}</strong>.</p>
-                            <p>¡Disfruta tu entrenamiento de hoy!</p>
-                            <br/>
-                            <p>Saludos,<br/>El equipo de <strong>Panda Fitness</strong></p>
-                        </div>
-                    `,
-                }).catch((err) => console.error("Error sending checkin email:", err));
-            }
-
-            return res.json({ message: "Entrada confirmada", reservationId: reservation.id });
+            return res.json({ message: "¡Ingreso de socio confirmado!", attendanceId: attendance.id, user });
         } catch (error) {
             console.error("Error confirmando entrada:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
@@ -186,41 +152,27 @@ class CheckInController {
 
     static async finalizeReservation(req, res) {
         try {
-            const { reservationId } = req.body;
-            if (!reservationId) {
-                return res.status(400).json({ message: "Falta reservationId" });
-            }
-
-            const reservation = await ReservationModel.findById(reservationId);
-            if (!reservation) {
-                return res.status(404).json({ message: "Reserva no encontrada" });
-            }
-
-            if (reservation.estado !== "confirmada") {
-                return res.status(400).json({ message: "Solo se puede finalizar una reserva confirmada" });
-            }
-
-            const attendance = await AttendanceModel.findByReservationId(reservationId);
-            if (!attendance) {
-                return res.status(400).json({ message: "No hay registro de asistencia para esta reserva" });
-            }
-
-            if (attendance.horaSalida) {
-                return res.status(400).json({ message: "La asistencia ya esta finalizada" });
-            }
-
+            const { userId, reservationId, attendanceId } = req.body;
             const now = new Date();
             const horaSalidaDb = formatMysqlDatetime(now);
-            await AttendanceModel.setExitByReservation(reservationId, horaSalidaDb);
-            await ReservationModel.updateStatus(reservationId, "finalizada");
 
-            return res.json({
-                message: "Reserva finalizada por administrador",
-                reservationId,
-                horaSalida: now.toISOString(),
-            });
+            if (attendanceId) {
+                await AttendanceModel.setExitById(attendanceId, horaSalidaDb);
+                return res.json({ message: "Salida registrada con éxito" });
+            }
+
+            const targetId = userId || reservationId;
+            if (targetId) {
+                const active = await AttendanceModel.findActiveByUser(targetId);
+                if (active) {
+                    await AttendanceModel.setExitById(active.id, horaSalidaDb);
+                    return res.json({ message: "Salida registrada con éxito" });
+                }
+            }
+
+            return res.json({ message: "Salida registrada con éxito" });
         } catch (error) {
-            console.error("Error finalizando reserva manualmente:", error);
+            console.error("Error registrando salida:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }
@@ -282,6 +234,7 @@ class CheckInController {
                 reservaId: reservation.id,
                 usuarioId: userId,
                 horaEntrada,
+                metodoRegistro: req.body.metodoRegistro || 'manual',
             });
 
             if (user.email) {
@@ -323,11 +276,149 @@ class CheckInController {
                     id: attendance.id,
                     usuarioId: attendance.usuarioId,
                     horaEntrada: attendance.horaEntrada,
+                    metodoRegistro: attendance.metodoRegistro,
                 },
             });
         } catch (error) {
             console.error("Error en check-in directo:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async biometricCheckIn(req, res) {
+        try {
+            const { userId, dni, durationMinutes } = req.body;
+            const MembershipModel = require("../models/MembershipModel");
+
+            let targetUser = null;
+            if (userId) {
+                targetUser = await UserModel.findActiveById(userId);
+            } else if (dni) {
+                targetUser = await UserModel.findActiveByDni(dni);
+            }
+
+            if (!targetUser) {
+                return res.status(404).json({ message: "Socio no encontrado para la huella indicada" });
+            }
+
+            // Validar membresía
+            const membership = await MembershipModel.getClientMembership(targetUser.id);
+            const isValidMembership = membership &&
+                membership.estado === 'activo' &&
+                new Date(membership.fechaFin) >= new Date();
+
+            if (!isValidMembership) {
+                return res.status(400).json({
+                    message: `Membresía no activa o vencida para ${targetUser.nombre} ${targetUser.apellido}. Regularizar en recepción.`,
+                    user: targetUser,
+                    membership,
+                });
+            }
+
+            // Comprobar si ya tiene una asistencia activa sin salida
+            const activeAssistances = await AttendanceModel.getActiveClients();
+            const currentActive = activeAssistances.find((a) => a.dni === targetUser.dni);
+
+            const now = new Date();
+
+            if (currentActive) {
+                // Calcular tiempo transcurrido desde el ingreso
+                let entradaDate = new Date(currentActive.horaEntrada);
+                if (isNaN(entradaDate.getTime()) && typeof currentActive.horaEntrada === 'string') {
+                    entradaDate = new Date(currentActive.horaEntrada.replace(' ', 'T'));
+                }
+                const diffMs = now.getTime() - entradaDate.getTime();
+                const minutosTranscurridos = Math.max(0, Math.floor(diffMs / (60 * 1000)));
+
+                // Tiempo mínimo configurable (por defecto 20 min)
+                const minDuration = req.body.minDurationMinutes !== undefined 
+                    ? Math.max(1, Number(req.body.minDurationMinutes)) 
+                    : 20;
+                const isForced = Boolean(req.body.forceExit);
+
+                // Si ha pasado menos del tiempo mínimo de entrenamiento y no se está forzando salida manual
+                if (minutosTranscurridos < minDuration && !isForced) {
+                    const restante = Math.max(1, minDuration - minutosTranscurridos);
+                    return res.status(200).json({
+                        tipo: "en_curso_reciente",
+                        success: false,
+                        message: `¡Hola ${targetUser.nombre}! Registraste tu ingreso hace ${minutosTranscurridos} min. Para registrar salida con huella y validar tus puntos de Mi Pandita, debes entrenar al menos ${minDuration} minutos (faltan ${restante} min).`,
+                        user: targetUser,
+                        minutosTranscurridos,
+                        minutosRestantes: restante,
+                        minutosMinimos: minDuration,
+                        horaEntrada: currentActive.horaEntrada,
+                        asistenciaId: currentActive.id,
+                        canForceExit: true,
+                    });
+                }
+
+                // Registrar Salida Biométrica
+                const horaSalidaDb = formatMysqlDatetime(now);
+                await db.execute(
+                    `UPDATE asistencias SET hora_salida = ? WHERE id = ?`,
+                    [horaSalidaDb, currentActive.id],
+                );
+                if (currentActive.reservaId) {
+                    await ReservationModel.updateStatus(currentActive.reservaId, "finalizada");
+                }
+
+                const horas = Math.floor(minutosTranscurridos / 60);
+                const mins = minutosTranscurridos % 60;
+                const tiempoTexto = horas > 0 ? `${horas}h ${mins}m` : `${minutosTranscurridos} min`;
+
+                return res.json({
+                    tipo: "salida",
+                    success: true,
+                    message: `¡Salida registrada con éxito! Buen entrenamiento de ${tiempoTexto}, ${targetUser.nombre}.`,
+                    user: targetUser,
+                    horaEntrada: currentActive.horaEntrada,
+                    horaSalida: now.toISOString(),
+                    minutosEntrenados: minutosTranscurridos,
+                    tiempoTexto,
+                    puntosValidados: true,
+                });
+            }
+
+            // Registrar Entrada Biométrica
+            const dur = Number(durationMinutes) || 60;
+            const horaEntrada = formatMysqlDatetime(now);
+            const salidaDate = new Date(now.getTime() + dur * 60 * 1000);
+            const horaSalida = formatMysqlDatetime(salidaDate);
+
+            // Crear reserva directa confirmada
+            const reservation = await ReservationModel.create({
+                usuarioId: targetUser.id,
+                horaEntrada,
+                horaSalida,
+                tipo: 'checkin_directo',
+                reservaOrigenId: null,
+                duracionMinutos: dur,
+            });
+            await ReservationModel.updateStatus(reservation.id, 'confirmada');
+
+            // Crear asistencia con método 'huella'
+            const attendance = await AttendanceModel.create({
+                reservaId: reservation.id,
+                usuarioId: targetUser.id,
+                horaEntrada,
+                metodoRegistro: 'huella',
+            });
+
+            return res.json({
+                tipo: "entrada",
+                success: true,
+                message: `¡Huella reconocida! Acceso autorizado para ${targetUser.nombre} ${targetUser.apellido}.`,
+                user: targetUser,
+                membership,
+                attendance,
+                horaEntrada: now.toISOString(),
+                xpSumados: 25,
+                bambusSumados: 10,
+            });
+        } catch (error) {
+            console.error("Error en check-in biométrico:", error);
+            return res.status(500).json({ message: "Error interno en validación biométrica" });
         }
     }
 }

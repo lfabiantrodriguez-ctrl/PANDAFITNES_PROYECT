@@ -117,6 +117,69 @@ class SocioController {
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }
+
+    static async getSocioFicha(req, res) {
+        try {
+            const socioId = Number(req.params.id);
+            if (!socioId) {
+                return res.status(400).json({ message: "ID de socio inválido" });
+            }
+
+            const ficha = await SocioModel.getFicha(socioId);
+            if (!ficha) {
+                return res.status(404).json({ message: "Socio no encontrado" });
+            }
+
+            return res.json({ ficha });
+        } catch (error) {
+            console.error("Error obteniendo ficha del socio:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async createOffer(req, res) {
+        try {
+            const { usuarioId, titulo, descripcion, tipo, valor, codigoCupon, diasVigencia } = req.body;
+
+            if (!titulo) {
+                return res.status(400).json({ message: "El título de la oferta es obligatorio" });
+            }
+
+            const offer = await SocioModel.createOffer({
+                usuarioId: usuarioId ? Number(usuarioId) : null,
+                titulo,
+                descripcion,
+                tipo,
+                valor: Number(valor || 0),
+                codigoCupon: codigoCupon ? String(codigoCupon).trim().toUpperCase() : null,
+                diasVigencia: diasVigencia ? Number(diasVigencia) : 30,
+            });
+
+            return res.status(201).json({
+                message: usuarioId ? "Oferta personalizada asignada y notificada al socio" : "Oferta general creada exitosamente",
+                offer,
+            });
+        } catch (error) {
+            console.error("Error creando oferta para socio:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async getOffers(req, res) {
+        try {
+            const db = require("../config/database");
+            const [rows] = await db.execute(
+                `SELECT o.*, u.nombre AS usuarioNombre, u.apellido AS usuarioApellido, u.dni AS usuarioDni
+                 FROM ofertas_socios o
+                 LEFT JOIN usuarios u ON u.id = o.usuario_id
+                 ORDER BY o.id DESC`,
+            );
+            return res.json({ ofertas: rows });
+        } catch (error) {
+            console.error("Error consultando ofertas:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
 }
 
 module.exports = SocioController;

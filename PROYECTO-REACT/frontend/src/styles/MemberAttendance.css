@@ -1,0 +1,630 @@
+/* ==========================================================================
+   ESTILOS OPTIMIZADOS PARA ASISTENCIA SOCIO (PANDA FITNESS)
+   Ajuste 100% al alto de pantalla (Viewport Fit) y total responsividad móvil
+   ========================================================================== */
+
+.attendance-view-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  width: 100%;
+  max-width: 1280px;
+  margin: 0 auto;
+}
+
+/* --------------------------------------------------------------------------
+   BARRA SUPERIOR COMPACTA (TÍTULO + KPI STRIP HORIZONTAL)
+   -------------------------------------------------------------------------- */
+.attendance-top-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding-bottom: 2px;
+}
+
+.attendance-title-area h1 {
+  font-size: 1.35rem;
+  font-weight: 900;
+  color: #111d15;
+  margin: 0 0 2px 0;
+  letter-spacing: -0.02em;
+}
+
+.attendance-title-area p {
+  color: #5f7165;
+  font-size: 0.8rem;
+  margin: 0;
+}
+
+.attendance-kpi-strip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.attendance-kpi-chip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1px solid #e3e8e2;
+  border-radius: 12px;
+  padding: 6px 12px;
+  box-shadow: 0 2px 6px rgba(18, 31, 23, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.attendance-kpi-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(18, 31, 23, 0.06);
+}
+
+.attendance-kpi-icon {
+  width: 26px;
+  height: 26px;
+  border-radius: 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-size: 0.78rem;
+  font-weight: 800;
+}
+
+.attendance-kpi-info {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.15;
+}
+
+.attendance-kpi-value {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #111d15;
+}
+
+.attendance-kpi-label {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #5f7165;
+}
+
+/* --------------------------------------------------------------------------
+   LAYOUT PRINCIPAL (CALENDARIO + PANEL LATERAL DE OBJETIVO)
+   -------------------------------------------------------------------------- */
+.attendance-main-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
+  gap: 14px;
+  align-items: stretch;
+}
+
+/* Panel Calendario */
+.calendar-panel {
+  background: #ffffff;
+  border: 1px solid #e3e8e2;
+  border-radius: 16px;
+  padding: 14px 18px;
+  box-shadow: 0 4px 14px rgba(18, 31, 23, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.calendar-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.calendar-header-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.calendar-header-title h2 {
+  font-size: 1.15rem;
+  font-weight: 900;
+  color: #111d15;
+  margin: 0;
+  letter-spacing: -0.01em;
+}
+
+/* Selector de Meses */
+.calendar-month-nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.calendar-nav-btn {
+  background: #f4f6f3;
+  border: 1px solid #e3e8e2;
+  border-radius: 8px;
+  padding: 4px 10px;
+  font-size: 0.76rem;
+  font-weight: 700;
+  color: #111d15;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.calendar-nav-btn:hover {
+  background: #111d15;
+  color: #c4f039;
+}
+
+.calendar-month-badge {
+  padding: 4px 12px;
+  background: #ffffff;
+  border: 1px solid #e3e8e2;
+  border-radius: 8px;
+  font-weight: 800;
+  font-size: 0.78rem;
+  color: #111d15;
+  letter-spacing: 0.04em;
+}
+
+/* Leyenda del Calendario */
+.calendar-legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding: 5px 0;
+  margin-bottom: 6px;
+  border-bottom: 1px solid #f1f5f1;
+}
+
+.calendar-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.calendar-legend-dot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  display: inline-block;
+  flex-shrink: 0;
+}
+
+/* Cabecera de Días de la Semana */
+.calendar-days-header {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  font-weight: 700;
+  font-size: 0.74rem;
+  color: #64748b;
+  padding: 2px 0 4px 0;
+}
+
+/* Matriz de Celdas del Calendario */
+.calendar-matrix {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 5px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.calendar-cell {
+  min-height: 56px;
+  min-width: 0;
+  border-radius: 10px;
+  padding: 5px 6px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+  position: relative;
+  user-select: none;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.calendar-cell:not(.cell-empty):hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.07);
+}
+
+.cell-empty {
+  min-height: 56px;
+  background: transparent;
+  border: none;
+  opacity: 0;
+  pointer-events: none;
+}
+
+/* ESTADOS DE CADA DÍA */
+/* 1. Asistido (Verde) */
+.cell-asistido {
+  background: #ecfccb;
+  border: 1.5px solid #84cc16;
+}
+
+.cell-asistido .cell-state-text {
+  color: #15803d;
+}
+
+/* 2. Inasistencia (Rojo) */
+.cell-inasistencia {
+  background: #fef2f2;
+  border: 1.5px solid #f87171;
+}
+
+.cell-inasistencia .cell-state-text {
+  color: #dc2626;
+}
+
+/* 3. Hoy - Pendiente (Amarillo Cálido) */
+.cell-hoy-pendiente {
+  background: #fefce8;
+  border: 2px solid #eab308;
+  box-shadow: 0 0 0 2px rgba(234, 179, 8, 0.18);
+}
+
+.cell-hoy-pendiente .cell-state-text {
+  color: #854d0e;
+}
+
+/* 4. Hoy - Descanso */
+.cell-hoy-descanso {
+  background: #f8fafc;
+  border: 2px solid #94a3b8;
+}
+
+.cell-hoy-descanso .cell-state-text {
+  color: #475569;
+}
+
+/* 5. Descanso Pasado (Gris Suave) */
+.cell-descanso {
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+}
+
+.cell-descanso .cell-state-text {
+  color: #64748b;
+}
+
+/* 6. Futuro - Día de Objetivo (Blanco con Borde Punteado Verde) */
+.cell-futuro-objetivo {
+  background: #ffffff;
+  border: 1.5px dashed #22c55e;
+}
+
+.cell-futuro-objetivo .cell-state-text {
+  color: #16a34a;
+}
+
+/* 7. Futuro - Día Libre (Blanco Nítido con Borde Tenue) */
+.cell-futuro-descanso {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+}
+
+.cell-futuro-descanso .cell-state-text {
+  color: #94a3b8;
+}
+
+/* 8. Bloqueado - Fuera de Matrícula (Gris tenue con candado) */
+.cell-bloqueado-membresia {
+  background: repeating-linear-gradient(
+    45deg,
+    #f8fafc,
+    #f8fafc 6px,
+    #f1f5f9 6px,
+    #f1f5f9 12px
+  );
+  border: 1.5px dashed #cbd5e1;
+  opacity: 0.85;
+}
+
+.cell-bloqueado-membresia .cell-state-text {
+  color: #64748b;
+  font-weight: 700;
+}
+
+.cell-badge-locked {
+  background: #e2e8f0;
+  color: #475569;
+  font-weight: 800;
+}
+
+.cell-badge-bonus {
+  background: #fef08a;
+  color: #854d0e;
+  border: 1px solid #eab308;
+  font-weight: 900;
+  animation: pulse 2s infinite;
+}
+
+/* Encabezado y subtexto dentro de la celda */
+.cell-top-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  line-height: 1;
+}
+
+.cell-day-num {
+  font-size: 0.88rem;
+  font-weight: 900;
+  color: #111d15;
+}
+
+.cell-badge {
+  font-size: 0.6rem;
+  font-weight: 800;
+  padding: 1px 5px;
+  border-radius: 4px;
+  letter-spacing: 0.02em;
+}
+
+.cell-badge-today {
+  background: #111d15;
+  color: #c4f039;
+}
+
+.cell-badge-xp {
+  background: #d9f99d;
+  color: #166534;
+}
+
+.cell-badge-meta {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.cell-bottom-row {
+  line-height: 1.15;
+}
+
+.cell-state-text {
+  font-size: 0.7rem;
+  font-weight: 800;
+}
+
+.cell-sublabel-text {
+  font-size: 0.62rem;
+  color: #64748b;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* --------------------------------------------------------------------------
+   PANEL LATERAL DERECHO (OBJETIVO SEMANAL)
+   -------------------------------------------------------------------------- */
+.goal-sidebar-panel {
+  background: #ffffff;
+  border: 1px solid #e3e8e2;
+  border-radius: 16px;
+  padding: 16px;
+  box-shadow: 0 4px 14px rgba(18, 31, 23, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.goal-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.goal-card-header h3 {
+  font-size: 0.98rem;
+  font-weight: 800;
+  color: #111d15;
+  margin: 0;
+}
+
+.goal-days-badge {
+  font-size: 0.7rem;
+  font-weight: 700;
+  background: rgba(196, 240, 57, 0.35);
+  color: #111d15;
+  padding: 3px 8px;
+  border-radius: 999px;
+  white-space: nowrap;
+}
+
+.goal-access-note {
+  font-size: 0.76rem;
+  color: #5f7165;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.goal-week-pills {
+  display: flex;
+  gap: 4px;
+}
+
+.goal-pill {
+  flex: 1;
+  text-align: center;
+  padding: 6px 0;
+  border-radius: 6px;
+  font-weight: 800;
+  font-size: 0.74rem;
+  transition: all 0.15s ease;
+}
+
+.goal-pill-active {
+  background: #ecfccb;
+  color: #15803d;
+  border: 1px solid #d9f99d;
+}
+
+.goal-pill-inactive {
+  background: #f1f5f9;
+  color: #94a3b8;
+  border: 1px solid transparent;
+}
+
+.goal-week-progress-title {
+  font-size: 0.82rem;
+  font-weight: 800;
+  color: #111d15;
+  margin-bottom: 2px;
+}
+
+.goal-week-progress-detail {
+  font-size: 0.74rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.goal-edit-btn {
+  width: 100%;
+  padding: 9px;
+  background: #ffffff;
+  border: 1.5px solid #111d15;
+  border-radius: 10px;
+  font-weight: 800;
+  font-size: 0.82rem;
+  color: #111d15;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.goal-edit-btn:hover {
+  background: #111d15;
+  color: #c4f039;
+}
+
+/* Tarjeta compacta informativa de descanso */
+.rest-info-card {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 10px 12px;
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.rest-info-icon {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ecfccb;
+  color: #15803d;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  font-weight: 800;
+  font-size: 0.74rem;
+}
+
+.rest-info-text h4 {
+  font-size: 0.78rem;
+  font-weight: 800;
+  color: #111d15;
+  margin: 0 0 2px 0;
+}
+
+.rest-info-text p {
+  font-size: 0.72rem;
+  color: #5f7165;
+  margin: 0;
+  line-height: 1.3;
+}
+
+/* --------------------------------------------------------------------------
+   RESPONSIVIDAD Y BREAKPOINTS (AJUSTE PERFECTO EN 393PX IPHONE 16)
+   -------------------------------------------------------------------------- */
+@media (max-width: 1140px) {
+  .attendance-main-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .attendance-kpi-strip {
+    width: 100%;
+    justify-content: space-between;
+  }
+}
+
+@media (max-width: 640px) {
+  .attendance-view-container {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .calendar-panel {
+    padding: 10px 8px;
+    border-radius: 14px;
+    width: 100%;
+    box-sizing: border-box;
+    overflow-x: hidden;
+  }
+
+  .calendar-matrix {
+    gap: 3px;
+    width: 100%;
+  }
+
+  .calendar-cell {
+    min-height: 44px;
+    padding: 3px 2px;
+    border-radius: 6px;
+    box-sizing: border-box;
+  }
+
+  .cell-day-num {
+    font-size: 0.74rem;
+  }
+
+  .cell-badge {
+    font-size: 0.52rem;
+    padding: 1px 3px;
+    letter-spacing: -0.02em;
+  }
+
+  .cell-state-text {
+    font-size: 0.56rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 100%;
+  }
+
+  .cell-sublabel-text {
+    display: none;
+  }
+
+  .attendance-kpi-chip {
+    flex: 1 1 calc(50% - 6px);
+    padding: 6px 8px;
+  }
+
+  .calendar-legend-bar {
+    gap: 8px;
+    padding: 4px 0;
+  }
+
+  .calendar-legend-item {
+    font-size: 0.65rem;
+  }
+}

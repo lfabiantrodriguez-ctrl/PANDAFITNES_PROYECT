@@ -153,6 +153,232 @@ async function runSchemaMigrations() {
             "recargo_aplicado",
             "TINYINT(1) DEFAULT 0 AFTER monto",
         );
+
+        // Columnas para Mi Pandita y Asistencias del socio
+        await ensureColumnExists(
+            "usuarios",
+            "dias_objetivo",
+            "VARCHAR(50) DEFAULT '1,2,4,5'",
+        );
+        await ensureColumnExists(
+            "usuarios",
+            "horario_preferido",
+            "VARCHAR(50) DEFAULT '07:00 - 08:30'",
+        );
+        await ensureColumnExists(
+            "usuarios",
+            "bambus_canjeados",
+            "INT DEFAULT 0",
+        );
+
+        // Columnas para perfil extendido del usuario
+        await ensureColumnExists(
+            "usuarios",
+            "fecha_nacimiento",
+            "VARCHAR(30) NULL",
+        );
+        await ensureColumnExists(
+            "usuarios",
+            "direccion",
+            "VARCHAR(255) NULL",
+        );
+        await ensureColumnExists(
+            "usuarios",
+            "contacto_emergencia",
+            "VARCHAR(120) NULL",
+        );
+        await ensureColumnExists(
+            "usuarios",
+            "telefono_emergencia",
+            "VARCHAR(20) NULL",
+        );
+        await ensureColumnExists(
+            "usuarios",
+            "avatar_url",
+            "LONGTEXT NULL",
+        );
+        await ensureColumnExists(
+            "usuarios",
+            "preferencias",
+            "TEXT NULL",
+        );
+
+        // Columnas para control de acceso con huella digital y manual
+        await ensureColumnExists(
+            "asistencias",
+            "metodo_registro",
+            "VARCHAR(30) DEFAULT 'manual'",
+        );
+        await ensureColumnExists(
+            "usuarios",
+            "huella_registrada",
+            "TINYINT(1) DEFAULT 1",
+        );
+
+        // Tabla de canjes de recompensas
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS canjes_recompensas (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT NOT NULL,
+                recompensa_nombre VARCHAR(120) NOT NULL,
+                costo_bambus INT NOT NULL,
+                codigo_canje VARCHAR(30) DEFAULT 'PANDA-CANJE',
+                fecha_canje TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                estado VARCHAR(30) DEFAULT 'canjeado',
+                INDEX idx_canjes_usuario (usuario_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+        await ensureColumnExists(
+            "canjes_recompensas",
+            "codigo_canje",
+            "VARCHAR(30) DEFAULT 'PANDA-CANJE' AFTER costo_bambus",
+        );
+
+        // Tabla de Catálogo de Recompensas administrable
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS recompensas_catalogo (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                nombre VARCHAR(120) NOT NULL,
+                descripcion TEXT,
+                costo_bambus INT NOT NULL DEFAULT 100,
+                categoria VARCHAR(60) NOT NULL DEFAULT 'suplementos',
+                stock INT DEFAULT 50,
+                activo TINYINT(1) DEFAULT 1,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // Sembrar recompensas iniciales si la tabla está vacía
+        const [recs] = await db.execute("SELECT COUNT(*) AS total FROM recompensas_catalogo");
+        if (recs[0]?.total === 0) {
+            await db.execute(`
+                INSERT INTO recompensas_catalogo (nombre, descripcion, costo_bambus, categoria, stock) VALUES
+                ('Bebida Isotónica Energizante', 'Hidratación inmediata con electrolitos en la cafetería del club.', 80, 'bebidas', 100),
+                ('Kit de Bienvenida Panda', 'Botilito ergonómico de 750ml y pulsera deportiva oficial.', 100, 'accesorios', 60),
+                ('Toalla Deportiva Microfibra', 'Toalla de secado rápido con logo bordado Panda Fitness.', 150, 'accesorios', 40),
+                ('Shake de Proteína Premium 25g', 'Batido cremoso de proteína whey con frutas en barra deportiva.', 200, 'suplementos', 80),
+                ('Pase Libre de 1 Día para Amigo', 'Permite que un amigo entrene un día completo contigo.', 300, 'servicios', 50),
+                ('15% Descuento en Renovación', 'Descuento directo aplicable en tu próxima cuota o mes.', 500, 'servicios', 30)
+            `);
+            console.log("Recompensas iniciales sembradas en recompensas_catalogo");
+        }
+
+        // Columnas de imagen y destacado para recompensas
+        await ensureColumnExists(
+            "recompensas_catalogo",
+            "imagen_url",
+            "LONGTEXT NULL AFTER categoria",
+        );
+        await ensureColumnExists(
+            "recompensas_catalogo",
+            "destacado",
+            "TINYINT(1) DEFAULT 0 AFTER stock",
+        );
+
+        // Tabla de Convenios Comerciales y Alianzas administrable
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS convenios_comerciales (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                aliado_nombre VARCHAR(120) NOT NULL,
+                categoria VARCHAR(60) NOT NULL DEFAULT 'Nutrición',
+                descuento_texto VARCHAR(80) NOT NULL,
+                descripcion TEXT,
+                codigo_promocional VARCHAR(50) DEFAULT 'PANDAFIT20',
+                activo TINYINT(1) DEFAULT 1,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // Columnas de imagen y destacado para convenios
+        await ensureColumnExists(
+            "convenios_comerciales",
+            "imagen_url",
+            "LONGTEXT NULL AFTER categoria",
+        );
+        await ensureColumnExists(
+            "convenios_comerciales",
+            "destacado",
+            "TINYINT(1) DEFAULT 0 AFTER codigo_promocional",
+        );
+
+        // Sembrar convenios iniciales si la tabla está vacía
+        const [partsCount] = await db.execute("SELECT COUNT(*) AS total FROM convenios_comerciales");
+        if (partsCount[0]?.total === 0) {
+            await db.execute(`
+                INSERT INTO convenios_comerciales (aliado_nombre, categoria, imagen_url, descuento_texto, descripcion, codigo_promocional, destacado) VALUES
+                ('Optimum Nutrition Store', 'Nutrición y Suplementos', 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?auto=format&fit=crop&w=600&q=80', '20% de Descuento', 'En proteínas, creatinas y aminoácidos presentando tu membresía activa.', 'PANDANUTRITION20', 1),
+                ('Clínica Fisiocare', 'Salud & Fisioterapia', 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=600&q=80', '30% en Descarga Muscular', 'Sesiones de recuperación muscular y masajes descontracturantes para socios.', 'PANDAFISIO30', 1),
+                ('SportStyle Indumentaria', 'Ropa Deportiva', 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&q=80', '15% en Toda la Tienda', 'Ropa deportiva, zapatillas de running y accesorios de entrenamiento.', 'PANDASTYLE15', 0),
+                ('GreenBowl Saludable', 'Gastronomía Saludable', 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80', '25% en Platos y Ensaladas', 'Almuerzos y cenas proteicas a 2 cuadras de Panda Fitness.', 'PANDAGREEN25', 1)
+            `);
+            console.log("Convenios iniciales sembrados");
+        }
+
+        // Actualizar imágenes iniciales para recompensas que no tengan imagen
+        await db.execute(`
+            UPDATE recompensas_catalogo 
+            SET imagen_url = 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=600&q=80', destacado = 1
+            WHERE (imagen_url IS NULL OR imagen_url = '') AND nombre LIKE '%Isotónica%'
+        `);
+        await db.execute(`
+            UPDATE recompensas_catalogo 
+            SET imagen_url = 'https://images.unsplash.com/photo-1574680096145-d05b474e2155?auto=format&fit=crop&w=600&q=80', destacado = 1
+            WHERE (imagen_url IS NULL OR imagen_url = '') AND nombre LIKE '%Kit de Bienvenida%'
+        `);
+        await db.execute(`
+            UPDATE recompensas_catalogo 
+            SET imagen_url = 'https://images.unsplash.com/photo-1607962837359-5e7e89f86776?auto=format&fit=crop&w=600&q=80', destacado = 0
+            WHERE (imagen_url IS NULL OR imagen_url = '') AND nombre LIKE '%Toalla%'
+        `);
+        await db.execute(`
+            UPDATE recompensas_catalogo 
+            SET imagen_url = 'https://images.unsplash.com/photo-1579722820308-d74e571900a9?auto=format&fit=crop&w=600&q=80', destacado = 1
+            WHERE (imagen_url IS NULL OR imagen_url = '') AND nombre LIKE '%Proteína%'
+        `);
+        await db.execute(`
+            UPDATE recompensas_catalogo 
+            SET imagen_url = 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=600&q=80', destacado = 1
+            WHERE (imagen_url IS NULL OR imagen_url = '') AND nombre LIKE '%Pase Libre%'
+        `);
+        await db.execute(`
+            UPDATE recompensas_catalogo 
+            SET imagen_url = 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=600&q=80', destacado = 1
+            WHERE (imagen_url IS NULL OR imagen_url = '') AND nombre LIKE '%Descuento en Renovación%'
+        `);
+
+        // Asegurar que asistencias.reserva_id sea nullable
+        try {
+            await db.execute("ALTER TABLE asistencias MODIFY reserva_id INT NULL DEFAULT NULL");
+        } catch (_) {}
+
+        // Tabla de Ofertas y Promociones (individuales y generales para socios)
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS ofertas_socios (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT NULL,
+                titulo VARCHAR(150) NOT NULL,
+                descripcion TEXT NULL,
+                tipo ENUM('descuento_porcentaje', 'descuento_fijo', 'dias_gratis', 'pase_amigo', 'personalizada') DEFAULT 'descuento_porcentaje',
+                valor DECIMAL(10,2) DEFAULT 0.00,
+                codigo_cupon VARCHAR(50) NULL,
+                fecha_inicio DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+                fecha_fin DATETIME NULL,
+                estado ENUM('activo', 'canjeado', 'expirado') DEFAULT 'activo',
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // Sembrar ofertas iniciales si la tabla está vacía
+        const [ofertasExist] = await db.execute("SELECT COUNT(*) AS total FROM ofertas_socios");
+        if (ofertasExist[0]?.total === 0) {
+            await db.execute(`
+                INSERT INTO ofertas_socios (usuario_id, titulo, descripcion, tipo, valor, codigo_cupon, fecha_fin, estado) VALUES
+                (NULL, 'Promoción General: 15% OFF en Plan Trimestral', 'Válido para todos los socios activos al renovar con anticipación.', 'descuento_porcentaje', 15.00, 'PROMO15', DATE_ADD(CURDATE(), INTERVAL 30 DAY), 'activo'),
+                (2, 'Beneficio Socio VIP: 20% de Descuento Exclusivo', 'Premio por tu constancia y lealtad entrenando en Panda Fitness.', 'descuento_porcentaje', 20.00, 'VIP20BRAYAN', DATE_ADD(CURDATE(), INTERVAL 45 DAY), 'activo'),
+                (3, 'Plan Reactivación: 7 Días Adicionales de Regalo', 'Vuelve a entrenar con nosotros y recibe una semana extra sin costo.', 'dias_gratis', 7.00, 'REACTIVA7', DATE_ADD(CURDATE(), INTERVAL 15 DAY), 'activo')
+            `);
+            console.log("Ofertas iniciales sembradas en ofertas_socios");
+        }
     } catch (error) {
         console.error("Error ejecutando migraciones de esquema:", error);
     }

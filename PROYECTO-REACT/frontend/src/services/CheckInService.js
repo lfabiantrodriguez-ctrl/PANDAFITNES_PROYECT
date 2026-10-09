@@ -1,13 +1,18 @@
 export class CheckInService {
-  static async lookupReservation(token, code) {
+  static async lookupMember(token, code) {
     const response = await fetch(`/api/admin/checkin/lookup/${encodeURIComponent(code)}`, {
       headers: { Authorization: `Bearer ${token}` },
     })
     const data = await response.json()
     if (!response.ok) {
-      throw new Error(data.message || 'No se pudo buscar la reserva')
+      throw new Error(data.message || 'No se pudo verificar el socio')
     }
     return data
+  }
+
+  // Alias para retrocompatibilidad
+  static async lookupReservation(token, code) {
+    return this.lookupMember(token, code)
   }
 
   static async confirmEntry(token, reservationId) {
@@ -21,7 +26,7 @@ export class CheckInService {
     })
     const data = await response.json()
     if (!response.ok) {
-      throw new Error(data.message || 'No se pudo confirmar la entrada')
+      throw new Error(data.message || 'No se pudo confirmar el ingreso')
     }
     return data
   }
@@ -53,7 +58,38 @@ export class CheckInService {
     })
     const data = await response.json()
     if (!response.ok) {
-      throw new Error(data.message || 'No se pudo finalizar la reserva')
+      throw new Error(data.message || 'No se pudo registrar la salida')
+    }
+    return data
+  }
+
+  static async finalizeDirectEntry(token, asistenciaId) {
+    return this.finalizeReservation(token, asistenciaId)
+  }
+
+  static async biometricCheckIn(token, { userId, dni, durationMinutes = 60, minDurationMinutes = 20, forceExit = false }) {
+    const response = await fetch('/api/admin/checkin/biometric', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ userId, dni, durationMinutes, minDurationMinutes, forceExit }),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'Validación biométrica no completada')
+    }
+    return data
+  }
+
+  static async getActiveClients(token) {
+    const response = await fetch('/api/admin/asistencias/activos', {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudieron consultar los clientes activos')
     }
     return data
   }

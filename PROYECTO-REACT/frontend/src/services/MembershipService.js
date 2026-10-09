@@ -8,6 +8,10 @@ export class MembershipService {
     return data
   }
 
+  static async getClientMembership(token) {
+    return this.getMyMembership(token)
+  }
+
   static async getMyPayments(token) {
     const res = await fetch('/api/membresias/mis-pagos', {
       headers: { Authorization: `Bearer ${token}` },

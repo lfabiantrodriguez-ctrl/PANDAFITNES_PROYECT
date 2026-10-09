@@ -1,20 +1,41 @@
 :root {
-  --panda-bg-main: #ffffff;
-  --panda-bg-alt: #fafafa;
+  /* Paleta Atlética Núcleo / Panda Fitness */
+  --panda-lime: #c4f039;
+  --panda-lime-hover: #b2e32a;
+  --panda-lime-active: #a2d61c;
+  --panda-lime-dark: #111d15;
+  --panda-lime-light: #ecfccb;
+  --panda-lime-border: #d9f99d;
+
+  --panda-forest: #235833;
+  --panda-forest-hover: #1b4528;
+  --panda-forest-light: #e8f5ec;
+  --panda-forest-muted: #2f6f43;
+
+  --panda-dark: #111d15;
+  --panda-dark-sidebar: #131f18;
+  --panda-dark-sidebar-alt: #16241c;
+  --panda-dark-card: #18271e;
+
+  --panda-bg-main: #f4f6f3;
+  --panda-bg-alt: #ffffff;
   --panda-card-bg: #ffffff;
-  --panda-dark: #111111;
-  --panda-gray-dark: #3a3a3c;
-  --panda-gray-light: #e5e5ea;
-  --panda-gray-subtle: #f2f2f7;
-  --panda-emerald: #00875a;
-  --panda-emerald-hover: #006644;
-  --panda-emerald-light: #e3fcef;
-  --panda-red: #d32f2f;
-  --panda-red-light: #ffebee;
+  --panda-card-border: #e3e8e2;
+
+  --panda-gray-dark: #5f7165;
+  --panda-gray-light: #e3e8e2;
+  --panda-gray-subtle: #f6f8f5;
+
+  --panda-emerald: #c4f039;
+  --panda-emerald-hover: #b2e32a;
+  --panda-emerald-light: #ecfccb;
+
+  --panda-red: #ef4444;
+  --panda-red-light: #fee2e2;
   --font-primary: Inter, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
 
   color: var(--panda-dark);
-  background: var(--panda-bg-alt);
+  background: var(--panda-bg-main);
   font: 16px/1.45 var(--font-primary);
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -22,13 +43,14 @@
   -moz-osx-font-smoothing: grayscale;
 }
 
-* {
-  box-sizing: border-box;
-}
-
+html,
 body {
   min-width: 320px;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
   margin: 0;
+  box-sizing: border-box;
 }
 
 button,
@@ -36,10 +58,15 @@ input,
 select,
 textarea {
   font: inherit;
+  box-sizing: border-box;
 }
 
 #root {
   min-height: 100vh;
+  width: 100%;
+  max-width: 100vw;
+  overflow-x: hidden;
+  box-sizing: border-box;
 }
 
 /* Responsive font sizing */

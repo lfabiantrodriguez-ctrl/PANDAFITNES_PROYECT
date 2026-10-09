@@ -1,12 +1,13 @@
-/* Mobile Header and Hamburger Menu */
+/* Mobile Header and Hamburger Menu - Tema Atlético Bosque y Lima */
 .mobile-header {
   display: none;
   position: relative;
   align-items: center;
   gap: 1rem;
-  padding: 1rem 1.5rem;
-  background: linear-gradient(180deg, #061a2c 0%, #071222 100%);
+  padding: 0.9rem 1.25rem;
+  background: #121e17;
   color: #ffffff;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
   z-index: 999;
 }
 
@@ -14,8 +15,8 @@
   display: none;
   flex-direction: column;
   gap: 5px;
-  width: 34px;
-  height: 26px;
+  width: 30px;
+  height: 22px;
   border: none;
   background: transparent;
   cursor: pointer;
@@ -25,14 +26,14 @@
 .hamburger-btn span {
   display: block;
   width: 100%;
-  height: 3px;
+  height: 2.5px;
   background: #ffffff;
   border-radius: 999px;
   transition: transform 0.3s ease, opacity 0.3s ease;
 }
 
 .hamburger-btn.active span:nth-child(1) {
-  transform: rotate(45deg) translate(6px, 6px);
+  transform: rotate(45deg) translate(5px, 5px);
 }
 
 .hamburger-btn.active span:nth-child(2) {
@@ -40,7 +41,7 @@
 }
 
 .hamburger-btn.active span:nth-child(3) {
-  transform: rotate(-45deg) translate(6px, -6px);
+  transform: rotate(-45deg) translate(5px, -5px);
 }
 
 .mobile-brand {
@@ -48,16 +49,16 @@
   border: 0;
   background: transparent;
   color: #ffffff;
-  font-size: 1.2rem;
+  font-size: 1.15rem;
   font-weight: 800;
-  letter-spacing: 0.03em;
+  letter-spacing: -0.02em;
   padding: 0;
-  text-align: center;
+  text-align: left;
   cursor: pointer;
 }
 
 .mobile-brand span {
-  color: var(--panda-emerald);
+  color: #c4f039;
 }
 
 .menu-overlay {
@@ -66,7 +67,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.55);
+  background: rgba(18, 30, 23, 0.8);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: 998;
 }
 
@@ -74,17 +77,18 @@
   position: fixed;
   top: 0;
   right: -100%;
-  width: 80%;
+  width: 82%;
   max-width: 320px;
   height: 100vh;
-  background: #081322;
+  background: #121e17;
   color: #ffffff;
   display: flex;
   flex-direction: column;
   justify-content: space-between;
   z-index: 1000;
-  transition: right 0.3s ease;
+  transition: right 0.3s cubic-bezier(0.16, 1, 0.3, 1);
   overflow-y: auto;
+  border-left: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .mobile-menu.open {
@@ -94,22 +98,28 @@
 .mobile-menu-header {
   display: flex;
   justify-content: flex-end;
-  padding: 1.5rem;
+  padding: 1.25rem;
   border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .close-btn {
-  background: transparent;
+  background: rgba(255, 255, 255, 0.1);
   border: none;
   color: #ffffff;
-  font-size: 1.5rem;
+  font-size: 1.2rem;
   cursor: pointer;
   padding: 0;
-  width: 30px;
-  height: 30px;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
+  transition: background 0.2s ease;
+}
+
+.close-btn:hover {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .mobile-nav-list {
@@ -117,30 +127,32 @@
   padding: 0;
   margin: 0;
   display: grid;
-  gap: 0.65rem;
+  gap: 0.5rem;
   padding: 1rem;
 }
 
 .mobile-nav-link {
   display: block;
-  padding: 1rem 1.1rem;
-  border-radius: 14px;
-  color: rgba(255, 255, 255, 0.82);
-  font-weight: 700;
+  padding: 0.9rem 1rem;
+  border-radius: 12px;
+  color: rgba(255, 255, 255, 0.7);
+  font-weight: 600;
   text-decoration: none;
-  transition: background 0.2s ease, color 0.2s ease;
+  transition: all 0.2s ease;
   background: rgba(255, 255, 255, 0.03);
 }
 
 .mobile-nav-link:hover {
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
   color: #ffffff;
 }
 
 .mobile-nav-link.active-page {
-  border-left: 4px solid var(--panda-emerald);
-  background: rgba(15, 118, 110, 0.22);
-  color: #ffffff;
+  border-left: none;
+  background: #c4f039;
+  color: #111d15;
+  font-weight: 800;
+  box-shadow: 0 4px 14px rgba(196, 240, 57, 0.28);
 }
 
 .mobile-menu-footer {
@@ -148,6 +160,7 @@
   gap: 0.85rem;
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   padding: 1.25rem 1rem;
+  margin-bottom: 20px;
 }
 
 .user-info {
@@ -165,7 +178,7 @@
   width: fit-content;
   border: 0;
   background: transparent;
-  color: #fda4af;
+  color: #ef4444;
   font-weight: 800;
   padding: 0;
   cursor: pointer;
@@ -180,9 +193,39 @@
 @media (max-width: 768px) {
   .mobile-header {
     display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.6rem 0.9rem;
+    width: 100%;
+    box-sizing: border-box;
+    position: sticky;
+    top: 0;
+    z-index: 100;
   }
 
   .hamburger-btn {
-    display: flex;
+    display: none !important;
   }
+}
+
+.mobile-sections-container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 0.5rem 0;
+}
+
+.mobile-section-block {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.mobile-section-title {
+  padding: 0.25rem 1.5rem;
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #728c7b;
 }

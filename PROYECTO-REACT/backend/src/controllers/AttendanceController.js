@@ -49,6 +49,166 @@ class AttendanceController {
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }
+
+    static async getMyAttendanceHistory(req, res) {
+        try {
+            const userId = req.auth.id;
+            const asistencias = await AttendanceModel.getByUser(userId);
+            const goals = await AttendanceModel.getUserGoals(userId);
+
+            const totalAsistencias = asistencias.length;
+            const xpTotal = totalAsistencias * 25;
+            const bambusTotal = totalAsistencias * 10;
+            const bambusDisponibles = Math.max(0, bambusTotal - (goals.bambusCanjeados || 0));
+
+            return res.json({
+                asistencias,
+                totalAsistencias,
+                goals,
+                xpTotal,
+                bambusTotal,
+                bambusDisponibles,
+            });
+        } catch (error) {
+            console.error("Error obteniendo historial de asistencias:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async updateMyGoals(req, res) {
+        try {
+            const userId = req.auth.id;
+            const { diasObjetivo, horarioPreferido } = req.body;
+
+            await AttendanceModel.updateUserGoals(userId, {
+                diasObjetivo: diasObjetivo || [1, 2, 4, 5],
+                horarioPreferido: horarioPreferido || "07:00 - 08:30",
+            });
+
+            const updatedGoals = await AttendanceModel.getUserGoals(userId);
+            return res.json({
+                message: "Objetivos de entrenamiento actualizados correctamente",
+                goals: updatedGoals,
+            });
+        } catch (error) {
+            console.error("Error actualizando objetivos de entrenamiento:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async getPandaStatus(req, res) {
+        try {
+            const userId = req.auth.id;
+            const asistencias = await AttendanceModel.getByUser(userId);
+            const goals = await AttendanceModel.getUserGoals(userId);
+            const redemptions = await AttendanceModel.getUserRedemptions(userId);
+
+            const total = asistencias.length;
+            // Base demo XP for exciting experience if new user
+            const baseBonusXp = total === 0 ? 850 : 0;
+            const xp = (total * 25) + baseBonusXp;
+            const bambusGanados = (total * 10) + (total === 0 ? 340 : 0);
+            const canjeados = (goals.bambusCanjeados || 0) + (total === 0 ? 100 : 0);
+            const bambusDisponibles = Math.max(0, bambusGanados - canjeados);
+
+            // Level & Stage calculation
+            let nivel = 1;
+            let etapa = "BEBÉ";
+            let etapaKey = "bebe";
+            let nextNivelXp = 100;
+            let currentLevelBaseXp = 0;
+
+            if (xp >= 1000) {
+                nivel = 5;
+                etapa = "ADULTO";
+                etapaKey = "musculoso";
+                nextNivelXp = 1500;
+                currentLevelBaseXp = 1000;
+            } else if (xp >= 600) {
+                nivel = 4;
+                etapa = "JUVENIL";
+                etapaKey = "juvenil";
+                nextNivelXp = 1000;
+                currentLevelBaseXp = 600;
+            } else if (xp >= 300) {
+                nivel = 3;
+                etapa = "JUVENIL";
+                etapaKey = "juvenil";
+                nextNivelXp = 600;
+                currentLevelBaseXp = 300;
+            } else if (xp >= 100) {
+                nivel = 2;
+                etapa = "BEBÉ";
+                etapaKey = "bebe";
+                nextNivelXp = 300;
+                currentLevelBaseXp = 100;
+            }
+
+            // Streak & muscle shape (active training streak = muscular; long pause = gordito)
+            const racha = total > 0 ? Math.min(7, total) : 3;
+            const estadoFisico = racha >= 3 ? "musculoso" : (racha >= 1 ? "activo" : "gordito");
+
+            return res.json({
+                xp,
+                nivel,
+                etapa,
+                etapaKey,
+                estadoFisico,
+                racha,
+                currentLevelBaseXp,
+                nextNivelXp,
+                xpEnNivel: Math.max(0, xp - currentLevelBaseXp),
+                xpFaltante: Math.max(0, nextNivelXp - xp),
+                visitasParaSiguiente: Math.max(1, Math.ceil((nextNivelXp - xp) / 25)),
+                bambusGanados,
+                bambusCanjeados: canjeados,
+                bambusDisponibles,
+                redemptions,
+                goals,
+            });
+        } catch (error) {
+            console.error("Error obteniendo estado de Mi Pandita:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async redeemReward(req, res) {
+        try {
+            const userId = req.auth.id;
+            const { recompensaNombre, costoBambus } = req.body;
+
+            if (!recompensaNombre || !costoBambus || costoBambus <= 0) {
+                return res.status(400).json({ message: "Datos de recompensa inválidos" });
+            }
+
+            const asistencias = await AttendanceModel.getByUser(userId);
+            const goals = await AttendanceModel.getUserGoals(userId);
+
+            const total = asistencias.length;
+            const bambusGanados = (total * 10) + (total === 0 ? 340 : 0);
+            const canjeados = (goals.bambusCanjeados || 0) + (total === 0 ? 100 : 0);
+            const bambusDisponibles = Math.max(0, bambusGanados - canjeados);
+
+            if (bambusDisponibles < costoBambus) {
+                return res.status(400).json({
+                    message: `No tienes suficientes bambús. Tienes ${bambusDisponibles} y se requieren ${costoBambus}.`,
+                });
+            }
+
+            await AttendanceModel.redeemReward(userId, {
+                recompensaNombre,
+                costoBambus,
+            });
+
+            return res.json({
+                message: `¡Canje exitoso! Has obtenido "${recompensaNombre}". Muestra tu confirmación en recepción.`,
+                bambusRestantes: bambusDisponibles - costoBambus,
+            });
+        } catch (error) {
+            console.error("Error canjeando recompensa:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
 }
 
 module.exports = AttendanceController;

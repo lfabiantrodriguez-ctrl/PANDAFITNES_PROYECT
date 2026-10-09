@@ -3,12 +3,13 @@ const authRoutes = require("./authRoutes");
 const dniRoutes = require("./dniRoutes");
 const planRoutes = require("./planRoutes");
 const socioRoutes = require("./socioRoutes");
-const reservationRoutes = require("./reservationRoutes");
 const capacityRoutes = require("./capacityRoutes");
 const checkInRoutes = require("./checkInRoutes");
 const attendanceRoutes = require("./attendanceRoutes");
 const membershipRoutes = require("./membershipRoutes");
 const guestRoutes = require("./guestRoutes");
+const configRoutes = require("./configRoutes");
+const rewardRoutes = require("./rewardRoutes");
 
 const router = express.Router();
 
@@ -23,9 +24,10 @@ router.use("/admin/socios", socioRoutes);
 router.use("/admin/asistencias", attendanceRoutes);
 router.use("/asistencias", attendanceRoutes);
 router.use("/aforo", capacityRoutes);
-router.use("/reservas", reservationRoutes);
 router.use("/admin/checkin", checkInRoutes);
 router.use("/membresias", membershipRoutes);
 router.use("/invitados", guestRoutes);
+router.use("/configuracion", configRoutes);
+router.use("/recompensas", rewardRoutes);
 
 module.exports = router;

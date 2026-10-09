@@ -7,35 +7,15 @@ const app = express();
 const PORT = process.env.PORT || 3000;
 
 app.use(cors());
-app.use(express.json());
+app.use(express.json({ limit: "15mb" }));
+app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
 // Mount central router
 app.use("/api", apiRoutes);
 
-const { checkAndCancelExpiredReservations, finalizeEndedAttendances, finalizeEndedReservations, finalizeEndedGuests } = require("./services/cronService");
+const { finalizeEndedGuests } = require("./services/cronService");
 
-// Iniciar verificador de tolerancia de reservas (cada 30 segundos)
-setInterval(() => {
-    checkAndCancelExpiredReservations().catch((err) => {
-        console.error("Error en verificador en segundo plano de reservas:", err);
-    });
-}, 30000);
-
-// Finalizar asistencias cuando la reserva haya terminado (cada 30 segundos)
-setInterval(() => {
-    finalizeEndedAttendances().catch((err) => {
-        console.error("Error en verificador de finalización de asistencias:", err);
-    });
-}, 30000);
-
-// Finalizar reservas confirmadas automáticamente al llegar su hora de fin (cada 30 segundos)
-setInterval(() => {
-    finalizeEndedReservations().catch((err) => {
-        console.error("Error en verificador de finalización automática de reservas:", err);
-    });
-}, 30000);
-
-// Finalizar invitados activos automáticamente cuando su hora de fin se cumple (cada 30 segundos)
+// Finalizar invitados activos automáticamente cuando su tiempo de permanencia se cumple (cada 30 segundos)
 setInterval(() => {
     finalizeEndedGuests().catch((err) => {
         console.error("Error en verificador de finalización automática de invitados:", err);

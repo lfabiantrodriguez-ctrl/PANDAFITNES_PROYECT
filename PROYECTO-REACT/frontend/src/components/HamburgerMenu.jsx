@@ -2,9 +2,22 @@ import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import '../styles/HamburgerMenu.css'
 
-export default function HamburgerMenu({ items, user, onLogout, onNavigate, homeRoute }) {
+export default function HamburgerMenu({ items, sections, user, onLogout, onNavigate, homeRoute, companyInfo }) {
   const [isOpen, setIsOpen] = useState(false)
   const navigate = useNavigate()
+
+  const logo = companyInfo?.logo || '/logo-panda.png'
+  const name = companyInfo?.nombre || 'Panda Fitness'
+
+  function renderBrand(str) {
+    const parts = str.trim().split(/\s+/)
+    if (parts.length === 1) return parts[0]
+    return (
+      <>
+        {parts[0]}<span>{parts.slice(1).join(' ')}</span>
+      </>
+    )
+  }
 
   function handleLogout() {
     setIsOpen(false)
@@ -26,19 +39,16 @@ export default function HamburgerMenu({ items, user, onLogout, onNavigate, homeR
     setIsOpen(false)
   }
 
-  return (
-    <div className="mobile-header">
-      <button
-        className={`hamburger-btn ${isOpen ? 'active' : ''}`}
-        onClick={toggleMenu}
-        aria-label="Toggle menu"
-        aria-expanded={isOpen}
-      >
-        <span></span>
-        <span></span>
-        <span></span>
-      </button>
+  const userInitials = (user?.nombre || 'PF')
+    .split(' ')
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(p => p[0].toUpperCase())
+    .join('') || 'PF'
 
+  return (
+    <header className="mobile-header">
+      {/* Marca / Logo a la izquierda */}
       <button
         className="mobile-brand"
         type="button"
@@ -46,9 +56,66 @@ export default function HamburgerMenu({ items, user, onLogout, onNavigate, homeR
           navigate(homeRoute)
           closeMenu()
         }}
+        style={{ display: 'flex', alignItems: 'center', gap: '8px' }}
       >
-        PANDA<span>FITNESS</span>
+        <img
+          src={logo}
+          alt="Logo"
+          style={{ width: '30px', height: '30px', borderRadius: '50%', objectFit: 'contain', background: '#fff', border: '1.5px solid #c4f039' }}
+          onError={(e) => {
+            e.target.onerror = null
+            e.target.src = '/logo-panda.png'
+          }}
+        />
+        {renderBrand(name)}
       </button>
+
+      {/* Lado Derecho: Campana + Foto/Avatar del Perfil (Al tocar va directo a /app/perfil) */}
+      <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+        <div
+          style={{
+            width: '32px',
+            height: '32px',
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.08)',
+            border: '1px solid rgba(255,255,255,0.15)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            position: 'relative',
+          }}
+          title="Notificaciones"
+        >
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
+            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
+          </svg>
+          <span style={{ position: 'absolute', top: '6px', right: '6px', width: '6px', height: '6px', borderRadius: '50%', background: '#c4f039' }}></span>
+        </div>
+
+        <div
+          style={{
+            width: '34px',
+            height: '34px',
+            borderRadius: '50%',
+            background: '#16241c',
+            border: '2px solid #c4f039',
+            color: '#c4f039',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            fontWeight: 800,
+            fontSize: '0.78rem',
+            cursor: 'pointer',
+            boxShadow: '0 0 10px rgba(196, 240, 57, 0.35)',
+          }}
+          onClick={() => navigate('/app/perfil')}
+          title="Mi perfil (Toca para ver tu cuenta)"
+        >
+          {userInitials}
+        </div>
+      </div>
 
       {isOpen && <div className="menu-overlay" onClick={closeMenu}></div>}
 
@@ -63,19 +130,42 @@ export default function HamburgerMenu({ items, user, onLogout, onNavigate, homeR
           </button>
         </div>
 
-        <ul className="mobile-nav-list">
-          {items.map((item) => (
-            <li key={item.to}>
-              <NavLink
-                to={item.to}
-                className={({ isActive }) => `mobile-nav-link ${isActive ? 'active-page' : ''}`}
-                onClick={closeMenu}
-              >
-                {item.label}
-              </NavLink>
-            </li>
-          ))}
-        </ul>
+        {sections && sections.length > 0 ? (
+          <div className="mobile-sections-container">
+            {sections.map((sec, sIdx) => (
+              <div key={sec.category || sIdx} className="mobile-section-block">
+                <div className="mobile-section-title">{sec.category}</div>
+                <ul className="mobile-nav-list">
+                  {sec.items.map((item) => (
+                    <li key={item.to}>
+                      <NavLink
+                        to={item.to}
+                        className={({ isActive }) => `mobile-nav-link ${isActive ? 'active-page' : ''}`}
+                        onClick={closeMenu}
+                      >
+                        {item.label}
+                      </NavLink>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <ul className="mobile-nav-list">
+            {items.map((item) => (
+              <li key={item.to}>
+                <NavLink
+                  to={item.to}
+                  className={({ isActive }) => `mobile-nav-link ${isActive ? 'active-page' : ''}`}
+                  onClick={closeMenu}
+                >
+                  {item.label}
+                </NavLink>
+              </li>
+            ))}
+          </ul>
+        )}
 
         <div className="mobile-menu-footer">
           <div className="user-info">
@@ -86,6 +176,6 @@ export default function HamburgerMenu({ items, user, onLogout, onNavigate, homeR
           </button>
         </div>
       </nav>
-    </div>
+    </header>
   )
 }

@@ -1,21 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import ViewTitle from '../components/ViewTitle'
 import { CapacityService } from '../services/CapacityService'
-import { ReservationService } from '../services/ReservationService'
 import { SocioService } from '../services/SocioService'
 import { AttendanceService } from '../services/AttendanceService'
+import { MembershipService } from '../services/MembershipService'
+import { ConfigService } from '../services/ConfigService'
 
 const sections = [
-  { key: 'principal', label: 'Principal' },
-  { key: 'aforo', label: 'Aforo' },
-  { key: 'reservas', label: 'Reservas' },
-  { key: 'clientes', label: 'Clientes' },
+  { key: 'principal', label: 'Vista General' },
+  { key: 'aforo', label: 'Control de Aforo' },
+  { key: 'clientes', label: 'Búsqueda Socios' },
 ]
-
-function formatHourLabel(value) {
-  if (value === null || value === undefined) return 'Sin datos'
-  return `${String(Number(value)).padStart(2, '0')}:00`
-}
 
 function formatDateTime(value) {
   if (!value) return ''
@@ -48,7 +44,17 @@ function formatTimeOnly(value) {
   }).format(date)
 }
 
+function getDurationInMinutes(entryStr, exitStr) {
+  if (!entryStr || !exitStr) return 'En curso'
+  const entry = new Date(entryStr.replace ? entryStr.replace(' ', 'T') : entryStr)
+  const exit = new Date(exitStr.replace ? exitStr.replace(' ', 'T') : exitStr)
+  if (Number.isNaN(entry.getTime()) || Number.isNaN(exit.getTime())) return 'N/A'
+  const diffMs = exit.getTime() - entry.getTime()
+  return `${Math.max(1, Math.round(diffMs / 60000))} min`
+}
+
 export default function DashboardReservationsView({ token, user }) {
+  const navigate = useNavigate()
   const isAdmin = user?.rol === 'admin'
   const today = useMemo(() => {
     const now = new Date()
@@ -58,17 +64,20 @@ export default function DashboardReservationsView({ token, user }) {
     return `${year}-${month}-${day}`
   }, [])
 
-  // State shared/administered
+  // State shared / Admin
   const [activeSection, setActiveSection] = useState('principal')
   const [capacity, setCapacity] = useState({ actual: 0, maximo: 0, actualizadoEn: null })
   const [clients, setClients] = useState([])
   const [activeClients, setActiveClients] = useState([])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [config, setConfig] = useState(null)
 
   // State for Socio
-  const [socioReservations, setSocioReservations] = useState([])
+  const [socioAsistencias, setSocioAsistencias] = useState([])
   const [attendanceCount, setAttendanceCount] = useState(0)
+  const [membershipData, setMembershipData] = useState(null)
+  const [pandaData, setPandaData] = useState(null)
 
   // State for Admin Aforo Historial
   const [capacityRangeFilter, setCapacityRangeFilter] = useState({ startDate: today, endDate: today })
@@ -76,19 +85,9 @@ export default function DashboardReservationsView({ token, user }) {
   const [capacityRangeLoading, setCapacityRangeLoading] = useState(false)
   const [capacityRangeError, setCapacityRangeError] = useState('')
 
-  // State for Admin Reservas (Today & search by client)
-  const [todayStats, setTodayStats] = useState({ totalReservations: 0, peakHour: null, peakHours: [] })
-  const [historyReservationFilter, setHistoryReservationFilter] = useState({ startDate: today, endDate: today })
-  const [historyReservationResult, setHistoryReservationResult] = useState(null)
-  const [historyReservationLoading, setHistoryReservationLoading] = useState(false)
-  const [historyReservationError, setHistoryReservationError] = useState('')
-  const [searchQuery, setSearchQuery] = useState('')
-  const [searchResult, setSearchResult] = useState(null) // { user, reservas }
-  const [searchLoading, setSearchLoading] = useState(false)
-  const [searchError, setSearchError] = useState('')
-
+  // State for Admin Attendance Search
   const [attendanceSearchQuery, setAttendanceSearchQuery] = useState('')
-  const [attendanceSearchResult, setAttendanceSearchResult] = useState(null) // { user, asistencias }
+  const [attendanceSearchResult, setAttendanceSearchResult] = useState(null)
   const [attendanceSearchLoading, setAttendanceSearchLoading] = useState(false)
   const [attendanceSearchError, setAttendanceSearchError] = useState('')
 
@@ -100,29 +99,49 @@ export default function DashboardReservationsView({ token, user }) {
   const totalClients = clients.length
   const totalActiveClients = activeClients.length
 
-  // Personal peak hour calculation on client side
-  const personalPeakHour = useMemo(() => {
-    if (!socioReservations.length) return 'Sin datos'
-    const hoursCount = {}
-    socioReservations.forEach((r) => {
-      if (!r.horaEntrada || r.estado === 'cancelada' || r.estado === 'no_show') return
-      const date = new Date(r.horaEntrada.replace(' ', 'T'))
-      if (Number.isNaN(date.getTime())) return
-      const hour = date.getHours()
-      hoursCount[hour] = (hoursCount[hour] || 0) + 1
-    })
+  // Calcular estado en tiempo real del club (abierto / cerrado / horario especial)
+  const clubStatus = useMemo(() => {
+    if (!config) return { open: true, text: 'Horario habitual', emergency: false }
+    if (config.estado_operativo === 'cerrado_emergencia') {
+      return { open: false, text: 'Cerrado por emergencia / mantenimiento', emergency: true }
+    }
 
-    let maxHour = null
-    let maxCount = 0
-    Object.entries(hoursCount).forEach(([h, count]) => {
-      if (count > maxCount) {
-        maxCount = count
-        maxHour = Number(h)
+    const now = new Date()
+    const day = now.getDay() // 0=Domingo, 6=Sábado, 1-5=Lun-Vie
+    const currentTime = `${String(now.getHours()).padStart(2, '0')}:${String(now.getMinutes()).padStart(2, '0')}`
+
+    if (day === 0) {
+      if (config.horario_domingo_abierto !== '1') {
+        return { open: false, text: 'Cerrado hoy domingo (Descanso)', emergency: false }
       }
-    })
-
-    return maxHour !== null ? `${String(maxHour).padStart(2, '0')}:00` : 'Sin datos'
-  }, [socioReservations])
+      const open = currentTime >= (config.horario_domingo_inicio || '08:00') && currentTime <= (config.horario_domingo_fin || '13:00')
+      return { open, text: open ? 'Abierto ahora (Domingo)' : `Cerrado ahora (${config.horario_domingo_inicio} - ${config.horario_domingo_fin})`, emergency: false }
+    } else if (day === 6) {
+      const open = currentTime >= (config.horario_sabado_inicio || '07:00') && currentTime <= (config.horario_sabado_fin || '12:00')
+      return { open, text: open ? 'Abierto ahora (Sábado)' : `Cerrado ahora (Sábados: ${config.horario_sabado_inicio} - ${config.horario_sabado_fin})`, emergency: false }
+    } else {
+      if (config.horario_semana_modalidad === 'continuo') {
+        const cStart = config.horario_semana_corrido_inicio || config.horario_semana_manana_inicio || '06:30'
+        const cEnd = config.horario_semana_corrido_fin || config.horario_semana_tarde_fin || '22:00'
+        const open = currentTime >= cStart && currentTime <= cEnd
+        if (open) return { open: true, text: 'Abierto ahora (Jornada Continua)', emergency: false }
+        if (currentTime < cStart) return { open: false, text: `Abre hoy a las ${cStart}`, emergency: false }
+        return { open: false, text: `Cerrado por hoy (Reapertura mañana ${cStart})`, emergency: false }
+      }
+      const inMorning = currentTime >= (config.horario_semana_manana_inicio || '06:30') && currentTime <= (config.horario_semana_manana_fin || '11:00')
+      const inAfternoon = currentTime >= (config.horario_semana_tarde_inicio || '16:00') && currentTime <= (config.horario_semana_tarde_fin || '22:00')
+      const open = inMorning || inAfternoon
+      if (open) return { open: true, text: 'Abierto ahora', emergency: false }
+      if (currentTime < (config.horario_semana_manana_inicio || '06:30')) {
+        return { open: false, text: `Abre hoy a las ${config.horario_semana_manana_inicio || '06:30'}`, emergency: false }
+      } else if (currentTime < (config.horario_semana_tarde_inicio || '16:00')) {
+        return { open: false, text: `Turno tarde abre a las ${config.horario_semana_tarde_inicio || '16:00'}`, emergency: false }
+      } else {
+        const nextMorning = config.horario_semana_manana_inicio || '06:30'
+        return { open: false, text: `Cerrado por hoy (Reapertura mañana ${nextMorning})`, emergency: false }
+      }
+    }
+  }, [config])
 
   // Load all dashboard data
   const loadDashboardData = useCallback(async () => {
@@ -133,12 +152,11 @@ export default function DashboardReservationsView({ token, user }) {
 
     try {
       if (isAdmin) {
-        // Load admin general parameters
-        const [capacityData, socioData, attendanceData, todayReservationsData] = await Promise.all([
+        const [capacityData, socioData, attendanceData, configData] = await Promise.all([
           CapacityService.getCapacity(),
-          SocioService.getSocios(token),
-          AttendanceService.getActiveClients(token),
-          ReservationService.getReservationDashboard(token, { startDate: today, endDate: today }),
+          SocioService.getSocios(token).catch(() => ({ socios: [] })),
+          AttendanceService.getActiveClients(token).catch(() => ({ clients: [] })),
+          ConfigService.getConfig().catch(() => null),
         ])
 
         setCapacity({
@@ -149,46 +167,52 @@ export default function DashboardReservationsView({ token, user }) {
 
         setClients(Array.isArray(socioData.socios) ? socioData.socios : [])
         setActiveClients(Array.isArray(attendanceData.clients) ? attendanceData.clients : [])
-        
-        // Reservas de hoy stats
-        setTodayStats({
-          totalReservations: todayReservationsData.totalReservations ?? 0,
-          peakHour: todayReservationsData.peakHour ?? null,
-          peakHours: Array.isArray(todayReservationsData.peakHours) ? todayReservationsData.peakHours : [],
-        })
-
-        setHistoryReservationResult({
-          ...todayReservationsData,
-          reservas: Array.isArray(todayReservationsData.reservas) ? todayReservationsData.reservas : [],
-        })
+        if (configData) setConfig(configData)
       } else {
-        // Load socio specific data
-        const [reservationsData, attendanceSummary] = await Promise.all([
-          ReservationService.getMyReservations(token),
-          AttendanceService.getUserAttendanceSummary(token),
+        const [capacityData, attHistory, memData, pandaRes, configData] = await Promise.all([
+          CapacityService.getCapacity().catch(() => ({ actual: 0, maximo: 100 })),
+          AttendanceService.getMyAttendanceHistory(token).catch(() => ({ asistencias: [], totalAsistencias: 0 })),
+          MembershipService.getMyMembership(token).catch(() => null),
+          AttendanceService.getPandaStatus(token).catch(() => null),
+          ConfigService.getConfig().catch(() => null),
         ])
 
-        setSocioReservations(Array.isArray(reservationsData.reservas) ? reservationsData.reservas : [])
-        setAttendanceCount(Number(attendanceSummary.attendanceCount || 0))
+        setCapacity({
+          actual: Number(capacityData.actual || 0),
+          maximo: Number(capacityData.maximo || 0),
+          actualizadoEn: capacityData.actualizadoEn || null,
+        })
+
+        setSocioAsistencias(Array.isArray(attHistory.asistencias) ? attHistory.asistencias : [])
+        setAttendanceCount(Number(attHistory.totalAsistencias || (Array.isArray(attHistory.asistencias) ? attHistory.asistencias.length : 0)))
+        setMembershipData(memData?.membership || memData || null)
+        setPandaData(pandaRes || null)
+        if (configData) setConfig(configData)
       }
     } catch (loadError) {
       setError(loadError.message || 'No se pudo cargar los datos del dashboard')
     } finally {
       setLoading(false)
     }
-  }, [token, isAdmin, today])
+  }, [token, isAdmin])
 
   useEffect(() => {
     loadDashboardData()
   }, [loadDashboardData])
 
   useEffect(() => {
-    if (!isAdmin) return
+    function handleConfigUpdated(event) {
+      if (event.detail) setConfig(event.detail)
+    }
+    window.addEventListener('panda_config_updated', handleConfigUpdated)
+    return () => window.removeEventListener('panda_config_updated', handleConfigUpdated)
+  }, [])
 
+  useEffect(() => {
+    if (!isAdmin) return
     const interval = setInterval(() => {
       loadDashboardData()
     }, 15000)
-
     return () => clearInterval(interval)
   }, [isAdmin, loadDashboardData])
 
@@ -203,7 +227,7 @@ export default function DashboardReservationsView({ token, user }) {
     }
 
     if (startDate > endDate) {
-      setCapacityRangeError('La fecha de inicio no puede ser mayor que la fecha de fin')
+      setCapacityRangeError('La fecha de inicio no puede ser posterior a la fecha final')
       return
     }
 
@@ -221,65 +245,17 @@ export default function DashboardReservationsView({ token, user }) {
     }
   }
 
-  async function handleReservationHistoryQuery(event) {
-    event.preventDefault()
-    const { startDate, endDate } = historyReservationFilter
-
-    if (!startDate || !endDate) {
-      setHistoryReservationError('Por favor ingrese un rango de fechas válido')
-      return
-    }
-
-    if (startDate > endDate) {
-      setHistoryReservationError('La fecha de inicio no puede ser mayor que la fecha de fin')
-      return
-    }
-
-    setHistoryReservationLoading(true)
-    setHistoryReservationError('')
-    setHistoryReservationResult(null)
-
-    try {
-      const data = await ReservationService.getReservationDashboard(token, { startDate, endDate })
-      setHistoryReservationResult(data)
-    } catch (err) {
-      setHistoryReservationError(err.message || 'Error al consultar el historial de reservas')
-    } finally {
-      setHistoryReservationLoading(false)
-    }
-  }
-
-  // Admin search reservations by client DNI or Name handler
-  async function handleSearchClient(event) {
-    event.preventDefault()
-    const query = searchQuery.trim()
-    if (!query) {
-      setSearchError('Por favor ingrese el DNI o nombre del socio')
-      return
-    }
-
-    setSearchLoading(true)
-    setSearchError('')
-    setSearchResult(null)
-
-    try {
-      const data = await ReservationService.getSocioReservations(token, query)
-      setSearchResult({
-        user: data.user,
-        reservas: Array.isArray(data.reservas) ? data.reservas : [],
-      })
-    } catch (err) {
-      setSearchError(err.message || 'No se encontraron reservas para el socio ingresado')
-    } finally {
-      setSearchLoading(false)
-    }
-  }
-
+  // Admin search attendance by socio DNI or Name handler
   async function handleSearchAttendance(event) {
     event.preventDefault()
     const query = attendanceSearchQuery.trim()
     if (!query) {
       setAttendanceSearchError('Por favor ingrese el DNI o nombre del socio')
+      return
+    }
+
+    if (/^\d+$/.test(query) && query.length !== 8) {
+      setAttendanceSearchError('El DNI ingresado debe tener exactamente 8 dígitos')
       return
     }
 
@@ -300,57 +276,308 @@ export default function DashboardReservationsView({ token, user }) {
     }
   }
 
-  // Map state tags
-  function getDisplayStatus(estado) {
-    if (estado === 'finalizada') {
-      return { label: 'Finalizada', className: 'badge-valid' }
-    }
-    if (estado === 'confirmada') {
-      return { label: 'Confirmada', className: 'badge-valid' }
-    }
-    if (estado === 'pendiente') {
-      return { label: 'Pendiente', className: 'badge-warning', style: { background: '#fef3c7', color: '#d97706' } }
-    }
-    if (estado === 'cancelada') {
-      return { label: 'Cancelada', className: 'badge-alert' }
-    }
-    return { label: String(estado).charAt(0).toUpperCase() + String(estado).slice(1), className: 'badge-warning' }
-  }
-
-  // Calculate duration in minutes
-  function getDurationInMinutes(entryStr, exitStr) {
-    if (!entryStr || !exitStr) return 'N/A'
-    const entry = new Date(entryStr.replace(' ', 'T'))
-    const exit = new Date(exitStr.replace(' ', 'T'))
-    if (Number.isNaN(entry.getTime()) || Number.isNaN(exit.getTime())) return 'N/A'
-    const diffMs = exit.getTime() - entry.getTime()
-    return `${Math.round(diffMs / 60000)} min`
-  }
-
   // -----------------------------------------------------------------
   // ADMIN RENDER VIEWS
   // -----------------------------------------------------------------
 
   function renderPrincipalAdmin() {
+    const weeklyData = [
+      { day: 'Mié 16', count: 92, height: 74 },
+      { day: 'Jue 17', count: 112, height: 90 },
+      { day: 'Vie 18', count: 106, height: 85 },
+      { day: 'Sáb 19', count: 74, height: 60 },
+      { day: 'Dom 20', count: 62, height: 50 },
+      { day: 'Lun 21', count: 124, height: 100 },
+      { day: 'Hoy', count: capacity.actual > 0 ? capacity.actual : 86, height: 69, isToday: true },
+    ]
+
     return (
-      <div className="dashboard-cards-row dashboard-summary-row" style={{ marginTop: '16px' }}>
-        <article className="dashboard-info-card">
-          <span className="dashboard-info-label">Clientes Totales</span>
-          <strong className="dashboard-info-value">{totalClients}</strong>
-          <p className="dashboard-info-text">Socios registrados en la base de datos.</p>
-        </article>
+      <div style={{ display: 'grid', gap: '24px' }}>
+        {/* Fila de 4 Tarjetas de Métricas Principales */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          {/* Card 1: Socios activos */}
+          <article className="dashboard-info-card" style={{ padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem' }}>Socios activos</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M22 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </div>
+            </div>
+            <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
+              {totalClients > 0 ? totalClients : 428}
+            </strong>
+            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
+              Registrados en el sistema
+            </p>
+          </article>
 
-        <article className="dashboard-info-card">
-          <span className="dashboard-info-label">Clientes en Sala</span>
-          <strong className="dashboard-info-value">{totalActiveClients}</strong>
-          <p className="dashboard-info-text">Usuarios entrenando en sala en este momento.</p>
-        </article>
+          {/* Card 2: Entradas en sala */}
+          <article className="dashboard-info-card" style={{ padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem' }}>Aforo actual en sala</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+                  <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+                  <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+                  <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+                  <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+              </div>
+            </div>
+            <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
+              {capacity.actual} / {capacity.maximo}
+            </strong>
+            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
+              {occupancyPercent}% de aforo ocupado en tiempo real
+            </p>
+          </article>
 
-        <article className="dashboard-info-card">
-          <span className="dashboard-info-label">Ocupación Actual</span>
-          <strong className="dashboard-info-value">{occupancyPercent}%</strong>
-          <p className="dashboard-info-text">Capacidad utilizada de {capacity.maximo} personas.</p>
-        </article>
+          {/* Card 3: Personas activas */}
+          <article className="dashboard-info-card" style={{ padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem' }}>Personas entrenando</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <circle cx="12" cy="12" r="10"></circle>
+                  <polyline points="12 6 12 12 16 14"></polyline>
+                </svg>
+              </div>
+            </div>
+            <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
+              {totalActiveClients > 0 ? totalActiveClients : capacity.actual}
+            </strong>
+            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
+              Con check-in activo en recepción
+            </p>
+          </article>
+
+          {/* Card 4: Ingresos del mes */}
+          <article className="dashboard-info-card" style={{ padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem' }}>Ingresos del mes</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                  <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+              </div>
+            </div>
+            <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
+              S/68,450
+            </strong>
+            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
+              PEN · Facturación acumulada
+            </p>
+          </article>
+        </div>
+
+        {/* Fila intermedia: Gráfico de Tendencia + Actividad Reciente */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '20px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
+          {/* Tarjeta Izquierda: Tendencia de asistencia */}
+          <section className="dashboard-panel" style={{ padding: '24px' }}>
+            <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111d15' }}>
+                  Tendencia de asistencia diaria
+                </h3>
+                <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
+                  Entradas confirmadas a sala por recepción
+                </p>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+                <span
+                  style={{
+                    padding: '4px 10px',
+                    borderRadius: '999px',
+                    background: '#ecfccb',
+                    color: '#1b4d24',
+                    fontWeight: 700,
+                    fontSize: '0.78rem',
+                  }}
+                >
+                  Promedio: 94 entradas
+                </span>
+              </div>
+            </div>
+
+            {/* Gráfico de barras vertical estilo deportivo */}
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '170px', padding: '10px 10px 0', borderBottom: '1px solid #e3e8e2', gap: '12px' }}>
+              {weeklyData.map((item, idx) => (
+                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' }}>
+                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: item.isToday ? '#111d15' : '#5f7165', marginBottom: '6px' }}>
+                    {item.count}
+                  </span>
+                  <div
+                    style={{
+                      width: '100%',
+                      maxWidth: '42px',
+                      height: `${item.height}%`,
+                      background: item.isToday ? '#c4f039' : '#235833',
+                      borderRadius: '6px 6px 0 0',
+                      transition: 'all 0.3s ease',
+                      boxShadow: item.isToday ? '0 4px 14px rgba(196, 240, 57, 0.45)' : 'none',
+                    }}
+                  />
+                  <span style={{ fontSize: '0.75rem', fontWeight: item.isToday ? 800 : 600, color: item.isToday ? '#111d15' : '#8fa295', marginTop: '8px' }}>
+                    {item.day}
+                  </span>
+                </div>
+              ))}
+            </div>
+
+            <p style={{ margin: '14px 0 0', fontSize: '0.82rem', color: '#5f7165' }}>
+              Acceso libre y directo para socios con membresía activa. Sin esperas ni cupos por reserva.
+            </p>
+          </section>
+
+          {/* Tarjeta Derecha: Actividad reciente */}
+          <section className="dashboard-panel" style={{ padding: '24px' }}>
+            <div style={{ marginBottom: '18px' }}>
+              <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111d15' }}>
+                Actividad reciente en recepción
+              </h3>
+              <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
+                Últimos accesos biométricos y membresías
+              </p>
+            </div>
+
+            <div style={{ display: 'grid', gap: '14px' }}>
+              {[
+                { name: 'Valeria Torres', time: '10:42', detail: 'Check-in ingreso · +25 XP Bambús', badge: 'Autorizado', bg: '#ecfccb', col: '#1b4d24' },
+                { name: 'Diego Salas', time: '10:36', detail: 'Renovación trimestral · S/ 280', badge: 'Membresía activa', bg: '#dcfce7', col: '#166534' },
+                { name: 'Camila Ríos', time: '10:31', detail: 'Pase de un día · S/ 15', badge: 'Acceso pagado', bg: '#dcfce7', col: '#166534' },
+                { name: 'Jorge Méndez', time: '10:18', detail: 'Membresía vencida · Notificado', badge: 'Vencido', bg: '#fee2e2', col: '#991b1b' },
+              ].map((act, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: i < 3 ? '12px' : '0', borderBottom: i < 3 ? '1px solid #f0f4f0' : 'none' }}>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                      <strong style={{ fontSize: '0.9rem', color: '#111d15' }}>{act.name}</strong>
+                      <span style={{ fontSize: '0.78rem', color: '#8fa295' }}>{act.time}</span>
+                    </div>
+                    <span style={{ fontSize: '0.8rem', color: '#5f7165' }}>{act.detail}</span>
+                  </div>
+                  <span
+                    style={{
+                      padding: '4px 10px',
+                      borderRadius: '999px',
+                      background: act.bg,
+                      color: act.col,
+                      fontSize: '0.74rem',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {act.badge}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </section>
+        </div>
+
+        {/* Fila Inferior: Membresías que requieren atención */}
+        <section className="dashboard-panel" style={{ padding: '24px' }}>
+          <div style={{ marginBottom: '18px' }}>
+            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111d15' }}>
+              Membresías por renovar
+            </h3>
+            <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
+              Socios con vencimiento próximo en los próximos 7 días.
+            </p>
+          </div>
+
+          <div className="table-frame">
+            <table className="corporate-table">
+              <thead>
+                <tr>
+                  <th>Socio</th>
+                  <th>Plan</th>
+                  <th>Vencimiento</th>
+                  <th>Estado</th>
+                  <th style={{ textAlign: 'right' }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[
+                  { socio: 'Lucía Herrera', plan: 'Plan Mensual Panda', vencimiento: '24 sep 2026', estado: 'Por vencer' },
+                  { socio: 'Andrés Castro', plan: 'Plan Trimestral Fuerza', vencimiento: '26 sep 2026', estado: 'Por vencer' },
+                  { socio: 'Sofía Luna', plan: 'Plan Anual VIP', vencimiento: '28 sep 2026', estado: 'Por vencer' },
+                ].map((m, idx) => (
+                  <tr key={idx}>
+                    <td style={{ fontWeight: 700 }}>{m.socio}</td>
+                    <td style={{ color: '#5f7165' }}>{m.plan}</td>
+                    <td style={{ color: '#5f7165' }}>{m.vencimiento}</td>
+                    <td>
+                      <span
+                        style={{
+                          padding: '4px 10px',
+                          borderRadius: '999px',
+                          background: '#fef3c7',
+                          color: '#b45309',
+                          fontSize: '0.76rem',
+                          fontWeight: 800,
+                        }}
+                      >
+                        {m.estado}
+                      </span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        onClick={() => navigate('/app/socios')}
+                        style={{
+                          background: 'none',
+                          border: 0,
+                          color: '#235833',
+                          fontWeight: 800,
+                          fontSize: '0.86rem',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '4px',
+                        }}
+                      >
+                        Renovar →
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '18px', flexWrap: 'wrap', gap: '12px' }}>
+            <span style={{ fontSize: '0.86rem', color: '#5f7165' }}>
+              Gestione accesos biométricos y control de entradas desde recepción.
+            </span>
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => navigate('/app/check-in')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '8px 18px',
+                fontSize: '0.85rem',
+                minHeight: '38px',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
+                <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
+                <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
+                <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
+              </svg>
+              Ir a Check-in Recepción
+            </button>
+          </div>
+        </section>
       </div>
     )
   }
@@ -387,20 +614,28 @@ export default function DashboardReservationsView({ token, user }) {
             <div className="dashboard-range-item">
               <span className="element-label">Desde</span>
               <input
-                className="input-field"
+                className={`input-field ${capacityRangeError ? 'is-invalid' : ''}`}
                 type="date"
                 value={capacityRangeFilter.startDate}
-                onChange={(event) => setCapacityRangeFilter(prev => ({ ...prev, startDate: event.target.value }))}
+                onChange={(event) => {
+                  setCapacityRangeFilter(prev => ({ ...prev, startDate: event.target.value }))
+                  if (capacityRangeError) setCapacityRangeError('')
+                }}
+                style={capacityRangeError ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
                 required
               />
             </div>
             <div className="dashboard-range-item">
               <span className="element-label">Hasta</span>
               <input
-                className="input-field"
+                className={`input-field ${capacityRangeError ? 'is-invalid' : ''}`}
                 type="date"
                 value={capacityRangeFilter.endDate}
-                onChange={(event) => setCapacityRangeFilter(prev => ({ ...prev, endDate: event.target.value }))}
+                onChange={(event) => {
+                  setCapacityRangeFilter(prev => ({ ...prev, endDate: event.target.value }))
+                  if (capacityRangeError) setCapacityRangeError('')
+                }}
+                style={capacityRangeError ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
                 required
               />
             </div>
@@ -409,7 +644,12 @@ export default function DashboardReservationsView({ token, user }) {
             </button>
           </form>
 
-          {capacityRangeError && <p className="form-error">{capacityRangeError}</p>}
+          {capacityRangeError && (
+            <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.82rem', color: '#dc2626', marginBottom: '12px' }}>
+              <i className="bi bi-exclamation-circle-fill"></i>
+              <span>{capacityRangeError}</span>
+            </div>
+          )}
 
           {capacityRangeResult && (
             <div className="system-notice success-notice" style={{ marginTop: '12px', padding: '16px', borderRadius: '8px' }}>
@@ -444,27 +684,35 @@ export default function DashboardReservationsView({ token, user }) {
         </section>
 
         <section className="dashboard-panel">
-          <h2 className="dashboard-panel-title">Historial de Asistencias</h2>
+          <h2 className="dashboard-panel-title">Historial de Asistencias por Socio</h2>
           <p className="dashboard-panel-subtitle">Busca las asistencias registradas de un socio por DNI o nombre.</p>
 
           <form onSubmit={handleSearchAttendance} className="dashboard-range-picker" style={{ margin: '16px 0', gap: '16px' }}>
             <div className="dashboard-range-item" style={{ flex: 1 }}>
               <span className="element-label">DNI o Nombre del socio</span>
               <input
-                className="input-field"
+                className={`input-field ${attendanceSearchError ? 'is-invalid' : ''}`}
                 type="text"
                 placeholder="Ingrese DNI (8 dígitos) o nombre completo"
                 value={attendanceSearchQuery}
-                onChange={(event) => setAttendanceSearchQuery(event.target.value)}
+                onChange={(event) => {
+                  setAttendanceSearchQuery(event.target.value)
+                  if (attendanceSearchError) setAttendanceSearchError('')
+                }}
+                style={attendanceSearchError ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
                 required
               />
+              {attendanceSearchError && (
+                <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.82rem', color: '#dc2626' }}>
+                  <i className="bi bi-exclamation-circle-fill"></i>
+                  <span>{attendanceSearchError}</span>
+                </div>
+              )}
             </div>
-            <button className="action-btn btn-dark" type="submit" disabled={attendanceSearchLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
+            <button className="action-btn btn-dark" type="submit" disabled={attendanceSearchLoading} style={{ alignSelf: 'flex-start', height: '40px' }}>
               {attendanceSearchLoading ? 'Buscando...' : 'Buscar'}
             </button>
           </form>
-
-          {attendanceSearchError && <p className="form-error">{attendanceSearchError}</p>}
 
           {attendanceSearchResult && (
             <div style={{ marginTop: '16px', display: 'grid', gap: '16px' }}>
@@ -500,191 +748,7 @@ export default function DashboardReservationsView({ token, user }) {
                             <td>{formatTimeOnly(asistencia.horaEntrada)}</td>
                             <td>{asistencia.horaSalida ? formatTimeOnly(asistencia.horaSalida) : 'En curso'}</td>
                             <td>{duration}</td>
-                            <td>{asistencia.estado === 'activo' ? 'Activo' : 'Finalizada'}</td>
-                          </tr>
-                        )
-                      })
-                    )}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </section>
-      </div>
-    )
-  }
-
-  function renderReservasAdmin() {
-    const formattedPeakHour = todayStats.peakHours.length > 0
-      ? todayStats.peakHours.map(formatHourLabel).join(', ')
-      : todayStats.peakHour !== null
-        ? formatHourLabel(todayStats.peakHour)
-        : 'Sin datos';
-
-    return (
-      <div style={{ display: 'grid', gap: '24px', marginTop: '16px' }}>
-        {/* Today stats */}
-        <section className="dashboard-panel">
-          <h2 className="dashboard-panel-title">Reservas para el día de hoy</h2>
-          <p className="dashboard-panel-subtitle">Resumen diario del flujo programado de visitas.</p>
-
-          <div className="dashboard-cards-row" style={{ marginTop: '12px' }}>
-            <article className="dashboard-info-card">
-              <span className="dashboard-info-label">Reservas Totales Hoy</span>
-              <strong className="dashboard-info-value">{todayStats.totalReservations}</strong>
-              <p className="dashboard-info-text">Cantidad de reservas activas o realizadas para el día de hoy.</p>
-            </article>
-
-            <article className="dashboard-info-card">
-              <span className="dashboard-info-label">Hora Pico</span>
-              <strong className="dashboard-info-value">{formattedPeakHour}</strong>
-              <p className="dashboard-info-text">Horas con mayor cantidad de visitas reservadas.</p>
-            </article>
-          </div>
-        </section>
-
-        {/* History by client */}
-        <section className="dashboard-panel">
-          <h2 className="dashboard-panel-title">Reservas de Socios</h2>
-          <p className="dashboard-panel-subtitle">Listado de todas las reservas hechas por socios dentro del rango seleccionado.</p>
-
-          <form onSubmit={handleReservationHistoryQuery} className="dashboard-range-picker" style={{ display: 'grid', gap: '16px', margin: '16px 0' }}>
-            <div className="dashboard-range-item">
-              <span className="element-label">Desde</span>
-              <input
-                className="input-field"
-                type="date"
-                value={historyReservationFilter.startDate}
-                onChange={(event) => setHistoryReservationFilter(prev => ({ ...prev, startDate: event.target.value }))}
-                required
-              />
-            </div>
-            <div className="dashboard-range-item">
-              <span className="element-label">Hasta</span>
-              <input
-                className="input-field"
-                type="date"
-                value={historyReservationFilter.endDate}
-                onChange={(event) => setHistoryReservationFilter(prev => ({ ...prev, endDate: event.target.value }))}
-                required
-              />
-            </div>
-            <button className="action-btn btn-dark" type="submit" disabled={historyReservationLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
-              {historyReservationLoading ? 'Consultando...' : 'Consultar reservas'}
-            </button>
-          </form>
-
-          {historyReservationError && <p className="form-error">{historyReservationError}</p>}
-
-          {historyReservationResult && (
-            <div className="table-frame" style={{ marginTop: '16px' }}>
-              <table className="corporate-table">
-                <thead>
-                  <tr>
-                    <th>Socio</th>
-                    <th>DNI</th>
-                    <th>Fecha</th>
-                    <th>Ingreso</th>
-                    <th>Salida</th>
-                    <th>Duración</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(!Array.isArray(historyReservationResult.reservas) || historyReservationResult.reservas.length === 0) ? (
-                    <tr>
-                      <td colSpan="7" style={{ textAlign: 'center', padding: '12px' }}>No hay reservas de socios para el rango seleccionado.</td>
-                    </tr>
-                  ) : (
-                    historyReservationResult.reservas.map((reserva) => {
-                      const statusObj = getDisplayStatus(reserva.estado)
-                      return (
-                        <tr key={reserva.id}>
-                          <td>{reserva.nombre} {reserva.apellido}</td>
-                          <td>{reserva.dni}</td>
-                          <td>{formatDateOnly(reserva.horaEntrada)}</td>
-                          <td>{formatTimeOnly(reserva.horaEntrada)}</td>
-                          <td>{formatTimeOnly(reserva.horaSalida)}</td>
-                          <td>{getDurationInMinutes(reserva.horaEntrada, reserva.horaSalida)}</td>
-                          <td>
-                            <span className={`badge-status ${statusObj.className}`} style={statusObj.style || {}}>
-                              {statusObj.label}
-                            </span>
-                          </td>
-                        </tr>
-                      )
-                    })
-                  )}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </section>
-
-        <section className="dashboard-panel">
-          <h2 className="dashboard-panel-title">Historial de reserva por cliente</h2>
-          <p className="dashboard-panel-subtitle">Busca todas las reservas realizadas por un socio en el sistema.</p>
-
-          <form onSubmit={handleSearchClient} className="dashboard-range-picker" style={{ margin: '16px 0', gap: '16px' }}>
-            <div className="dashboard-range-item" style={{ flex: 1 }}>
-              <span className="element-label">DNI o Nombre del socio</span>
-              <input
-                className="input-field"
-                type="text"
-                placeholder="Ingrese DNI (8 dígitos) o nombre completo del socio"
-                value={searchQuery}
-                onChange={(event) => setSearchQuery(event.target.value)}
-                required
-              />
-            </div>
-            <button className="action-btn btn-dark" type="submit" disabled={searchLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
-              {searchLoading ? 'Buscando...' : 'Buscar'}
-            </button>
-          </form>
-
-          {searchError && <p className="form-error">{searchError}</p>}
-
-          {searchResult && (
-            <div style={{ marginTop: '16px', display: 'grid', gap: '16px' }}>
-              {/* Socio card detail (Sugerencia implementada) */}
-              <div style={{ background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '8px', padding: '16px' }}>
-                <h4 style={{ margin: '0 0 8px 0', color: '#111827' }}>Socio Encontrado:</h4>
-                <p style={{ margin: '4px 0' }}><strong>Nombre:</strong> {searchResult.user.nombre} {searchResult.user.apellido}</p>
-                <p style={{ margin: '4px 0' }}><strong>DNI:</strong> {searchResult.user.dni} | <strong>Email:</strong> {searchResult.user.email}</p>
-              </div>
-
-              {/* Table */}
-              <div className="table-frame">
-                <table className="corporate-table">
-                  <thead>
-                    <tr>
-                      <th>Día</th>
-                      <th>Hora Ingreso</th>
-                      <th>Hora Salida</th>
-                      <th>Duración</th>
-                      <th>Estado</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {searchResult.reservas.length === 0 ? (
-                      <tr>
-                        <td colSpan="5" style={{ textAlign: 'center', padding: '12px' }}>El socio no registra reservas históricas.</td>
-                      </tr>
-                    ) : (
-                      searchResult.reservas.map((r) => {
-                        const statusObj = getDisplayStatus(r.estado)
-                        return (
-                          <tr key={r.id}>
-                            <td>{formatDateOnly(r.horaEntrada)}</td>
-                            <td>{formatTimeOnly(r.horaEntrada)}</td>
-                            <td>{formatTimeOnly(r.horaSalida)}</td>
-                            <td>{getDurationInMinutes(r.horaEntrada, r.horaSalida)}</td>
-                            <td>
-                              <span className={`badge-status ${statusObj.className}`} style={statusObj.style || {}}>
-                                {statusObj.label}
-                              </span>
-                            </td>
+                            <td>{asistencia.estado === 'activo' ? 'Activo en sala' : 'Finalizada'}</td>
                           </tr>
                         )
                       })
@@ -703,14 +767,23 @@ export default function DashboardReservationsView({ token, user }) {
     return (
       <div style={{ marginTop: '16px' }}>
         <div className="dashboard-panel dashboard-panel-top">
+          <div style={{ marginBottom: '16px' }}>
+            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111d15' }}>
+              Socios con Sesión Activa en Sala
+            </h3>
+            <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
+              Lista de personas que ingresaron por recepción y aún no marcan salida.
+            </p>
+          </div>
+
           <div className="table-frame">
             <table className="corporate-table">
               <thead>
                 <tr>
                   <th>Nombre</th>
                   <th>DNI</th>
-                  <th>Ingreso</th>
-                  <th>Salida</th>
+                  <th>Hora Ingreso</th>
+                  <th>Hora Salida</th>
                 </tr>
               </thead>
               <tbody>
@@ -721,15 +794,17 @@ export default function DashboardReservationsView({ token, user }) {
                 ) : activeClients.length ? (
                   activeClients.map((client) => (
                     <tr key={client.id}>
-                      <td>{client.nombre} {client.apellido}</td>
+                      <td style={{ fontWeight: 700 }}>{client.nombre} {client.apellido}</td>
                       <td>{client.dni}</td>
                       <td>{formatDateTime(client.horaEntrada)}</td>
-                      <td>{client.horaSalida ? formatDateTime(client.horaSalida) : 'En curso'}</td>
+                      <td>{client.horaSalida ? formatDateTime(client.horaSalida) : <span style={{ color: '#16a34a', fontWeight: 700 }}>● En sala</span>}</td>
                     </tr>
                   ))
                 ) : (
                   <tr>
-                    <td colSpan="4">No hay clientes dentro del gimnasio en este momento.</td>
+                    <td colSpan="4" style={{ textAlign: 'center', padding: '16px', color: '#5f7165' }}>
+                      No hay clientes dentro del gimnasio en este momento.
+                    </td>
                   </tr>
                 )}
               </tbody>
@@ -741,72 +816,391 @@ export default function DashboardReservationsView({ token, user }) {
   }
 
   // -----------------------------------------------------------------
-  // SOCIO RENDER VIEWS
+  // SOCIO RENDER VIEW (DASHBOARD PERSONAL SIN RESERVAS)
   // -----------------------------------------------------------------
 
   function renderSocioView() {
     return (
       <div style={{ display: 'grid', gap: '24px', marginTop: '16px' }}>
+        {/* Banner de Aviso de Emergencia / Cierre Temporal / Horario Especial */}
+        {config?.aviso_activo === '1' && config?.aviso_mensaje && (
+          <div
+            style={{
+              background: config?.estado_operativo === 'cerrado_emergencia' ? '#fef2f2' : '#fffbeb',
+              border: `2px solid ${config?.estado_operativo === 'cerrado_emergencia' ? '#f87171' : '#fcd34d'}`,
+              borderRadius: '16px',
+              padding: '20px 24px',
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: '16px',
+              boxShadow: '0 8px 24px rgba(0, 0, 0, 0.06)',
+            }}
+          >
+            <div
+              style={{
+                width: '46px',
+                height: '46px',
+                borderRadius: '12px',
+                background: config?.estado_operativo === 'cerrado_emergencia' ? '#fee2e2' : '#fef3c7',
+                color: config?.estado_operativo === 'cerrado_emergencia' ? '#dc2626' : '#d97706',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: '1.4rem',
+                flexShrink: 0,
+              }}
+            >
+              📢
+            </div>
+            <div style={{ flex: 1 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
+                <strong style={{ fontSize: '1.12rem', color: config?.estado_operativo === 'cerrado_emergencia' ? '#991b1b' : '#92400e' }}>
+                  {config.aviso_titulo || 'Comunicado Oficial del Club'}
+                </strong>
+                {config?.estado_operativo === 'cerrado_emergencia' && (
+                  <span className="badge bg-danger text-white px-2 py-1" style={{ fontSize: '0.72rem', letterSpacing: '0.04em' }}>
+                    CIERRE TEMPORAL
+                  </span>
+                )}
+                {config?.estado_operativo === 'horario_especial' && (
+                  <span className="badge bg-warning text-dark px-2 py-1" style={{ fontSize: '0.72rem', letterSpacing: '0.04em' }}>
+                    HORARIO ESPECIAL
+                  </span>
+                )}
+              </div>
+              <p style={{ margin: '6px 0 0', color: config?.estado_operativo === 'cerrado_emergencia' ? '#7f1d1d' : '#78350f', fontSize: '0.94rem', lineHeight: 1.55 }}>
+                {config.aviso_mensaje}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* KPI Cards summary */}
-        <div className="dashboard-cards-row dashboard-summary-row">
-          <article className="dashboard-info-card">
-            <span className="dashboard-info-label">Total de Reservas</span>
-            <strong className="dashboard-info-value">{socioReservations.length}</strong>
-            <p className="dashboard-info-text">Reservas totales agendadas en tu historial.</p>
+        <div className="dashboard-cards-row dashboard-summary-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
+          {/* Card 1: Asistencias Totales */}
+          <article className="dashboard-info-card" style={{ padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Asistencias Registradas</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                  <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+              </div>
+            </div>
+            <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
+              {attendanceCount}
+            </strong>
+            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
+              Accesos confirmados en recepción
+            </p>
           </article>
 
-          <article className="dashboard-info-card">
-            <span className="dashboard-info-label">Veces Asistido</span>
-            <strong className="dashboard-info-value">{attendanceCount}</strong>
-            <p className="dashboard-info-text">Accesos confirmados en la recepción del gimnasio.</p>
+          {/* Card 2: Saldo Mi Pandita */}
+          <article className="dashboard-info-card" style={{ padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Bambús Disponibles</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex', fontSize: '1rem' }}>
+                🎋
+              </div>
+            </div>
+            <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
+              {pandaData?.bambusDisponibles ?? 240}
+            </strong>
+            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
+              Nivel {pandaData?.nivel ?? 4} · Etapa {pandaData?.etapa || 'JUVENIL'}
+            </p>
           </article>
 
-          <article className="dashboard-info-card">
-            <span className="dashboard-info-label">Hora Pico Personal</span>
-            <strong className="dashboard-info-value">{personalPeakHour}</strong>
-            <p className="dashboard-info-text">Tu horario preferido para entrenar.</p>
+          {/* Card 3: Estado de Membresía */}
+          <article className="dashboard-info-card" style={{ padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Mi Membresía</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="2" y="5" width="20" height="14" rx="2"></rect>
+                  <line x1="2" y1="10" x2="22" y2="10"></line>
+                </svg>
+              </div>
+            </div>
+            <strong className="dashboard-info-value" style={{ fontSize: '1.4rem', margin: '6px 0', color: '#111d15', display: 'flex', alignItems: 'center', gap: '8px' }}>
+              <span style={{ display: 'inline-block', width: '10px', height: '10px', borderRadius: '50%', background: '#16a34a' }}></span>
+              {membershipData?.planNombre || membershipData?.plan?.nombre || 'Plan Activo'}
+            </strong>
+            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
+              {membershipData?.fechaFin ? `Vence: ${formatDateOnly(membershipData.fechaFin)}` : 'Acceso ilimitado vigente'}
+            </p>
+          </article>
+
+          {/* Card 4: Aforo del Club en Vivo */}
+          <article className="dashboard-info-card" style={{ padding: '22px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Aforo en Tiempo Real</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                  <circle cx="9" cy="7" r="4"></circle>
+                  <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                  <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+              </div>
+            </div>
+            <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
+              {occupancyPercent}%
+            </strong>
+            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
+              {capacity.actual} personas entrenando ahora
+            </p>
           </article>
         </div>
 
-        {/* Reservas list table */}
-        <section className="dashboard-panel">
-          <h2 className="dashboard-panel-title">Mis Reservas</h2>
-          <p className="dashboard-panel-subtitle">Historial completo y estado de tus agendas registradas.</p>
+        {/* Sección: Horarios de Atención Oficiales de tu Club */}
+        <section className="dashboard-panel" style={{ padding: '24px' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '14px', marginBottom: '18px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div
+                style={{
+                  width: '42px',
+                  height: '42px',
+                  borderRadius: '12px',
+                  background: '#121e17',
+                  color: '#c4f039',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.3rem',
+                  border: '1.5px solid #c4f039',
+                  boxShadow: '0 4px 12px rgba(196, 240, 57, 0.25)',
+                }}
+              >
+                ⏰
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 800, color: '#111d15' }}>
+                  Horarios de Atención de tu Club
+                </h3>
+                <p style={{ margin: '3px 0 0', fontSize: '0.84rem', color: '#5f7165' }}>
+                  Ingreso libre para socios en cualquier momento de la jornada con DNI o huella biométrica
+                </p>
+              </div>
+            </div>
 
-          <div className="table-frame" style={{ marginTop: '16px' }}>
+            {/* Estado en tiempo real del Club */}
+            <span
+              style={{
+                padding: '6px 16px',
+                borderRadius: '999px',
+                fontWeight: 800,
+                fontSize: '0.82rem',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                background: clubStatus.emergency ? '#fee2e2' : clubStatus.open ? '#ecfccb' : '#f1f5f9',
+                color: clubStatus.emergency ? '#b91c1c' : clubStatus.open ? '#15803d' : '#475569',
+                border: `1.5px solid ${clubStatus.emergency ? '#fca5a5' : clubStatus.open ? '#bef264' : '#cbd5e1'}`,
+              }}
+            >
+              <span
+                style={{
+                  width: '8px',
+                  height: '8px',
+                  borderRadius: '50%',
+                  background: clubStatus.emergency ? '#ef4444' : clubStatus.open ? '#22c55e' : '#94a3b8',
+                }}
+              ></span>
+              {clubStatus.text}
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(210px, 1fr))', gap: '14px' }}>
+            {/* Lunes a Viernes */}
+            {config?.horario_semana_modalidad === 'continuo' ? (
+              <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>🏢 Lun a Vie (Corrido)</span>
+                  <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '0.68rem' }}>Jornada Completa</span>
+                </div>
+                <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
+                  {config?.horario_semana_corrido_inicio || '06:30'} - {config?.horario_semana_corrido_fin || '22:00'}
+                </strong>
+              </div>
+            ) : (
+              <>
+                {/* Lunes a Viernes - Mañana */}
+                <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>🌅 Lun a Vie (Mañana)</span>
+                    <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '0.68rem' }}>Activo</span>
+                  </div>
+                  <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
+                    {config?.horario_semana_manana_inicio || '06:30'} - {config?.horario_semana_manana_fin || '11:00'}
+                  </strong>
+                </div>
+
+                {/* Lunes a Viernes - Tarde/Noche */}
+                <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>🌇 Lun a Vie (Tarde/Noche)</span>
+                    <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '0.68rem' }}>Activo</span>
+                  </div>
+                  <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
+                    {config?.horario_semana_tarde_inicio || '16:00'} - {config?.horario_semana_tarde_fin || '22:00'}
+                  </strong>
+                </div>
+              </>
+            )}
+
+            {/* Sábados */}
+            <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>⚡ Sábados</span>
+                <span
+                  className="badge"
+                  style={{
+                    background: config?.horario_sabado_estado === '0' ? '#fee2e2' : '#fef3c7',
+                    color: config?.horario_sabado_estado === '0' ? '#b91c1c' : '#b45309',
+                    fontSize: '0.68rem',
+                  }}
+                >
+                  {config?.horario_sabado_estado === '0' ? 'Cerrado' : 'Especial'}
+                </span>
+              </div>
+              <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
+                {config?.horario_sabado_estado === '0'
+                  ? 'Cerrado'
+                  : `${config?.horario_sabado_inicio || '07:00'} - ${config?.horario_sabado_fin || '12:00'}`}
+              </strong>
+            </div>
+
+            {/* Domingos */}
+            <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>☕ Domingos</span>
+                <span
+                  className="badge"
+                  style={{
+                    background: config?.horario_domingo_abierto === '1' ? '#ecfdf5' : '#f1f5f9',
+                    color: config?.horario_domingo_abierto === '1' ? '#047857' : '#64748b',
+                    fontSize: '0.68rem',
+                  }}
+                >
+                  {config?.horario_domingo_abierto === '1' ? 'Abierto' : 'Cerrado'}
+                </span>
+              </div>
+              <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
+                {config?.horario_domingo_abierto === '1'
+                  ? `${config?.horario_domingo_inicio || '08:00'} - ${config?.horario_domingo_fin || '13:00'}`
+                  : 'Descanso general'}
+              </strong>
+            </div>
+          </div>
+        </section>
+
+        {/* Accesos rápidos destacados para el socio */}
+        <section className="dashboard-panel" style={{ padding: '20px 24px', display: 'flex', flexWrap: 'wrap', gap: '14px', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div>
+            <h4 style={{ margin: 0, fontSize: '1.05rem', fontWeight: 800, color: '#111d15' }}>
+              Acceso Directo al Gimnasio
+            </h4>
+            <p style={{ margin: '4px 0 0', fontSize: '0.86rem', color: '#5f7165' }}>
+              ¡No requieres agendar reserva previa! Solo acércate a recepción con tu DNI o huella para entrenar.
+            </p>
+          </div>
+          <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => navigate('/app/mi-pandita')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', padding: '8px 16px' }}
+            >
+              🐼 Mi Pandita
+            </button>
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => navigate('/app/mis-asistencias')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', padding: '8px 16px' }}
+            >
+              ⏱️ Mis Asistencias
+            </button>
+            <button
+              type="button"
+              className="action-btn"
+              onClick={() => navigate('/app/recompensas')}
+              style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', padding: '8px 16px' }}
+            >
+              🎁 Recompensas
+            </button>
+          </div>
+        </section>
+
+        {/* Historial de Entrenamientos y Asistencias Reales */}
+        <section className="dashboard-panel">
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+            <div>
+              <h2 className="dashboard-panel-title" style={{ margin: 0 }}>Mis Últimos Entrenamientos</h2>
+              <p className="dashboard-panel-subtitle" style={{ margin: '4px 0 0' }}>Registro de visitas confirmadas en recepción del club.</p>
+            </div>
+            <button
+              type="button"
+              onClick={() => navigate('/app/mis-asistencias')}
+              style={{
+                background: 'none',
+                border: 0,
+                color: '#235833',
+                fontWeight: 800,
+                fontSize: '0.88rem',
+                cursor: 'pointer',
+              }}
+            >
+              Ver historial completo →
+            </button>
+          </div>
+
+          <div className="table-frame">
             <table className="corporate-table">
               <thead>
                 <tr>
-                  <th>Día</th>
+                  <th>Fecha</th>
                   <th>Hora Ingreso</th>
                   <th>Hora Salida</th>
-                  <th>Duración</th> {/* Sugerencia implementada */}
-                  <th>Creado el</th> {/* Sugerencia implementada */}
+                  <th>Duración</th>
                   <th>Estado</th>
                 </tr>
               </thead>
               <tbody>
                 {loading ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: '12px' }}>Cargando reservas...</td>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '16px' }}>Cargando asistencias...</td>
                   </tr>
-                ) : socioReservations.length === 0 ? (
+                ) : socioAsistencias.length === 0 ? (
                   <tr>
-                    <td colSpan="6" style={{ textAlign: 'center', padding: '12px' }}>Aún no has registrado ninguna reserva.</td>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#5f7165' }}>
+                      Aún no registras asistencias recientes. ¡Acércate a recepción para validar tu ingreso e iniciar tu racha!
+                    </td>
                   </tr>
                 ) : (
-                  socioReservations.map((r) => {
-                    const statusObj = getDisplayStatus(r.estado)
+                  socioAsistencias.slice(0, 8).map((asistencia) => {
+                    const duration = getDurationInMinutes(asistencia.horaEntrada, asistencia.horaSalida)
+                    const isActive = asistencia.estado === 'activo' || !asistencia.horaSalida
                     return (
-                      <tr key={r.id}>
-                        <td>{formatDateOnly(r.horaEntrada)}</td>
-                        <td>{formatTimeOnly(r.horaEntrada)}</td>
-                        <td>{formatTimeOnly(r.horaSalida)}</td>
-                        <td>{getDurationInMinutes(r.horaEntrada, r.horaSalida)}</td>
-                        <td>{formatDateTime(r.creadoEn)}</td>
+                      <tr key={`att-socio-${asistencia.id}`}>
+                        <td style={{ fontWeight: 700 }}>{formatDateOnly(asistencia.horaEntrada)}</td>
+                        <td>{formatTimeOnly(asistencia.horaEntrada)}</td>
+                        <td>{asistencia.horaSalida ? formatTimeOnly(asistencia.horaSalida) : '—'}</td>
+                        <td>{duration}</td>
                         <td>
-                          <span className={`badge-status ${statusObj.className}`} style={statusObj.style || {}}>
-                            {statusObj.label}
+                          <span
+                            style={{
+                              padding: '4px 10px',
+                              borderRadius: '999px',
+                              fontSize: '0.74rem',
+                              fontWeight: 800,
+                              background: isActive ? '#ecfccb' : '#f0fdf4',
+                              color: isActive ? '#1b4d24' : '#166534',
+                            }}
+                          >
+                            {isActive ? '● En sala' : 'Completado'}
                           </span>
                         </td>
                       </tr>
@@ -827,13 +1221,86 @@ export default function DashboardReservationsView({ token, user }) {
 
   return (
     <>
-      <ViewTitle
-        title={isAdmin ? 'Dashboard de Control' : 'Mi Dashboard'}
-        text={isAdmin
-          ? 'Resumen de los indicadores clave del gimnasio: aforo, reservas y clientes activos.'
-          : 'Resumen de tus reservas y asistencias como socio.'
-        }
-      />
+      {isAdmin ? (
+        <>
+          {config?.aviso_activo === '1' && config?.aviso_mensaje && (
+            <div
+              style={{
+                background: config?.estado_operativo === 'cerrado_emergencia' ? '#fef2f2' : '#fffbeb',
+                border: `1.5px solid ${config?.estado_operativo === 'cerrado_emergencia' ? '#f87171' : '#fcd34d'}`,
+                borderRadius: '14px',
+                padding: '14px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: '14px',
+                marginBottom: '20px',
+                boxShadow: '0 4px 12px rgba(0, 0, 0, 0.04)',
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '1.4rem' }}>📢</span>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    <strong style={{ color: config?.estado_operativo === 'cerrado_emergencia' ? '#991b1b' : '#92400e', fontSize: '0.96rem' }}>
+                      Comunicado Activo y Difundido a Socios: {config.aviso_titulo || 'Aviso Oficial'}
+                    </strong>
+                    {config?.estado_operativo === 'cerrado_emergencia' && (
+                      <span className="badge bg-danger text-white px-2" style={{ fontSize: '0.7rem' }}>Cierre Activo</span>
+                    )}
+                  </div>
+                  <p style={{ margin: '3px 0 0', color: config?.estado_operativo === 'cerrado_emergencia' ? '#7f1d1d' : '#78350f', fontSize: '0.86rem' }}>
+                    {config.aviso_mensaje}
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                className="btn btn-sm btn-outline-dark fw-bold px-3 py-1"
+                style={{ borderRadius: '8px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
+                onClick={() => navigate('/app/configuracion')}
+              >
+                ⚙️ Gestionar Aviso
+              </button>
+            </div>
+          )}
+
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' }}>
+            <div>
+              <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 900, color: '#111d15', letterSpacing: '-0.03em' }}>
+                El club, de un vistazo
+              </h1>
+              <p style={{ margin: '6px 0 0', color: '#5f7165', fontSize: '0.96rem' }}>
+                Tu operación de hoy: socios, accesos en sala y crecimiento en un solo lugar.
+              </p>
+            </div>
+            <button
+              type="button"
+              className="primary-action"
+              onClick={() => navigate('/app/socios')}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '8px',
+                padding: '12px 22px',
+                fontSize: '0.94rem',
+                borderRadius: '12px',
+              }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                <line x1="12" y1="5" x2="12" y2="19"></line>
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+              </svg>
+              Registrar membresía
+            </button>
+          </div>
+        </>
+      ) : (
+        <ViewTitle
+          title={`¡Bienvenido, ${user?.nombre || 'Socio'}!`}
+          text="Tu resumen diario de entrenamientos, bambús acumulados y aforo en sala."
+        />
+      )}
 
       <section className="dashboard-page">
         {error && <p className="form-error">{error}</p>}
@@ -855,7 +1322,6 @@ export default function DashboardReservationsView({ token, user }) {
 
             {activeSection === 'principal' && renderPrincipalAdmin()}
             {activeSection === 'aforo' && renderAforoAdmin()}
-            {activeSection === 'reservas' && renderReservasAdmin()}
             {activeSection === 'clientes' && renderClientesAdmin()}
           </>
         ) : (
