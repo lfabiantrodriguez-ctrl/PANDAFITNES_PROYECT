@@ -112,6 +112,14 @@ export default function RewardsView({ token, user }) {
   const [activeTab, setActiveTab] = useState('catalogo')
   const [loading, setLoading] = useState(true)
 
+  const [isMobile, setIsMobile] = useState(() => typeof window !== 'undefined' && window.innerWidth <= 768)
+
+  useEffect(() => {
+    const handleResize = () => setIsMobile(window.innerWidth <= 768)
+    window.addEventListener('resize', handleResize)
+    return () => window.removeEventListener('resize', handleResize)
+  }, [])
+
   const [rewards, setRewards] = useState([])
   const [partnerships, setPartnerships] = useState([])
   const [myRedemptions, setMyRedemptions] = useState([])
@@ -758,7 +766,7 @@ export default function RewardsView({ token, user }) {
   }
 
   return (
-    <div className="dashboard-page" style={{ maxWidth: '1240px', margin: '0 auto', paddingBottom: '70px' }}>
+    <div className="dashboard-page" style={{ maxWidth: '1240px', margin: '0 auto', paddingBottom: '70px', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       {/* Encabezado */}
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
@@ -769,24 +777,26 @@ export default function RewardsView({ token, user }) {
         </div>
 
         {/* Saldo de Bambús & Acceso a Mi Pandita */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
           <button
             type="button"
             onClick={() => navigate('/app/mi-pandita')}
             style={{
-              padding: '12px 18px',
+              padding: isMobile ? '10px 14px' : '12px 18px',
               borderRadius: '14px',
               border: '1.5px solid #16241c',
               background: '#ffffff',
               color: '#111d15',
               fontWeight: 800,
-              fontSize: '0.86rem',
+              fontSize: isMobile ? '0.8rem' : '0.86rem',
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
+              justifyContent: 'center',
               gap: '8px',
               boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
               transition: 'all 0.2s',
+              flex: isMobile ? '1 1 140px' : 'none',
             }}
           >
             <span style={{ fontSize: '1.15rem' }}>🐼</span>
@@ -798,18 +808,20 @@ export default function RewardsView({ token, user }) {
               background: 'linear-gradient(135deg, #111d15 0%, #16241c 100%)',
               border: '1px solid #233c2a',
               borderRadius: '16px',
-              padding: '12px 22px',
+              padding: isMobile ? '10px 16px' : '12px 22px',
               display: 'flex',
               alignItems: 'center',
-              gap: '12px',
+              gap: '10px',
               boxShadow: '0 6px 18px rgba(17, 29, 21, 0.25)',
+              flex: isMobile ? '1 1 180px' : 'none',
+              boxSizing: 'border-box',
             }}
           >
-            <i className="bi bi-fire" style={{ fontSize: '1.6rem', color: '#c4f039' }}></i>
+            <i className="bi bi-fire" style={{ fontSize: isMobile ? '1.3rem' : '1.6rem', color: '#c4f039' }}></i>
             <div>
               <div
                 style={{
-                  fontSize: '0.72rem',
+                  fontSize: isMobile ? '0.65rem' : '0.72rem',
                   fontWeight: 800,
                   color: '#84cc16',
                   letterSpacing: '0.06em',
@@ -818,7 +830,7 @@ export default function RewardsView({ token, user }) {
               >
                 Tus Bambús Disponibles
               </div>
-              <div style={{ fontSize: '1.45rem', fontWeight: 900, color: '#ffffff', lineHeight: 1.1 }}>
+              <div style={{ fontSize: isMobile ? '1.25rem' : '1.45rem', fontWeight: 900, color: '#ffffff', lineHeight: 1.1 }}>
                 {bambooBalance} <span style={{ fontSize: '0.82rem', color: '#c4f039' }}>BAMBÚS</span>
               </div>
             </div>
@@ -851,12 +863,15 @@ export default function RewardsView({ token, user }) {
         <div
           style={{
             position: 'relative',
-            borderRadius: '24px',
+            borderRadius: isMobile ? '16px' : '24px',
             overflow: 'hidden',
-            marginBottom: '30px',
+            marginBottom: isMobile ? '18px' : '30px',
             boxShadow: '0 12px 36px rgba(17, 29, 21, 0.16)',
             background: '#111d15',
-            minHeight: '280px',
+            minHeight: isMobile ? '230px' : '280px',
+            width: '100%',
+            maxWidth: '100%',
+            boxSizing: 'border-box',
           }}
           onMouseEnter={() => setIsCarouselPaused(true)}
           onMouseLeave={() => setIsCarouselPaused(false)}
@@ -874,7 +889,9 @@ export default function RewardsView({ token, user }) {
                   transition: 'opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
                   display: 'flex',
                   alignItems: 'center',
-                  minHeight: '280px',
+                  minHeight: isMobile ? '230px' : '280px',
+                  width: '100%',
+                  boxSizing: 'border-box',
                 }}
               >
                 <img
@@ -884,10 +901,10 @@ export default function RewardsView({ token, user }) {
                     position: 'absolute',
                     right: 0,
                     top: 0,
-                    width: '62%',
+                    width: isMobile ? '80%' : '62%',
                     height: '100%',
                     objectFit: 'cover',
-                    filter: 'brightness(0.9) contrast(1.05)',
+                    filter: 'brightness(0.85) contrast(1.05)',
                   }}
                 />
 
@@ -896,7 +913,7 @@ export default function RewardsView({ token, user }) {
                     position: 'absolute',
                     inset: 0,
                     background:
-                      'linear-gradient(90deg, #0e1712 0%, rgba(14, 23, 18, 0.96) 45%, rgba(14, 23, 18, 0.7) 70%, rgba(14, 23, 18, 0.2) 100%)',
+                      'linear-gradient(90deg, #0e1712 0%, rgba(14, 23, 18, 0.96) 55%, rgba(14, 23, 18, 0.75) 80%, rgba(14, 23, 18, 0.3) 100%)',
                   }}
                 />
 
@@ -904,23 +921,25 @@ export default function RewardsView({ token, user }) {
                   style={{
                     position: 'relative',
                     zIndex: 2,
-                    padding: '32px 38px',
+                    padding: isMobile ? '16px 14px' : '32px 38px',
                     maxWidth: '660px',
+                    width: '100%',
+                    boxSizing: 'border-box',
                   }}
                 >
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '10px', marginBottom: '12px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: isMobile ? '8px' : '12px', flexWrap: 'wrap' }}>
                     <span
                       style={{
                         background: item.badgeBg,
                         color: item.badgeColor,
-                        padding: '4px 12px',
+                        padding: '3px 10px',
                         borderRadius: '9999px',
-                        fontSize: '0.72rem',
+                        fontSize: isMobile ? '0.66rem' : '0.72rem',
                         fontWeight: 900,
                         letterSpacing: '0.05em',
                         display: 'inline-flex',
                         alignItems: 'center',
-                        gap: '6px',
+                        gap: '5px',
                         boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
                       }}
                     >
@@ -930,7 +949,7 @@ export default function RewardsView({ token, user }) {
                     <span
                       style={{
                         color: '#94a3b8',
-                        fontSize: '0.76rem',
+                        fontSize: isMobile ? '0.7rem' : '0.76rem',
                         fontWeight: 700,
                         textTransform: 'uppercase',
                         letterSpacing: '0.04em',
@@ -942,12 +961,13 @@ export default function RewardsView({ token, user }) {
 
                   <h2
                     style={{
-                      fontSize: '1.9rem',
+                      fontSize: isMobile ? '1.25rem' : '1.9rem',
                       fontWeight: 900,
                       color: '#ffffff',
-                      marginBottom: '10px',
-                      lineHeight: 1.18,
+                      marginBottom: isMobile ? '6px' : '10px',
+                      lineHeight: 1.2,
                       letterSpacing: '-0.02em',
+                      wordBreak: 'break-word',
                     }}
                   >
                     {item.title}
@@ -955,17 +975,17 @@ export default function RewardsView({ token, user }) {
 
                   <p
                     style={{
-                      fontSize: '0.9rem',
+                      fontSize: isMobile ? '0.78rem' : '0.9rem',
                       color: '#cbd5e1',
-                      marginBottom: '20px',
-                      lineHeight: 1.5,
+                      marginBottom: isMobile ? '12px' : '20px',
+                      lineHeight: 1.4,
                       maxWidth: '520px',
                     }}
                   >
                     {item.desc}
                   </p>
 
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '12px', flexWrap: 'wrap' }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: isMobile ? '8px' : '12px', flexWrap: 'wrap', width: '100%' }}>
                     <button
                       type="button"
                       onClick={() => {
@@ -973,22 +993,23 @@ export default function RewardsView({ token, user }) {
                         setActiveDetailImageIndex(0)
                       }}
                       style={{
-                        padding: '11px 22px',
-                        borderRadius: '12px',
+                        padding: isMobile ? '8px 14px' : '11px 22px',
+                        borderRadius: '10px',
                         border: 'none',
                         background: '#c4f039',
                         color: '#111d15',
                         fontWeight: 800,
-                        fontSize: '0.88rem',
+                        fontSize: isMobile ? '0.78rem' : '0.88rem',
                         cursor: 'pointer',
                         display: 'flex',
                         alignItems: 'center',
-                        gap: '8px',
+                        gap: '6px',
                         boxShadow: '0 4px 14px rgba(196, 240, 57, 0.35)',
+                        whiteSpace: 'nowrap',
                       }}
                     >
                       <i className="bi bi-arrows-angle-expand"></i>
-                      <span>Ver Oferta Completa</span>
+                      <span>Ver Oferta</span>
                     </button>
 
                     {item.type === 'reward' ? (
@@ -997,22 +1018,23 @@ export default function RewardsView({ token, user }) {
                         onClick={() => handleRedeemReward(item.rawItem)}
                         disabled={bambooBalance < item.rawItem.costoBambus}
                         style={{
-                          padding: '11px 18px',
-                          borderRadius: '12px',
+                          padding: isMobile ? '8px 12px' : '11px 18px',
+                          borderRadius: '10px',
                           border: '1px solid rgba(255,255,255,0.2)',
                           background: 'rgba(255, 255, 255, 0.08)',
                           color: '#ffffff',
                           fontWeight: 700,
-                          fontSize: '0.86rem',
+                          fontSize: isMobile ? '0.78rem' : '0.86rem',
                           cursor: bambooBalance >= item.rawItem.costoBambus ? 'pointer' : 'not-allowed',
                           backdropFilter: 'blur(6px)',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '6px',
+                          whiteSpace: 'nowrap',
                         }}
                       >
                         <i className="bi bi-fire text-lime"></i>
-                        <span>{bambooBalance >= item.rawItem.costoBambus ? 'Canjear Ahora' : 'Bambús insuficientes'}</span>
+                        <span>{bambooBalance >= item.rawItem.costoBambus ? 'Canjear' : 'Bambús insuficientes'}</span>
                       </button>
                     ) : (
                       <button
@@ -1022,18 +1044,19 @@ export default function RewardsView({ token, user }) {
                           setDetailModalItem({ type: 'partner', data: item.rawItem })
                         }}
                         style={{
-                          padding: '11px 18px',
-                          borderRadius: '12px',
+                          padding: isMobile ? '8px 12px' : '11px 18px',
+                          borderRadius: '10px',
                           border: '1px solid rgba(255,255,255,0.2)',
                           background: 'rgba(255, 255, 255, 0.08)',
                           color: '#ffffff',
                           fontWeight: 700,
-                          fontSize: '0.86rem',
+                          fontSize: isMobile ? '0.78rem' : '0.86rem',
                           cursor: 'pointer',
                           backdropFilter: 'blur(6px)',
                           display: 'flex',
                           alignItems: 'center',
                           gap: '6px',
+                          whiteSpace: 'nowrap',
                         }}
                       >
                         <i className="bi bi-ticket-perforated"></i>
@@ -1150,88 +1173,26 @@ export default function RewardsView({ token, user }) {
           marginBottom: '20px',
           flexWrap: 'wrap',
           gap: '12px',
+          width: '100%',
+          maxWidth: '100%',
+          minWidth: 0,
+          boxSizing: 'border-box',
         }}
       >
-        <div className="rewards-tabs-bar">
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('catalogo')
-              setSelectedCategory('all')
-            }}
-            style={{
-              padding: '9px 16px',
-              borderRadius: '11px',
-              border: 'none',
-              background: activeTab === 'catalogo' ? '#111d15' : 'transparent',
-              color: activeTab === 'catalogo' ? '#c4f039' : '#5f7165',
-              fontWeight: 800,
-              fontSize: '0.86rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <i className="bi bi-gift-fill"></i>
-            <span>Catálogo de Premios ({rewards.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => {
-              setActiveTab('convenios')
-              setSelectedCategory('all')
-            }}
-            style={{
-              padding: '9px 16px',
-              borderRadius: '11px',
-              border: 'none',
-              background: activeTab === 'convenios' ? '#111d15' : 'transparent',
-              color: activeTab === 'convenios' ? '#c4f039' : '#5f7165',
-              fontWeight: 800,
-              fontSize: '0.86rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <i className="bi bi-shop"></i>
-            <span>Convenios Comerciales ({partnerships.length})</span>
-          </button>
-
-          <button
-            type="button"
-            onClick={() => setActiveTab('mis_canjes')}
-            style={{
-              padding: '9px 16px',
-              borderRadius: '11px',
-              border: 'none',
-              background: activeTab === 'mis_canjes' ? '#111d15' : 'transparent',
-              color: activeTab === 'mis_canjes' ? '#c4f039' : '#5f7165',
-              fontWeight: 800,
-              fontSize: '0.86rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <i className="bi bi-ticket-perforated-fill"></i>
-            <span>Mis Canjes ({myRedemptions.length})</span>
-          </button>
-
-          {isAdmin && (
+        <div className="rewards-tabs-container">
+          <div className="rewards-tabs-bar">
             <button
               type="button"
-              onClick={() => setActiveTab('admin_canjes')}
+              onClick={() => {
+                setActiveTab('catalogo')
+                setSelectedCategory('all')
+              }}
               style={{
                 padding: '9px 16px',
                 borderRadius: '11px',
                 border: 'none',
-                background: activeTab === 'admin_canjes' ? '#111d15' : 'transparent',
-                color: activeTab === 'admin_canjes' ? '#c4f039' : '#5f7165',
+                background: activeTab === 'catalogo' ? '#111d15' : 'transparent',
+                color: activeTab === 'catalogo' ? '#c4f039' : '#5f7165',
                 fontWeight: 800,
                 fontSize: '0.86rem',
                 cursor: 'pointer',
@@ -1240,14 +1201,82 @@ export default function RewardsView({ token, user }) {
                 gap: '6px',
               }}
             >
-              <i className="bi bi-box-seam-fill"></i>
-              <span>Recepción / Entregas ({allRedemptions.length})</span>
+              <i className="bi bi-gift-fill"></i>
+              <span>Catálogo de Premios ({rewards.length})</span>
             </button>
-          )}
+
+            <button
+              type="button"
+              onClick={() => {
+                setActiveTab('convenios')
+                setSelectedCategory('all')
+              }}
+              style={{
+                padding: '9px 16px',
+                borderRadius: '11px',
+                border: 'none',
+                background: activeTab === 'convenios' ? '#111d15' : 'transparent',
+                color: activeTab === 'convenios' ? '#c4f039' : '#5f7165',
+                fontWeight: 800,
+                fontSize: '0.86rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <i className="bi bi-shop"></i>
+              <span>Convenios Comerciales ({partnerships.length})</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('mis_canjes')}
+              style={{
+                padding: '9px 16px',
+                borderRadius: '11px',
+                border: 'none',
+                background: activeTab === 'mis_canjes' ? '#111d15' : 'transparent',
+                color: activeTab === 'mis_canjes' ? '#c4f039' : '#5f7165',
+                fontWeight: 800,
+                fontSize: '0.86rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <i className="bi bi-ticket-perforated-fill"></i>
+              <span>Mis Canjes ({myRedemptions.length})</span>
+            </button>
+
+            {isAdmin && (
+              <button
+                type="button"
+                onClick={() => setActiveTab('admin_canjes')}
+                style={{
+                  padding: '9px 16px',
+                  borderRadius: '11px',
+                  border: 'none',
+                  background: activeTab === 'admin_canjes' ? '#111d15' : 'transparent',
+                  color: activeTab === 'admin_canjes' ? '#c4f039' : '#5f7165',
+                  fontWeight: 800,
+                  fontSize: '0.86rem',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '6px',
+                }}
+              >
+                <i className="bi bi-box-seam-fill"></i>
+                <span>Recepción / Entregas ({allRedemptions.length})</span>
+              </button>
+            )}
+          </div>
         </div>
 
         {isAdmin && (
-          <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+          <div className="rewards-admin-actions-bar">
             <button
               type="button"
               onClick={() => setShowCategoryModal(true)}
@@ -1295,17 +1324,19 @@ export default function RewardsView({ token, user }) {
           style={{
             background: '#ffffff',
             borderRadius: '16px',
-            padding: '14px 18px',
+            padding: isMobile ? '12px 14px' : '14px 18px',
             border: '1px solid #e3e8e2',
-            marginBottom: '24px',
+            marginBottom: '20px',
             display: 'flex',
-            flexWrap: 'wrap',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            gap: '12px',
+            flexDirection: 'column',
+            gap: '10px',
+            width: '100%',
+            maxWidth: '100%',
+            minWidth: 0,
+            boxSizing: 'border-box',
           }}
         >
-          <div style={{ position: 'relative', minWidth: '240px', flex: '1 1 260px' }}>
+          <div style={{ position: 'relative', width: '100%', minWidth: 0 }}>
             <i
               className="bi bi-search"
               style={{
@@ -1332,12 +1363,14 @@ export default function RewardsView({ token, user }) {
                 borderRadius: '12px',
                 border: '1px solid #cbd5e1',
                 fontSize: '0.86rem',
+                width: '100%',
+                boxSizing: 'border-box',
               }}
             />
           </div>
 
-          <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', alignItems: 'center' }}>
-            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b', marginRight: '2px' }}>
+          <div className="rewards-filters-scroll-bar">
+            <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b', marginRight: '2px', flexShrink: 0 }}>
               Filtrar:
             </span>
 
@@ -1353,6 +1386,8 @@ export default function RewardsView({ token, user }) {
                 fontSize: '0.78rem',
                 fontWeight: 700,
                 cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
               }}
             >
               <i className="bi bi-grid-fill me-1"></i>
@@ -1371,6 +1406,8 @@ export default function RewardsView({ token, user }) {
                 fontSize: '0.78rem',
                 fontWeight: 800,
                 cursor: 'pointer',
+                flexShrink: 0,
+                whiteSpace: 'nowrap',
               }}
             >
               <i className="bi bi-star-fill me-1 text-dark"></i>
@@ -1391,6 +1428,8 @@ export default function RewardsView({ token, user }) {
                   fontSize: '0.78rem',
                   fontWeight: 700,
                   cursor: 'pointer',
+                  flexShrink: 0,
+                  whiteSpace: 'nowrap',
                 }}
               >
                 <i className="bi bi-tag-fill me-1"></i>
@@ -1420,7 +1459,17 @@ export default function RewardsView({ token, user }) {
               </h4>
             </div>
           ) : (
-            <div className="rewards-catalog-grid">
+            <div
+              className="rewards-catalog-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: isMobile ? '8px' : '20px',
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
               {filteredRewards.map((item) => {
                 const canAfford = bambooBalance >= item.costoBambus
                 const imageUrl = getRewardImage(item)
@@ -1432,7 +1481,7 @@ export default function RewardsView({ token, user }) {
                     className="reward-card-item"
                     style={{
                       background: '#ffffff',
-                      borderRadius: '18px',
+                      borderRadius: isMobile ? '14px' : '18px',
                       border: '1px solid #e3e8e2',
                       overflow: 'hidden',
                       display: 'flex',
@@ -1441,13 +1490,18 @@ export default function RewardsView({ token, user }) {
                       boxShadow: '0 4px 18px rgba(18, 31, 23, 0.05)',
                       transition: 'transform 0.25s ease, box-shadow 0.25s ease',
                       position: 'relative',
+                      minWidth: 0,
+                      width: '100%',
+                      boxSizing: 'border-box',
                     }}
                   >
                     <div
                       className="reward-card-img-wrap"
                       style={{
                         position: 'relative',
-                        height: '180px',
+                        height: isMobile ? '120px' : '180px',
+                        minHeight: isMobile ? '120px' : '180px',
+                        maxHeight: isMobile ? '120px' : '180px',
                         width: '100%',
                         overflow: 'hidden',
                         background: '#0f172a',
@@ -1482,13 +1536,13 @@ export default function RewardsView({ token, user }) {
                         className="reward-badge-cost"
                         style={{
                           position: 'absolute',
-                          top: '10px',
-                          left: '10px',
+                          top: isMobile ? '6px' : '10px',
+                          left: isMobile ? '6px' : '10px',
                           background: '#111d15',
                           color: '#c4f039',
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          fontSize: '0.76rem',
+                          padding: isMobile ? '3px 6px' : '4px 10px',
+                          borderRadius: isMobile ? '6px' : '8px',
+                          fontSize: isMobile ? '0.66rem' : '0.76rem',
                           fontWeight: 900,
                           display: 'flex',
                           alignItems: 'center',
@@ -1500,15 +1554,15 @@ export default function RewardsView({ token, user }) {
                         <span>{item.costoBambus}</span>
                       </div>
 
-                      <div className="reward-badge-tag" style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', gap: '4px' }}>
+                      <div className="reward-badge-tag" style={{ position: 'absolute', top: isMobile ? '6px' : '10px', right: isMobile ? '6px' : '10px', display: 'flex', gap: '4px' }}>
                         {item.destacado ? (
                           <span
                             style={{
                               background: '#c4f039',
                               color: '#111d15',
-                              padding: '4px 8px',
-                              borderRadius: '7px',
-                              fontSize: '0.7rem',
+                              padding: isMobile ? '2px 5px' : '4px 8px',
+                              borderRadius: isMobile ? '6px' : '7px',
+                              fontSize: isMobile ? '0.62rem' : '0.7rem',
                               fontWeight: 900,
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -1525,80 +1579,90 @@ export default function RewardsView({ token, user }) {
                         <span
                           style={{
                             position: 'absolute',
-                            bottom: '8px',
-                            left: '8px',
+                            bottom: '6px',
+                            left: '6px',
                             background: 'rgba(17, 29, 21, 0.75)',
                             color: '#ffffff',
-                            padding: '2px 8px',
-                            borderRadius: '6px',
-                            fontSize: '0.68rem',
+                            padding: '2px 6px',
+                            borderRadius: '5px',
+                            fontSize: '0.62rem',
                             fontWeight: 700,
                             backdropFilter: 'blur(4px)',
                             display: 'inline-flex',
                             alignItems: 'center',
-                            gap: '4px',
+                            gap: '3px',
                           }}
                         >
                           <i className="bi bi-images"></i>
-                          <span>{itemImages.length} fotos</span>
+                          <span>{itemImages.length}</span>
                         </span>
                       )}
 
-                      <button
-                        type="button"
-                        className="reward-expand-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDetailModalItem({ type: 'reward', data: item })
-                          setActiveDetailImageIndex(0)
-                        }}
-                        style={{
-                          position: 'absolute',
-                          bottom: '10px',
-                          right: '10px',
-                          background: 'rgba(17, 29, 21, 0.85)',
-                          color: '#ffffff',
-                          border: '1px solid rgba(255, 255, 255, 0.25)',
-                          borderRadius: '8px',
-                          padding: '4px 9px',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          backdropFilter: 'blur(4px)',
-                        }}
-                      >
-                        <i className="bi bi-arrows-angle-expand"></i>
-                        <span>Agrandar</span>
-                      </button>
+                      {!isMobile && (
+                        <button
+                          type="button"
+                          className="reward-expand-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDetailModalItem({ type: 'reward', data: item })
+                            setActiveDetailImageIndex(0)
+                          }}
+                          style={{
+                            position: 'absolute',
+                            bottom: '10px',
+                            right: '10px',
+                            background: 'rgba(17, 29, 21, 0.85)',
+                            color: '#ffffff',
+                            border: '1px solid rgba(255, 255, 255, 0.25)',
+                            borderRadius: '8px',
+                            padding: '4px 9px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            backdropFilter: 'blur(4px)',
+                          }}
+                        >
+                          <i className="bi bi-arrows-angle-expand"></i>
+                          <span>Agrandar</span>
+                        </button>
+                      )}
                     </div>
 
                     <div
                       className="reward-card-body"
                       style={{
-                        padding: '16px',
+                        padding: isMobile ? '8px 6px' : '16px',
                         display: 'flex',
                         flexDirection: 'column',
                         flex: 1,
                         justifyContent: 'space-between',
+                        minWidth: 0,
+                        width: '100%',
+                        boxSizing: 'border-box',
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '3px' }}>
+                      <div style={{ minWidth: 0, width: '100%' }}>
+                        <div style={{ fontSize: isMobile ? '0.62rem' : '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {item.categoria}
                         </div>
 
                         <h3
                           className="reward-card-title"
                           style={{
-                            fontSize: '1.05rem',
+                            fontSize: isMobile ? '0.82rem' : '1.05rem',
                             fontWeight: 900,
                             color: '#111d15',
-                            margin: '0 0 6px 0',
-                            lineHeight: 1.3,
+                            margin: '0 0 4px 0',
+                            lineHeight: 1.25,
                             cursor: 'pointer',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            wordBreak: 'break-word',
                           }}
                           onClick={() => {
                             setDetailModalItem({ type: 'reward', data: item })
@@ -1611,17 +1675,22 @@ export default function RewardsView({ token, user }) {
                         <p
                           className="reward-card-desc"
                           style={{
-                            fontSize: '0.8rem',
+                            fontSize: isMobile ? '0.68rem' : '0.8rem',
                             color: '#5f7165',
-                            margin: '0 0 12px 0',
-                            lineHeight: 1.45,
+                            margin: '0 0 8px 0',
+                            lineHeight: 1.35,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            wordBreak: 'break-word',
                           }}
                         >
                           {item.descripcion}
                         </p>
                       </div>
 
-                      <div>
+                      <div style={{ minWidth: 0, width: '100%' }}>
                         <button
                           type="button"
                           className="reward-card-btn"
@@ -1629,41 +1698,47 @@ export default function RewardsView({ token, user }) {
                           onClick={() => handleRedeemReward(item)}
                           style={{
                             width: '100%',
-                            padding: '10px',
-                            borderRadius: '10px',
+                            padding: isMobile ? '6px 4px' : '10px',
+                            borderRadius: isMobile ? '8px' : '10px',
                             border: 'none',
                             background: canAfford ? '#c4f039' : '#e2e8f0',
                             color: canAfford ? '#111d15' : '#94a3b8',
                             fontWeight: 800,
-                            fontSize: '0.84rem',
+                            fontSize: isMobile ? '0.72rem' : '0.84rem',
                             cursor: canAfford ? 'pointer' : 'not-allowed',
                             transition: 'all 0.2s ease',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
-                            gap: '6px',
+                            gap: '4px',
                             boxShadow: canAfford ? '0 3px 10px rgba(196, 240, 57, 0.25)' : 'none',
+                            minWidth: 0,
                           }}
                         >
-                          <i className="bi bi-check2-circle"></i>
-                          <span>{canAfford ? 'Canjear Premio' : 'Faltan ' + (item.costoBambus - bambooBalance)}</span>
+                          <i className="bi bi-check2-circle" style={{ fontSize: isMobile ? '0.8rem' : '1rem' }}></i>
+                          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            {canAfford ? 'Canjear' : 'Faltan ' + (item.costoBambus - bambooBalance)}
+                          </span>
                         </button>
 
                         {isAdmin && (
                           <div
+                            className="reward-card-admin-row"
                             style={{
                               display: 'flex',
                               justifyContent: 'space-between',
                               alignItems: 'center',
-                              marginTop: '8px',
+                              flexWrap: 'wrap',
+                              gap: '4px',
+                              marginTop: '6px',
                               paddingTop: '6px',
                               borderTop: '1px dashed #e2e8f0',
                             }}
                           >
-                            <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>
+                            <span style={{ fontSize: isMobile ? '0.62rem' : '0.7rem', color: '#94a3b8' }}>
                               Stock: {item.stock ?? 50}
                             </span>
-                            <div style={{ display: 'flex', gap: '8px' }}>
+                            <div style={{ display: 'flex', gap: '6px' }}>
                               <button
                                 type="button"
                                 onClick={() => handleOpenEditReward(item)}
@@ -1671,13 +1746,13 @@ export default function RewardsView({ token, user }) {
                                   background: 'none',
                                   border: 'none',
                                   color: '#2563eb',
-                                  fontSize: '0.74rem',
+                                  fontSize: isMobile ? '0.68rem' : '0.74rem',
                                   fontWeight: 700,
                                   cursor: 'pointer',
                                   padding: 0,
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: '3px',
+                                  gap: '2px',
                                 }}
                               >
                                 <i className="bi bi-pencil-square"></i>
@@ -1690,13 +1765,13 @@ export default function RewardsView({ token, user }) {
                                   background: 'none',
                                   border: 'none',
                                   color: '#ef4444',
-                                  fontSize: '0.74rem',
+                                  fontSize: isMobile ? '0.68rem' : '0.74rem',
                                   fontWeight: 700,
                                   cursor: 'pointer',
                                   padding: 0,
                                   display: 'flex',
                                   alignItems: 'center',
-                                  gap: '3px',
+                                  gap: '2px',
                                 }}
                               >
                                 <i className="bi bi-trash3-fill"></i>
@@ -1748,11 +1823,19 @@ export default function RewardsView({ token, user }) {
             >
               <i className="bi bi-search" style={{ fontSize: '2.5rem', color: '#94a3b8', display: 'block', marginBottom: '12px' }}></i>
               <h4 style={{ fontWeight: 800, color: '#1e293b', marginBottom: '6px' }}>
-                No se encontraron convenios comerciales
-              </h4>
-            </div>
+                No se encontraron convenios</h4></div>
           ) : (
-            <div className="rewards-catalog-grid">
+            <div
+              className="rewards-catalog-grid"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: isMobile ? 'repeat(2, minmax(0, 1fr))' : 'repeat(auto-fill, minmax(260px, 1fr))',
+                gap: isMobile ? '8px' : '20px',
+                width: '100%',
+                maxWidth: '100%',
+                boxSizing: 'border-box',
+              }}
+            >
               {filteredPartnerships.map((partner) => {
                 const imageUrl = getPartnerImage(partner)
 
@@ -1762,7 +1845,7 @@ export default function RewardsView({ token, user }) {
                     className="reward-card-item"
                     style={{
                       background: '#ffffff',
-                      borderRadius: '18px',
+                      borderRadius: isMobile ? '14px' : '18px',
                       border: '1px solid #e3e8e2',
                       overflow: 'hidden',
                       display: 'flex',
@@ -1771,13 +1854,18 @@ export default function RewardsView({ token, user }) {
                       boxShadow: '0 4px 18px rgba(18, 31, 23, 0.05)',
                       transition: 'transform 0.25s ease, box-shadow 0.25s ease',
                       position: 'relative',
+                      minWidth: 0,
+                      width: '100%',
+                      boxSizing: 'border-box',
                     }}
                   >
                     <div
                       className="reward-card-img-wrap"
                       style={{
                         position: 'relative',
-                        height: '180px',
+                        height: isMobile ? '120px' : '180px',
+                        minHeight: isMobile ? '120px' : '180px',
+                        maxHeight: isMobile ? '120px' : '180px',
                         width: '100%',
                         overflow: 'hidden',
                         background: '#0f172a',
@@ -1808,13 +1896,13 @@ export default function RewardsView({ token, user }) {
                         className="reward-badge-cost"
                         style={{
                           position: 'absolute',
-                          top: '10px',
-                          left: '10px',
+                          top: isMobile ? '6px' : '10px',
+                          left: isMobile ? '6px' : '10px',
                           background: '#16a34a',
                           color: '#ffffff',
-                          padding: '4px 10px',
-                          borderRadius: '8px',
-                          fontSize: '0.76rem',
+                          padding: isMobile ? '3px 6px' : '4px 10px',
+                          borderRadius: isMobile ? '6px' : '8px',
+                          fontSize: isMobile ? '0.66rem' : '0.76rem',
                           fontWeight: 900,
                           display: 'flex',
                           alignItems: 'center',
@@ -1825,15 +1913,15 @@ export default function RewardsView({ token, user }) {
                         <span>{partner.descuentoTexto}</span>
                       </div>
 
-                      <div className="reward-badge-tag" style={{ position: 'absolute', top: '10px', right: '10px', display: 'flex', gap: '4px' }}>
+                      <div className="reward-badge-tag" style={{ position: 'absolute', top: isMobile ? '6px' : '10px', right: isMobile ? '6px' : '10px', display: 'flex', gap: '4px' }}>
                         {partner.destacado ? (
                           <span
                             style={{
                               background: '#38bdf8',
                               color: '#082f49',
-                              padding: '4px 8px',
-                              borderRadius: '7px',
-                              fontSize: '0.7rem',
+                              padding: isMobile ? '2px 5px' : '4px 8px',
+                              borderRadius: isMobile ? '6px' : '7px',
+                              fontSize: isMobile ? '0.62rem' : '0.7rem',
                               fontWeight: 900,
                               display: 'inline-flex',
                               alignItems: 'center',
@@ -1846,59 +1934,69 @@ export default function RewardsView({ token, user }) {
                         ) : null}
                       </div>
 
-                      <button
-                        type="button"
-                        className="reward-expand-btn"
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          setDetailModalItem({ type: 'partner', data: partner })
-                        }}
-                        style={{
-                          position: 'absolute',
-                          bottom: '10px',
-                          right: '10px',
-                          background: 'rgba(17, 29, 21, 0.85)',
-                          color: '#ffffff',
-                          border: '1px solid rgba(255, 255, 255, 0.25)',
-                          borderRadius: '8px',
-                          padding: '4px 9px',
-                          fontSize: '0.72rem',
-                          fontWeight: 700,
-                          cursor: 'pointer',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                          backdropFilter: 'blur(4px)',
-                        }}
-                      >
-                        <i className="bi bi-arrows-angle-expand"></i>
-                        <span>Ver Ficha</span>
-                      </button>
+                      {!isMobile && (
+                        <button
+                          type="button"
+                          className="reward-expand-btn"
+                          onClick={(e) => {
+                            e.stopPropagation()
+                            setDetailModalItem({ type: 'partner', data: partner })
+                          }}
+                          style={{
+                            position: 'absolute',
+                            bottom: '10px',
+                            right: '10px',
+                            background: 'rgba(17, 29, 21, 0.85)',
+                            color: '#ffffff',
+                            border: '1px solid rgba(255, 255, 255, 0.25)',
+                            borderRadius: '8px',
+                            padding: '4px 9px',
+                            fontSize: '0.72rem',
+                            fontWeight: 700,
+                            cursor: 'pointer',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            backdropFilter: 'blur(4px)',
+                          }}
+                        >
+                          <i className="bi bi-arrows-angle-expand"></i>
+                          <span>Ver Ficha</span>
+                        </button>
+                      )}
                     </div>
 
                     <div
                       className="reward-card-body"
                       style={{
-                        padding: '16px',
+                        padding: isMobile ? '8px 6px' : '16px',
                         display: 'flex',
                         flexDirection: 'column',
                         flex: 1,
                         justifyContent: 'space-between',
+                        minWidth: 0,
+                        width: '100%',
+                        boxSizing: 'border-box',
                       }}
                     >
-                      <div>
-                        <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '3px' }}>
+                      <div style={{ minWidth: 0, width: '100%' }}>
+                        <div style={{ fontSize: isMobile ? '0.62rem' : '0.7rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {partner.categoria}
                         </div>
 
                         <h3
                           className="reward-card-title"
                           style={{
-                            fontSize: '1.05rem',
+                            fontSize: isMobile ? '0.82rem' : '1.05rem',
                             fontWeight: 900,
                             color: '#111d15',
-                            margin: '0 0 6px 0',
+                            margin: '0 0 4px 0',
                             cursor: 'pointer',
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            wordBreak: 'break-word',
                           }}
                           onClick={() => setDetailModalItem({ type: 'partner', data: partner })}
                         >
@@ -1908,32 +2006,38 @@ export default function RewardsView({ token, user }) {
                         <p
                           className="reward-card-desc"
                           style={{
-                            fontSize: '0.8rem',
+                            fontSize: isMobile ? '0.68rem' : '0.8rem',
                             color: '#5f7165',
-                            margin: '0 0 12px 0',
-                            lineHeight: 1.45,
+                            margin: '0 0 8px 0',
+                            lineHeight: 1.35,
+                            display: '-webkit-box',
+                            WebkitLineClamp: 2,
+                            WebkitBoxOrient: 'vertical',
+                            overflow: 'hidden',
+                            wordBreak: 'break-word',
                           }}
                         >
                           {partner.descripcion}
                         </p>
                       </div>
 
-                      <div>
+                      <div style={{ minWidth: 0, width: '100%' }}>
                         <div
                           style={{
                             background: '#f8fafc',
-                            padding: '10px 12px',
-                            borderRadius: '10px',
+                            padding: isMobile ? '6px 8px' : '10px 12px',
+                            borderRadius: '8px',
                             border: '1px dashed #cbd5e1',
                             display: 'flex',
                             alignItems: 'center',
                             justifyContent: 'space-between',
-                            marginBottom: '8px',
+                            marginBottom: '6px',
+                            gap: '4px',
                           }}
                         >
-                          <div>
-                            <span style={{ fontSize: '0.66rem', color: '#64748b', display: 'block' }}>CUPÓN SOCIO:</span>
-                            <strong style={{ fontSize: '0.9rem', color: '#111d15', fontFamily: 'monospace' }}>
+                          <div style={{ minWidth: 0 }}>
+                            <span style={{ fontSize: isMobile ? '0.58rem' : '0.66rem', color: '#64748b', display: 'block' }}>CUPÓN:</span>
+                            <strong style={{ fontSize: isMobile ? '0.75rem' : '0.9rem', color: '#111d15', fontFamily: 'monospace', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', display: 'block' }}>
                               {partner.codigoPromocional}
                             </strong>
                           </div>
@@ -1942,17 +2046,18 @@ export default function RewardsView({ token, user }) {
                             type="button"
                             onClick={() => handleCopyCode(partner.codigoPromocional)}
                             style={{
-                              padding: '5px 10px',
-                              borderRadius: '7px',
+                              padding: isMobile ? '4px 6px' : '5px 10px',
+                              borderRadius: '6px',
                               border: 'none',
                               background: '#111d15',
                               color: '#c4f039',
-                              fontSize: '0.74rem',
+                              fontSize: isMobile ? '0.66rem' : '0.74rem',
                               fontWeight: 800,
                               cursor: 'pointer',
                               display: 'flex',
                               alignItems: 'center',
-                              gap: '4px',
+                              gap: '3px',
+                              flexShrink: 0,
                             }}
                           >
                             <i className="bi bi-copy"></i>
@@ -1969,17 +2074,17 @@ export default function RewardsView({ token, user }) {
                                 background: 'none',
                                 border: 'none',
                                 color: '#ef4444',
-                                fontSize: '0.74rem',
+                                fontSize: isMobile ? '0.68rem' : '0.74rem',
                                 fontWeight: 700,
                                 cursor: 'pointer',
                                 padding: 0,
                                 display: 'flex',
                                 alignItems: 'center',
-                                gap: '3px',
+                                gap: '2px',
                               }}
                             >
                               <i className="bi bi-trash3-fill"></i>
-                              <span>Eliminar convenio</span>
+                              <span>Eliminar</span>
                             </button>
                           </div>
                         )}

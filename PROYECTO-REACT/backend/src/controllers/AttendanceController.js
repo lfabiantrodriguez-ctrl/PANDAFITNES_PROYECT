@@ -111,37 +111,45 @@ class AttendanceController {
             const canjeados = (goals.bambusCanjeados || 0) + (total === 0 ? 100 : 0);
             const bambusDisponibles = Math.max(0, bambusGanados - canjeados);
 
-            // Level & Stage calculation
+            // Level & Stage calculation (Configuración de umbrales del sistema)
+            // 01 · PANDA BEBÉ: 0 a 299 XP (Niveles 1-2)
+            // 02 · PANDA INTERMEDIO: 300 a 999 XP (Niveles 3-4)
+            // 03 · PANDA MUSCULOSO: 1000+ XP (Nivel 5+)
             let nivel = 1;
-            let etapa = "BEBÉ";
+            let etapa = "01 · PANDA BEBÉ";
             let etapaKey = "bebe";
             let nextNivelXp = 100;
             let currentLevelBaseXp = 0;
+            let modelUrl = "/models/panda_bebe.glb";
 
             if (xp >= 1000) {
                 nivel = 5;
-                etapa = "ADULTO";
+                etapa = "03 · PANDA MUSCULOSO";
                 etapaKey = "musculoso";
                 nextNivelXp = 1500;
                 currentLevelBaseXp = 1000;
+                modelUrl = "/models/panda_musculoso.glb";
             } else if (xp >= 600) {
                 nivel = 4;
-                etapa = "JUVENIL";
-                etapaKey = "juvenil";
+                etapa = "02 · PANDA INTERMEDIO";
+                etapaKey = "intermedio";
                 nextNivelXp = 1000;
                 currentLevelBaseXp = 600;
+                modelUrl = "/models/panda_intermedio.glb";
             } else if (xp >= 300) {
                 nivel = 3;
-                etapa = "JUVENIL";
-                etapaKey = "juvenil";
+                etapa = "02 · PANDA INTERMEDIO";
+                etapaKey = "intermedio";
                 nextNivelXp = 600;
                 currentLevelBaseXp = 300;
+                modelUrl = "/models/panda_intermedio.glb";
             } else if (xp >= 100) {
                 nivel = 2;
-                etapa = "BEBÉ";
+                etapa = "01 · PANDA BEBÉ";
                 etapaKey = "bebe";
                 nextNivelXp = 300;
                 currentLevelBaseXp = 100;
+                modelUrl = "/models/panda_bebe.glb";
             }
 
             // Streak & muscle shape (active training streak = muscular; long pause = gordito)
@@ -153,6 +161,7 @@ class AttendanceController {
                 nivel,
                 etapa,
                 etapaKey,
+                modelUrl,
                 estadoFisico,
                 racha,
                 currentLevelBaseXp,

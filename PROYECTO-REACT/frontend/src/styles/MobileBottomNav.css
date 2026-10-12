@@ -57,8 +57,9 @@
     filter: drop-shadow(0 2px 8px rgba(196, 240, 57, 0.6));
   }
 
-  /* Añadir padding al app-main en móvil para que el contenido no quede oculto detrás de la barra inferior */
+  /* Añadir padding al app-main en móvil para que el contenido no quede oculto detrás de las barras fijas */
   .app-main {
+    padding-top: 66px !important;
     padding-bottom: 84px !important;
   }
 }

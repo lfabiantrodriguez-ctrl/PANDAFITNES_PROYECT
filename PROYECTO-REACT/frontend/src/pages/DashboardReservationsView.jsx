@@ -491,7 +491,7 @@ export default function DashboardReservationsView({ token, user }) {
             </p>
           </div>
 
-          <div className="table-frame">
+          <div className="table-frame d-none d-md-block">
             <table className="corporate-table">
               <thead>
                 <tr>
@@ -549,6 +549,53 @@ export default function DashboardReservationsView({ token, user }) {
                 ))}
               </tbody>
             </table>
+          </div>
+
+          {/* VISTA MÓVIL: TARJETAS DE UN SOLO VISTAZO */}
+          <div className="d-block d-md-none mobile-card-list mt-2">
+            {[
+              { socio: 'Lucía Herrera', plan: 'Plan Mensual Panda', vencimiento: '24 sep 2026', estado: 'Por vencer' },
+              { socio: 'Andrés Castro', plan: 'Plan Trimestral Fuerza', vencimiento: '26 sep 2026', estado: 'Por vencer' },
+              { socio: 'Sofía Luna', plan: 'Plan Anual VIP', vencimiento: '28 sep 2026', estado: 'Por vencer' },
+            ].map((m, idx) => (
+              <div key={idx} className="mobile-data-card" style={{ padding: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                  <strong style={{ fontSize: '0.94rem', color: '#111d15' }}>{m.socio}</strong>
+                  <span
+                    style={{
+                      padding: '3px 10px',
+                      borderRadius: '999px',
+                      background: '#fef3c7',
+                      color: '#b45309',
+                      fontSize: '0.72rem',
+                      fontWeight: 800,
+                    }}
+                  >
+                    {m.estado}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#5f7165', marginBottom: '10px' }}>
+                  <span>{m.plan}</span>
+                  <span className="fw-semibold text-dark">Vence: {m.vencimiento}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => navigate('/app/socios')}
+                  className="btn btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-1"
+                  style={{
+                    background: '#f0fdf4',
+                    border: '1px solid #bbf7d0',
+                    color: '#166534',
+                    borderRadius: '10px',
+                    fontSize: '0.82rem',
+                    padding: '8px',
+                  }}
+                >
+                  <i className="bi bi-arrow-repeat"></i>
+                  <span>Renovar Membresía</span>
+                </button>
+              </div>
+            ))}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '18px', flexWrap: 'wrap', gap: '12px' }}>
@@ -653,11 +700,11 @@ export default function DashboardReservationsView({ token, user }) {
 
           {capacityRangeResult && (
             <div className="system-notice success-notice" style={{ marginTop: '12px', padding: '16px', borderRadius: '8px' }}>
-              <h4>📊 Aforo en el rango seleccionado:</h4>
+              <h4><i className="bi bi-bar-chart-fill me-2 text-success"></i>Aforo en el rango seleccionado:</h4>
               <p style={{ margin: '8px 0 0 0' }}>
                 Rango: <strong>{capacityRangeResult.startDate}</strong> hasta <strong>{capacityRangeResult.endDate}</strong>
               </p>
-              <div className="table-frame" style={{ marginTop: '16px' }}>
+              <div className="table-frame d-none d-md-block" style={{ marginTop: '16px' }}>
                 <table className="corporate-table">
                   <thead>
                     <tr>
@@ -678,6 +725,26 @@ export default function DashboardReservationsView({ token, user }) {
                     ))}
                   </tbody>
                 </table>
+              </div>
+
+              {/* VISTA MÓVIL: RESUMEN DE AFORO EN TARJETAS DE UN SOLO VISTAZO */}
+              <div className="d-block d-md-none mobile-card-list mt-3">
+                {capacityRangeResult.dailySummary.map((row) => (
+                  <div key={row.fecha} className="mobile-data-card" style={{ padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <strong style={{ fontSize: '0.9rem', color: '#111d15' }}>
+                        <i className="bi bi-calendar3 me-1 text-success"></i> {row.fecha}
+                      </strong>
+                      <span className="badge" style={{ background: '#ecfccb', color: '#15803d', fontWeight: 800, fontSize: '0.78rem' }}>
+                        {row.total} Total
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#475569', marginTop: '6px' }}>
+                      <span>Socios: <strong className="text-dark">{row.attendances}</strong></span>
+                      <span>Invitados: <strong className="text-dark">{row.guests}</strong></span>
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           )}
@@ -723,7 +790,7 @@ export default function DashboardReservationsView({ token, user }) {
                 <p style={{ margin: '4px 0' }}><strong>Total Asistencias:</strong> {attendanceSearchResult.asistencias.length}</p>
               </div>
 
-              <div className="table-frame">
+              <div className="table-frame d-none d-md-block">
                 <table className="corporate-table">
                   <thead>
                     <tr>
@@ -756,6 +823,51 @@ export default function DashboardReservationsView({ token, user }) {
                   </tbody>
                 </table>
               </div>
+
+              {/* VISTA MÓVIL: ASISTENCIAS EN TARJETAS DE UN SOLO VISTAZO */}
+              <div className="d-block d-md-none mobile-card-list">
+                {attendanceSearchResult.asistencias.length === 0 ? (
+                  <div style={{ textAlign: 'center', padding: '16px', color: '#5f7165' }}>
+                    No se encontraron asistencias para este socio.
+                  </div>
+                ) : (
+                  attendanceSearchResult.asistencias.map((asistencia) => {
+                    const duration = getDurationInMinutes(asistencia.horaEntrada, asistencia.horaSalida)
+                    const isActive = asistencia.estado === 'activo'
+                    return (
+                      <div key={`att-mob-${asistencia.id}`} className="mobile-data-card" style={{ padding: '12px 14px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                          <strong style={{ fontSize: '0.88rem', color: '#111d15' }}>
+                            <i className="bi bi-calendar-event me-1 text-success"></i>
+                            {formatDateOnly(asistencia.horaEntrada)}
+                          </strong>
+                          <span
+                            style={{
+                              padding: '2px 8px',
+                              borderRadius: '999px',
+                              fontSize: '0.72rem',
+                              fontWeight: 800,
+                              background: isActive ? '#ecfccb' : '#f1f5f9',
+                              color: isActive ? '#15803d' : '#475569',
+                            }}
+                          >
+                            {isActive ? '● En sala' : 'Finalizada'}
+                          </span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#475569' }}>
+                          <span>
+                            <i className="bi bi-clock me-1 text-muted"></i>
+                            {formatTimeOnly(asistencia.horaEntrada)} {asistencia.horaSalida ? `→ ${formatTimeOnly(asistencia.horaSalida)}` : ''}
+                          </span>
+                          <span className="fw-semibold text-dark">
+                            ⏱ {duration}
+                          </span>
+                        </div>
+                      </div>
+                    )
+                  })
+                )}
+              </div>
             </div>
           )}
         </section>
@@ -776,7 +888,7 @@ export default function DashboardReservationsView({ token, user }) {
             </p>
           </div>
 
-          <div className="table-frame">
+          <div className="table-frame d-none d-md-block">
             <table className="corporate-table">
               <thead>
                 <tr>
@@ -809,6 +921,32 @@ export default function DashboardReservationsView({ token, user }) {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* VISTA MÓVIL: CLIENTES ACTIVOS EN TARJETAS DE UN SOLO VISTAZO */}
+          <div className="d-block d-md-none mobile-card-list">
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '16px', color: '#5f7165' }}>Cargando clientes activos...</div>
+            ) : activeClients.length ? (
+              activeClients.map((client) => (
+                <div key={`mob-active-${client.id}`} className="mobile-data-card" style={{ padding: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <strong style={{ fontSize: '0.92rem', color: '#111d15' }}>{client.nombre} {client.apellido}</strong>
+                    <span className="badge" style={{ background: '#ecfccb', color: '#15803d', fontWeight: 800, fontSize: '0.74rem' }}>
+                      ● En sala
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
+                    <span>DNI: {client.dni}</span>
+                    <span>Ingreso: <strong className="text-dark font-monospace">{formatTimeOnly(client.horaEntrada)} hrs</strong></span>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#5f7165', fontSize: '0.85rem' }}>
+                No hay clientes dentro del gimnasio en este momento.
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -850,7 +988,7 @@ export default function DashboardReservationsView({ token, user }) {
                 flexShrink: 0,
               }}
             >
-              📢
+              <i className="bi bi-megaphone-fill"></i>
             </div>
             <div style={{ flex: 1 }}>
               <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
@@ -901,7 +1039,7 @@ export default function DashboardReservationsView({ token, user }) {
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Bambús Disponibles</span>
               <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex', fontSize: '1rem' }}>
-                🎋
+                <i className="bi bi-gem"></i>
               </div>
             </div>
             <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
@@ -973,7 +1111,7 @@ export default function DashboardReservationsView({ token, user }) {
                   boxShadow: '0 4px 12px rgba(196, 240, 57, 0.25)',
                 }}
               >
-                ⏰
+                <i className="bi bi-clock-history"></i>
               </div>
               <div>
                 <h3 style={{ margin: 0, fontSize: '1.18rem', fontWeight: 800, color: '#111d15' }}>
@@ -1017,7 +1155,9 @@ export default function DashboardReservationsView({ token, user }) {
             {config?.horario_semana_modalidad === 'continuo' ? (
               <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>🏢 Lun a Vie (Corrido)</span>
+                  <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                    <i className="bi bi-calendar3 me-1 text-primary"></i> Lun a Vie (Corrido)
+                  </span>
                   <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '0.68rem' }}>Jornada Completa</span>
                 </div>
                 <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
@@ -1029,7 +1169,9 @@ export default function DashboardReservationsView({ token, user }) {
                 {/* Lunes a Viernes - Mañana */}
                 <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>🌅 Lun a Vie (Mañana)</span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                      <i className="bi bi-brightness-high me-1 text-warning"></i> Lun a Vie (Mañana)
+                    </span>
                     <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '0.68rem' }}>Activo</span>
                   </div>
                   <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
@@ -1040,7 +1182,9 @@ export default function DashboardReservationsView({ token, user }) {
                 {/* Lunes a Viernes - Tarde/Noche */}
                 <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>🌇 Lun a Vie (Tarde/Noche)</span>
+                    <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                      <i className="bi bi-sunset me-1 text-info"></i> Lun a Vie (Tarde/Noche)
+                    </span>
                     <span className="badge" style={{ background: '#ecfdf5', color: '#047857', fontSize: '0.68rem' }}>Activo</span>
                   </div>
                   <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
@@ -1053,7 +1197,9 @@ export default function DashboardReservationsView({ token, user }) {
             {/* Sábados */}
             <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>⚡ Sábados</span>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                  <i className="bi bi-lightning-charge-fill me-1 text-warning"></i> Sábados
+                </span>
                 <span
                   className="badge"
                   style={{
@@ -1075,7 +1221,9 @@ export default function DashboardReservationsView({ token, user }) {
             {/* Domingos */}
             <div style={{ padding: '14px 16px', borderRadius: '12px', background: '#f8fafc', border: '1px solid #e2e8f0' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>☕ Domingos</span>
+                <span style={{ fontSize: '0.82rem', fontWeight: 700, color: '#334155' }}>
+                  <i className="bi bi-cup-hot me-1 text-secondary"></i> Domingos
+                </span>
                 <span
                   className="badge"
                   style={{
@@ -1113,7 +1261,8 @@ export default function DashboardReservationsView({ token, user }) {
               onClick={() => navigate('/app/mi-pandita')}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', padding: '8px 16px' }}
             >
-              🐼 Mi Pandita
+              <i className="bi bi-award-fill"></i>
+              <span>Mi Pandita</span>
             </button>
             <button
               type="button"
@@ -1121,7 +1270,8 @@ export default function DashboardReservationsView({ token, user }) {
               onClick={() => navigate('/app/mis-asistencias')}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', padding: '8px 16px' }}
             >
-              ⏱️ Mis Asistencias
+              <i className="bi bi-stopwatch"></i>
+              <span>Mis Asistencias</span>
             </button>
             <button
               type="button"
@@ -1129,7 +1279,8 @@ export default function DashboardReservationsView({ token, user }) {
               onClick={() => navigate('/app/recompensas')}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', padding: '8px 16px' }}
             >
-              🎁 Recompensas
+              <i className="bi bi-gift-fill"></i>
+              <span>Recompensas</span>
             </button>
           </div>
         </section>
@@ -1157,7 +1308,7 @@ export default function DashboardReservationsView({ token, user }) {
             </button>
           </div>
 
-          <div className="table-frame">
+          <div className="table-frame d-none d-md-block">
             <table className="corporate-table">
               <thead>
                 <tr>
@@ -1210,6 +1361,53 @@ export default function DashboardReservationsView({ token, user }) {
               </tbody>
             </table>
           </div>
+
+          {/* VISTA MÓVIL: ASISTENCIAS EN TARJETAS DE UN SOLO VISTAZO */}
+          <div className="d-block d-md-none mobile-card-list">
+            {loading ? (
+              <div style={{ textAlign: 'center', padding: '16px', color: '#5f7165' }}>Cargando asistencias...</div>
+            ) : socioAsistencias.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#5f7165', fontSize: '0.85rem' }}>
+                Aún no registras asistencias recientes. ¡Acércate a recepción para validar tu ingreso e iniciar tu racha!
+              </div>
+            ) : (
+              socioAsistencias.slice(0, 8).map((asistencia) => {
+                const duration = getDurationInMinutes(asistencia.horaEntrada, asistencia.horaSalida)
+                const isActive = asistencia.estado === 'activo' || !asistencia.horaSalida
+                return (
+                  <div key={`mob-att-socio-${asistencia.id}`} className="mobile-data-card" style={{ padding: '12px 14px' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                      <strong style={{ fontSize: '0.88rem', color: '#111d15' }}>
+                        <i className="bi bi-calendar-check me-1 text-success"></i>
+                        {formatDateOnly(asistencia.horaEntrada)}
+                      </strong>
+                      <span
+                        style={{
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontSize: '0.72rem',
+                          fontWeight: 800,
+                          background: isActive ? '#ecfccb' : '#f0fdf4',
+                          color: isActive ? '#1b4d24' : '#166534',
+                        }}
+                      >
+                        {isActive ? '● En sala' : 'Completado'}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#475569' }}>
+                      <span>
+                        <i className="bi bi-clock me-1 text-muted"></i>
+                        {formatTimeOnly(asistencia.horaEntrada)} {asistencia.horaSalida ? `→ ${formatTimeOnly(asistencia.horaSalida)}` : ''}
+                      </span>
+                      <span className="fw-semibold text-dark">
+                        {duration}
+                      </span>
+                    </div>
+                  </div>
+                )
+              })
+            )}
+          </div>
         </section>
       </div>
     )
@@ -1239,7 +1437,9 @@ export default function DashboardReservationsView({ token, user }) {
               }}
             >
               <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '1.4rem' }}>📢</span>
+                <span style={{ fontSize: '1.4rem' }}>
+                  <i className="bi bi-megaphone-fill text-danger"></i>
+                </span>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                     <strong style={{ color: config?.estado_operativo === 'cerrado_emergencia' ? '#991b1b' : '#92400e', fontSize: '0.96rem' }}>

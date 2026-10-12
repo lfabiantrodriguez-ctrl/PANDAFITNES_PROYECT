@@ -283,7 +283,7 @@ export default function CheckInView({ token }) {
             transition: 'all 0.2s ease',
           }}
         >
-          <span>👆</span>
+          <i className="bi bi-fingerprint"></i>
           <span>Huella Digital (Biométrico)</span>
         </button>
 
@@ -310,7 +310,7 @@ export default function CheckInView({ token }) {
             transition: 'all 0.2s ease',
           }}
         >
-          <span>✍️</span>
+          <i className="bi bi-pencil-square"></i>
           <span>Validación Manual</span>
         </button>
       </div>
@@ -319,26 +319,9 @@ export default function CheckInView({ token }) {
           CONTENIDO PESTAÑA 1: ESCÁNER DE HUELLA DIGITAL
           ===================================================== */}
       {activeTab === 'huella' && (
-        <div
-          style={{
-            display: 'grid',
-            gridTemplateColumns: 'minmax(0, 1fr) 380px',
-            gap: '24px',
-            alignItems: 'start',
-            marginBottom: '32px',
-          }}
-        >
+        <div className="checkin-biometric-grid">
           {/* Card del Lector Biométrico */}
-          <div
-            style={{
-              background: '#ffffff',
-              borderRadius: '24px',
-              padding: '36px',
-              border: '1px solid #e3e8e2',
-              boxShadow: '0 6px 24px rgba(18, 31, 23, 0.05)',
-              textAlign: 'center',
-            }}
-          >
+          <div className="checkin-scanner-card">
             <div style={{ maxWidth: '440px', margin: '0 auto' }}>
               <span
                 style={{
@@ -450,7 +433,7 @@ export default function CheckInView({ token }) {
                 <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
                   DNI del Socio para Lector Biométrico:
                 </label>
-                <div style={{ display: 'flex', gap: '8px' }}>
+                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
                   <input
                     type="text"
                     inputMode="numeric"
@@ -464,6 +447,7 @@ export default function CheckInView({ token }) {
                     placeholder="Ingresa DNI (ej: 12345678)..."
                     className={`form-control ${biometricError ? 'is-invalid' : ''}`}
                     style={{
+                      flex: '1 1 180px',
                       borderRadius: '12px',
                       padding: '12px 16px',
                       fontSize: '0.95rem',
@@ -476,7 +460,7 @@ export default function CheckInView({ token }) {
                     disabled={isScanning || !biometricDni.trim()}
                     onClick={() => handleFingerprintScan()}
                     style={{
-                      padding: '12px 22px',
+                      padding: '12px 20px',
                       borderRadius: '12px',
                       border: 'none',
                       background: '#c4f039',
@@ -486,9 +470,13 @@ export default function CheckInView({ token }) {
                       cursor: isScanning || !biometricDni.trim() ? 'not-allowed' : 'pointer',
                       whiteSpace: 'nowrap',
                       boxShadow: '0 4px 12px rgba(196, 240, 57, 0.35)',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '6px',
                     }}
                   >
-                    {isScanning ? 'Escaneando...' : '👆 Validar Huella'}
+                    <i className="bi bi-fingerprint"></i>
+                    <span>{isScanning ? 'Escaneando...' : 'Validar Huella'}</span>
                   </button>
                 </div>
                 {biometricError && (
@@ -539,15 +527,7 @@ export default function CheckInView({ token }) {
           </div>
 
           {/* Resultado Biométrico en Pantalla */}
-          <div
-            style={{
-              background: '#ffffff',
-              borderRadius: '24px',
-              padding: '28px',
-              border: '1px solid #e3e8e2',
-              boxShadow: '0 6px 24px rgba(18, 31, 23, 0.05)',
-            }}
-          >
+          <div className="checkin-result-card">
             <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#111d15', margin: '0 0 18px 0' }}>
               Estado del Acceso Biométrico
             </h4>
@@ -599,10 +579,11 @@ export default function CheckInView({ token }) {
                     </p>
 
                     <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '14px', textAlign: 'left', fontSize: '0.82rem', color: '#334155', lineHeight: 1.6, marginBottom: '16px' }}>
-                      <div><strong>Método:</strong> Sensor Biométrico de Huella Digital 👆</div>
+                      <div><strong>Método:</strong> Sensor Biométrico de Huella Digital <i className="bi bi-fingerprint text-success ms-1"></i></div>
                       <div><strong>Hora de Ingreso:</strong> {formatTimePeru(biometricResult.horaEntrada || new Date())} hrs (Hora Perú)</div>
                       <div style={{ color: '#166534', fontWeight: 700, marginTop: '4px' }}>
-                        ⚡ +25 XP y +10 bambús otorgados a Mi Pandita
+                        <i className="bi bi-lightning-charge-fill text-warning me-1"></i>
+                        +25 XP y +10 bambús otorgados a Mi Pandita
                       </div>
                     </div>
                   </>
@@ -653,13 +634,15 @@ export default function CheckInView({ token }) {
                     </p>
 
                     <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '14px', textAlign: 'left', fontSize: '0.82rem', color: '#334155', lineHeight: 1.6, marginBottom: '16px' }}>
-                      <div><strong>Método:</strong> Sensor Biométrico de Huella Digital 👆</div>
+                      <div><strong>Método:</strong> Sensor Biométrico de Huella Digital <i className="bi bi-fingerprint text-primary ms-1"></i></div>
                       <div><strong>Hora de Salida:</strong> {formatTimePeru(biometricResult.horaSalida || new Date())} hrs (Hora Perú)</div>
                       <div style={{ color: '#0369a1', fontWeight: 700, marginTop: '4px' }}>
-                        🏋️ Sesión completada: {biometricResult.tiempoTexto || 'Entrenamiento finalizado'}
+                        <i className="bi bi-activity text-primary me-1"></i>
+                        Sesión completada: {biometricResult.tiempoTexto || 'Entrenamiento finalizado'}
                       </div>
                       <div style={{ color: '#166534', fontSize: '0.78rem', marginTop: '2px' }}>
-                        ✓ Asistencia registrada y puntos consolidados en Mi Pandita
+                        <i className="bi bi-check-circle-fill text-success me-1"></i>
+                        Asistencia registrada y puntos consolidados en Mi Pandita
                       </div>
                     </div>
                   </>
@@ -713,7 +696,8 @@ export default function CheckInView({ token }) {
                       <div><strong>Ingreso registrado a las:</strong> {formatTimePeru(biometricResult.horaEntrada)} hrs</div>
                       <div><strong>Tiempo en sala:</strong> {biometricResult.minutosTranscurridos} minutos entrenando</div>
                       <div className="mt-2" style={{ color: '#78350f' }}>
-                        💡 Para validar tu salida con huella y asegurar tus puntos de Mi Pandita, debes entrenar un mínimo de <strong>{biometricResult.minutosMinimos} min</strong> (faltan {biometricResult.minutosRestantes} min).
+                        <i className="bi bi-info-circle-fill text-warning me-1"></i>
+                        Para validar tu salida con huella y asegurar tus puntos de Mi Pandita, debes entrenar un mínimo de <strong>{biometricResult.minutosMinimos} min</strong> (faltan {biometricResult.minutosRestantes} min).
                       </div>
                     </div>
 
@@ -750,7 +734,9 @@ export default function CheckInView({ token }) {
               </div>
             ) : (
               <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
-                <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>👆</div>
+                <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>
+                  <i className="bi bi-fingerprint" style={{ fontSize: '2.8rem', color: '#94a3b8' }}></i>
+                </div>
                 <p style={{ fontSize: '0.86rem', margin: 0 }}>
                   Aún no se ha realizado ninguna lectura biométrica en esta sesión.
                 </p>
@@ -818,7 +804,13 @@ export default function CheckInView({ token }) {
                   whiteSpace: 'nowrap',
                 }}
               >
-                {status.loading ? 'Buscando...' : '🔍 Buscar Socio'}
+                {status.loading ? (
+                  'Buscando...'
+                ) : (
+                  <>
+                    <i className="bi bi-search me-1"></i> Buscar Socio
+                  </>
+                )}
               </button>
             </div>
             {manualError && (
@@ -864,9 +856,13 @@ export default function CheckInView({ token }) {
               fontSize: '0.8rem',
               fontWeight: 700,
               cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
             }}
           >
-            ↻ Actualizar lista
+            <i className="bi bi-arrow-clockwise"></i>
+            <span>Actualizar lista</span>
           </button>
         </div>
 
@@ -907,9 +903,13 @@ export default function CheckInView({ token }) {
                             background: client.metodoRegistro === 'huella' ? '#ecfccb' : '#f1f5f9',
                             color: client.metodoRegistro === 'huella' ? '#15803d' : '#475569',
                             border: client.metodoRegistro === 'huella' ? '1px solid #d9f99d' : '1px solid #e2e8f0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
                           }}
                         >
-                          {client.metodoRegistro === 'huella' ? '👆 Huella Digital' : '✍️ Manual'}
+                          <i className={client.metodoRegistro === 'huella' ? 'bi bi-fingerprint' : 'bi bi-pencil-square'}></i>
+                          <span>{client.metodoRegistro === 'huella' ? 'Huella Digital' : 'Manual'}</span>
                         </span>
                       </td>
                       <td className="px-3">
@@ -967,9 +967,13 @@ export default function CheckInView({ token }) {
                             background: client.metodoRegistro === 'huella' ? '#ecfccb' : '#f1f5f9',
                             color: client.metodoRegistro === 'huella' ? '#15803d' : '#475569',
                             border: client.metodoRegistro === 'huella' ? '1px solid #d9f99d' : '1px solid #e2e8f0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
                           }}
                         >
-                          {client.metodoRegistro === 'huella' ? '👆 Huella' : '✍️ Manual'}
+                          <i className={client.metodoRegistro === 'huella' ? 'bi bi-fingerprint' : 'bi bi-pencil-square'}></i>
+                          <span>{client.metodoRegistro === 'huella' ? 'Huella' : 'Manual'}</span>
                         </span>
                       </div>
                     </div>
@@ -979,14 +983,16 @@ export default function CheckInView({ token }) {
                       <div className="mobile-card-field">
                         <div className="mobile-card-label">Hora Ingreso</div>
                         <div className="mobile-card-value font-monospace">
-                          🕒 {client.horaEntrada?.slice(11, 16)} hrs
+                          <i className="bi bi-clock me-1 text-muted"></i>
+                          {client.horaEntrada?.slice(11, 16)} hrs
                         </div>
                       </div>
 
                       <div className="mobile-card-field">
                         <div className="mobile-card-label">Estado Actual</div>
                         <div className="mobile-card-value" style={{ color: '#166534' }}>
-                          🟢 En Entrenamiento
+                          <i className="bi bi-circle-fill text-success me-1" style={{ fontSize: '0.65rem' }}></i>
+                          En Entrenamiento
                         </div>
                       </div>
                     </div>
@@ -1002,7 +1008,7 @@ export default function CheckInView({ token }) {
                           fontSize: '0.84rem',
                         }}
                       >
-                        <span>🚪</span>
+                        <i className="bi bi-box-arrow-right"></i>
                         <span>Registrar Salida del Club</span>
                       </button>
                     </div>
@@ -1037,11 +1043,12 @@ export default function CheckInView({ token }) {
             {manualMembership && manualMembership.estado === 'activo' ? (
               <button
                 type="button"
-                className="btn btn-dark px-4 py-2 fw-bold"
+                className="btn btn-dark px-4 py-2 fw-bold d-inline-flex align-items-center gap-1"
                 onClick={handleManualDirectCheckIn}
                 style={{ background: '#c4f039', color: '#111d15', border: 'none' }}
               >
-                ✓ Autorizar Entrada a Sala ({directDuration} min)
+                <i className="bi bi-check-lg"></i>
+                <span>Autorizar Entrada a Sala ({directDuration} min)</span>
               </button>
             ) : (
               <button

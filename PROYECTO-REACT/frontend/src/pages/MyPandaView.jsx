@@ -1,80 +1,96 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AttendanceService } from '../services/AttendanceService'
-import PandaCharacterSVG from '../components/PandaCharacterSVG'
-import ViewTitle from '../components/ViewTitle'
+import PandaCharacter3D from '../components/PandaCharacter3D'
 
 const PANDA_QUOTES = [
-  '¡A entrenar duro hoy! 💪',
-  '¡Ufff, qué fuerte! 💪🐼',
-  '¡Siente ese bombeo muscular! 🔥',
-  '¡Una repetición más, no te rindas! ⚡',
-  '¡El bambú me da superpoderes! 🎋',
-  '¡Hoy rompemos récord en el club! 🏆',
-  '¡Disciplina sobre motivación! 🦍',
-  '¡Panda fit, socio invencible! ✨',
+  '¡A entrenar duro hoy! Sin excusas.',
+  '¡Ufff, qué buen bombeo muscular!',
+  '¡Una repetición más, tú puedes!',
+  '¡La disciplina vence a la motivación!',
+  '¡El bambú y las pesas me dan poder!',
+  '¡Hoy rompemos récords en el club!',
+  '¡Panda fit, socio invencible!',
+  '¡Constancia diaria, resultados reales!',
 ]
 
 const STAGES = [
   {
+    index: 0,
     key: 'bebe',
-    name: 'Panda Bebé',
-    levelLabel: 'Niveles 1-2 · Desde 0 XP',
-    desc: 'Pequeño, curioso y juguetón con mancuernitas de goma',
+    name: '01 · Panda Bebé',
+    collectionName: '01 · PANDA BEBÉ',
+    levelLabel: 'Niveles 1-2 · 0 a 299 XP',
+    desc: 'Cuerpo pequeño y redondeado, etapa inicial de aprendizaje y técnica.',
     reqXp: 0,
+    nextThreshold: 300,
+    iconClass: 'bi-egg-fill',
+    modelUrl: '/models/panda_bebe.glb',
   },
   {
-    key: 'juvenil',
-    name: 'Panda Juvenil',
-    levelLabel: 'Nivel Intermedio (3-4) · Desde 300 XP',
-    desc: 'Activo, con cinta deportiva en la frente y cardio dinámico',
+    index: 1,
+    key: 'intermedio',
+    name: '02 · Panda Intermedio',
+    collectionName: '02 · PANDA INTERMEDIO',
+    levelLabel: 'Niveles 3-4 · 300 a 999 XP',
+    desc: 'Postura atlética, mayor tono muscular en pecho, hombros y brazos.',
     reqXp: 300,
+    nextThreshold: 1000,
+    iconClass: 'bi-lightning-fill',
+    modelUrl: '/models/panda_intermedio.glb',
   },
   {
+    index: 2,
     key: 'musculoso',
-    name: 'Panda Musculoso',
-    levelLabel: 'Nivel Avanzado (5+) · Desde 1,000 XP',
-    desc: 'Espalda ancha, bíceps definidos y levantamiento olímpico',
+    name: '03 · Panda Musculoso',
+    collectionName: '03 · PANDA MUSCULOSO',
+    levelLabel: 'Nivel Avanzado 5+ · 1,000+ XP',
+    desc: 'Físico imponente, deltoides hipertrofiados, espalda ancha y fuerza máxima.',
     reqXp: 1000,
+    nextThreshold: 2000,
+    iconClass: 'bi-shield-shaded',
+    modelUrl: '/models/panda_musculoso.glb',
   },
 ]
 
 export default function MyPandaView({ token, user }) {
   const navigate = useNavigate()
-  const [loading, setLoading] = useState(true)
+  const modelViewerRef = useRef(null)
 
-  // Datos del Panda
+  // Datos de evolución y asistencia
   const [pandaData, setPandaData] = useState({
-    xp: 1250,
+    xp: 850,
     nivel: 4,
-    etapa: 'JUVENIL',
-    etapaKey: 'juvenil',
+    etapa: '02 · PANDA INTERMEDIO',
+    etapaKey: 'intermedio',
     racha: 3,
     asistenciasMes: 15,
-    nextNivelXp: 1500,
-    currentLevelBaseXp: 1000,
+    nextNivelXp: 1000,
+    currentLevelBaseXp: 600,
     xpEnNivel: 250,
-    xpFaltante: 250,
+    xpFaltante: 150,
     bambusDisponibles: 240,
     bambusGanados: 340,
     hasCheckedInToday: true,
   })
 
-  // Etapa seleccionada en el carrusel interactivo (0: bebe, 1: juvenil, 2: musculoso)
+  // Etapa seleccionada en el carrusel (0: bebe, 1: intermedio, 2: musculoso)
   const [activeStageIndex, setActiveStageIndex] = useState(1)
 
-  // Estados de animación y juego
+  // Estados interactivos
   const [isTraining, setIsTraining] = useState(false)
   const [repCount, setRepCount] = useState(15)
-  const [speechBubbleLeft, setSpeechBubbleLeft] = useState('¡A entrenar duro hoy! 💪')
-  const [speechBubbleRight, setSpeechBubbleRight] = useState('¡Disciplina sobre motivación! 🦍')
-  const [floatingXp, setFloatingXp] = useState([]) // [{ id, text, offsetX }]
-
-  // Mostrar / Ocultar textos informativos
-  const [showInfoDetails, setShowInfoDetails] = useState(true)
-
-  // Notificación temporal
+  const [speechBubble, setSpeechBubble] = useState('¡A entrenar duro hoy! Sin excusas.')
+  const [floatingXp, setFloatingXp] = useState([])
+  const [autoRotate, setAutoRotate] = useState(false)
   const [notification, setNotification] = useState('')
+
+  // Estados para modales informativos
+  const [showProgressModal, setShowProgressModal] = useState(false)
+  const [showEvolutionModal, setShowEvolutionModal] = useState(false)
+  const [showStreakModal, setShowStreakModal] = useState(false)
+  const [showBambusModal, setShowBambusModal] = useState(false)
+  const [showGuideModal, setShowGuideModal] = useState(false)
 
   useEffect(() => {
     loadPandaStatus()
@@ -98,78 +114,47 @@ export default function MyPandaView({ token, user }) {
           xpFaltante: res.xpFaltante ?? prev.xpFaltante,
         }))
 
-        // Asignar índice inicial según nivel
         if (res.etapaKey === 'bebe') setActiveStageIndex(0)
         else if (res.etapaKey === 'musculoso') setActiveStageIndex(2)
         else setActiveStageIndex(1)
       }
     } catch {
-      // Conservar valores iniciales
-    } finally {
-      setLoading(false)
+      // Conservar valores iniciales de prueba
     }
   }
 
   // Tocar al Panda para entrenar
   function handlePandaTap(e) {
+    if (e && e.stopPropagation) e.stopPropagation()
     setIsTraining(true)
     setRepCount((prev) => prev + 1)
 
-    // Cambiar frase de motivación al azar
+    // Cambiar frase aleatoria
     const randomQuote = PANDA_QUOTES[Math.floor(Math.random() * PANDA_QUOTES.length)]
-    if (Math.random() > 0.5) {
-      setSpeechBubbleLeft(randomQuote)
-    } else {
-      setSpeechBubbleRight(randomQuote)
-    }
+    setSpeechBubble(randomQuote)
 
-    // Vibración si el dispositivo la soporta
     if (navigator?.vibrate) {
-      navigator.vibrate(40)
+      navigator.vibrate(35)
     }
 
-    // Efecto de burbuja flotante +5 XP
+    // Efecto flotante de XP
     const newId = Date.now() + Math.random()
     const offsetX = (Math.random() - 0.5) * 80
-    setFloatingXp((prev) => [...prev, { id: newId, text: '+5 XP 💥', offsetX }])
+    setFloatingXp((prev) => [...prev, { id: newId, text: '+5 XP', offsetX }])
 
     setTimeout(() => {
       setFloatingXp((prev) => prev.filter((item) => item.id !== newId))
-    }, 1200)
+    }, 1100)
 
     setTimeout(() => {
       setIsTraining(false)
-    }, 650)
+    }, 450)
   }
 
-  // Simular o alternar asistencia de hoy
-  function handleToggleCheckIn() {
-    setPandaData((prev) => {
-      const nextChecked = !prev.hasCheckedInToday
-      const xpIncrement = nextChecked ? 100 : 0
-      const nextXp = prev.xp + xpIncrement
-      return {
-        ...prev,
-        hasCheckedInToday: nextChecked,
-        xp: nextXp,
-        racha: nextChecked ? prev.racha + 1 : Math.max(0, prev.racha - 1),
-        asistenciasMes: nextChecked ? prev.asistenciasMes + 1 : Math.max(0, prev.asistenciasMes - 1),
-        bambusDisponibles: nextChecked ? prev.bambusDisponibles + 15 : prev.bambusDisponibles,
-      }
-    })
-
-    if (!pandaData.hasCheckedInToday) {
-      setNotification('🎉 ¡Asistencia registrada! +100 XP y +15 Bambús añadidos a tu cuenta.')
-    } else {
-      setNotification('ℹ️ Asistencia alternada para pruebas.')
-    }
-    setTimeout(() => setNotification(''), 3000)
-  }
-
-  // Alimentar al Panda con 1 Bambú
+  // Alimentar al Panda
   function handleFeedPanda() {
     if (pandaData.bambusDisponibles < 1) {
-      setNotification('🎋 No tienes suficientes bambús disponibles para alimentar a tu Pandita.')
+      setNotification('No tienes suficientes bambús disponibles.')
       setTimeout(() => setNotification(''), 2500)
       return
     }
@@ -179,873 +164,989 @@ export default function MyPandaView({ token, user }) {
       bambusDisponibles: prev.bambusDisponibles - 1,
       xp: prev.xp + 10,
     }))
-    setSpeechBubbleRight('¡Ñam! ¡El bambú me da fuerza! 🎋✨')
+    setSpeechBubble('¡Ñam! ¡El bambú me da super energía!')
     setIsTraining(true)
-    setTimeout(() => setIsTraining(false), 900)
+    setTimeout(() => setIsTraining(false), 600)
 
-    setNotification('🎋 ¡Le diste un bambú a tu Pandita! +10 XP de energía')
+    const newId = Date.now() + Math.random()
+    setFloatingXp((prev) => [...prev, { id: newId, text: '+10 XP', offsetX: 0 }])
+    setTimeout(() => {
+      setFloatingXp((prev) => prev.filter((item) => item.id !== newId))
+    }, 1100)
+
+    setNotification('¡Le diste un bambú a tu Pandita! +10 XP')
     setTimeout(() => setNotification(''), 2500)
   }
 
-  // Navegar carrusel hacia la izquierda
+  // Simular asistencia
+  function handleToggleCheckIn() {
+    setPandaData((prev) => {
+      const nextChecked = !prev.hasCheckedInToday
+      const xpIncrement = nextChecked ? 100 : 0
+      const nextXp = prev.xp + xpIncrement
+      return {
+        ...prev,
+        hasCheckedInToday: nextChecked,
+        xp: nextXp,
+      }
+    })
+
+    if (!pandaData.hasCheckedInToday) {
+      setNotification('¡Asistencia registrada! +100 XP añadidos.')
+    } else {
+      setNotification('Asistencia desmarcada para pruebas.')
+    }
+    setTimeout(() => setNotification(''), 2500)
+  }
+
+  // Navegación de etapas
   function handlePrevStage() {
     setActiveStageIndex((prev) => (prev > 0 ? prev - 1 : STAGES.length - 1))
   }
 
-  // Navegar carrusel hacia la derecha
   function handleNextStage() {
     setActiveStageIndex((prev) => (prev < STAGES.length - 1 ? prev + 1 : 0))
   }
 
-  const currentStage = STAGES[activeStageIndex]
-  const prevStageIndex = (activeStageIndex - 1 + STAGES.length) % STAGES.length
-  const nextStageIndex = (activeStageIndex + 1) % STAGES.length
-  const prevStage = STAGES[prevStageIndex]
-  const nextStage = STAGES[nextStageIndex]
+  // Recentrar cámara frontal
+  function handleResetCamera() {
+    const viewer = modelViewerRef.current
+    if (viewer) {
+      viewer.cameraOrbit = '0deg 82deg auto'
+      viewer.jumpCameraToGoal()
+    }
+  }
 
-  // Cálculo de porcentaje de barra de progreso
+  const currentStage = STAGES[activeStageIndex]
   const progressPercent = Math.min(
     100,
     Math.round(
       ((pandaData.xp - pandaData.currentLevelBaseXp) /
-        (pandaData.nextNivelXp - pandaData.currentLevelBaseXp)) *
+        Math.max(1, pandaData.nextNivelXp - pandaData.currentLevelBaseXp)) *
         100
-    ) || 75
+    )
   )
 
   return (
-    <div className="dashboard-page" style={{ maxWidth: '1360px', margin: '0 auto', paddingBottom: '60px' }}>
-      {/* HEADER DE LA VISTA ADAPTADO A COMPUTADORA */}
-      <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
-        <div>
-          <ViewTitle
-            title="Mi Pandita Fit (Gamificación & Hábitos)"
-            text="Tu compañero virtual de entrenamiento. Suma experiencia con cada visita, evoluciona de nivel y canjea tus bambús por beneficios reales."
-          />
-        </div>
-
-        {/* CHIPS DE RESUMEN SUPERIOR */}
-        <div className="d-flex flex-wrap align-items-center gap-2">
-          <div
-            style={{
-              background: '#111d15',
-              border: '1px solid #233c2a',
-              borderRadius: '12px',
-              padding: '8px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '8px',
-              color: '#ffffff',
-              fontSize: '0.85rem',
-              fontWeight: 800,
-            }}
-          >
-            <span style={{ color: '#c4f039' }}>⭐ NIVEL {pandaData.nivel}</span>
-            <span style={{ color: '#64748b' }}>•</span>
-            <span style={{ color: '#94a3b8' }}>{currentStage.name}</span>
-          </div>
-
-          <div
-            style={{
-              background: '#111d15',
-              border: '1px solid rgba(249, 115, 22, 0.4)',
-              borderRadius: '12px',
-              padding: '8px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              color: '#f97316',
-              fontSize: '0.85rem',
-              fontWeight: 800,
-            }}
-          >
-            <span>🔥 RACHA: {pandaData.racha} DÍAS</span>
-          </div>
-
-          <div
-            style={{
-              background: '#111d15',
-              border: '1px solid rgba(196, 240, 57, 0.4)',
-              borderRadius: '12px',
-              padding: '8px 16px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '6px',
-              color: '#c4f039',
-              fontSize: '0.85rem',
-              fontWeight: 800,
-            }}
-          >
-            <span>🎋 {pandaData.bambusDisponibles} BAMBÚS</span>
-          </div>
-        </div>
-      </div>
-
-      {/* NOTIFICACIÓN FLOTANTE / TOAST */}
+    <div className="panda-view-wrapper">
+      {/* Toast de notificación temporal */}
       {notification && (
         <div
           style={{
-            background: '#c4f039',
-            color: '#111d15',
-            padding: '12px 20px',
-            borderRadius: '14px',
+            position: 'absolute',
+            top: '16px',
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 1050,
+            background: 'rgba(17, 29, 21, 0.95)',
+            border: '1px solid #c4f039',
+            color: '#c4f039',
+            padding: '8px 20px',
+            borderRadius: '9999px',
+            fontSize: '0.84rem',
             fontWeight: 800,
-            fontSize: '0.9rem',
-            textAlign: 'center',
-            boxShadow: '0 8px 24px rgba(0,0,0,0.3)',
-            marginBottom: '20px',
-            animation: 'fadeIn 0.25s ease',
+            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '8px',
+            animation: 'fadeIn 0.25s ease-out',
+            whiteSpace: 'nowrap',
           }}
         >
-          {notification}
+          <i className="bi bi-check-circle-fill"></i>
+          <span>{notification}</span>
         </div>
       )}
 
-      {/* GRID PRINCIPAL RESPONSIVE ADAPTADO A COMPUTADORA */}
-      <div className="pandita-desktop-grid">
-        {/* COLUMNA IZQUIERDA: ARENA DEL PANDA & EVOLUCIÓN */}
-        <div className="pandita-left-col">
-          {/* ARENA CARD */}
-          <div
+      {/* ======================================================== */}
+      {/* HUD SUPERIOR: Selector de Etapa Central                  */}
+      {/* ======================================================== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '12px',
+          left: '12px',
+          right: '12px',
+          zIndex: 30,
+          display: 'flex',
+          justifyContent: 'center',
+          pointerEvents: 'none',
+        }}
+      >
+        <div
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: '8px',
+            background: 'rgba(11, 20, 14, 0.92)',
+            backdropFilter: 'blur(14px)',
+            border: '1.5px solid rgba(196, 240, 57, 0.45)',
+            borderRadius: '9999px',
+            padding: '5px 12px',
+            boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
+            pointerEvents: 'auto',
+          }}
+        >
+          <button
+            type="button"
+            onClick={handlePrevStage}
+            aria-label="Etapa anterior"
             style={{
-              background: 'linear-gradient(145deg, #0d1510 0%, #132218 100%)',
-              borderRadius: '24px',
-              border: '1.5px solid #1f3325',
-              boxShadow: '0 16px 40px rgba(0, 0, 0, 0.45)',
-              padding: '28px 24px',
-              marginBottom: '24px',
-              position: 'relative',
-              overflow: 'hidden',
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: 'none',
+              color: '#c4f039',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              transition: 'all 0.2s',
             }}
           >
-            {/* BARRA DE PROGRESO DE NIVEL Y XP */}
-            <div style={{ marginBottom: '24px' }}>
-              <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                <div>
-                  <span
-                    style={{
-                      fontSize: '0.74rem',
-                      fontWeight: 800,
-                      color: '#84cc16',
-                      letterSpacing: '0.06em',
-                      textTransform: 'uppercase',
-                    }}
-                  >
-                    PROGRESO DE ENTRENAMIENTO
-                  </span>
-                  <h3
-                    style={{
-                      fontSize: '1.18rem',
-                      fontWeight: 900,
-                      color: '#ffffff',
-                      margin: '2px 0 0 0',
-                    }}
-                  >
-                    NIVEL {pandaData.nivel} · <span style={{ color: '#c4f039' }}>{currentStage.name}</span>
-                  </h3>
-                </div>
+            <i className="bi bi-chevron-left"></i>
+          </button>
 
-                <div className="d-flex align-items-center gap-2">
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 900,
-                      color: '#c4f039',
-                      background: 'rgba(196, 240, 57, 0.12)',
-                      border: '1px solid rgba(196, 240, 57, 0.3)',
-                      padding: '4px 10px',
-                      borderRadius: '999px',
-                    }}
-                  >
-                    ▲ +100 XP por Asistencia
-                  </span>
-                  <span
-                    style={{
-                      fontSize: '0.72rem',
-                      fontWeight: 900,
-                      color: '#a3e635',
-                      background: 'rgba(163, 230, 53, 0.1)',
-                      border: '1px solid rgba(163, 230, 53, 0.25)',
-                      padding: '4px 10px',
-                      borderRadius: '999px',
-                    }}
-                  >
-                    🎋 +15 Bambús
-                  </span>
-                </div>
+          <div
+            onClick={() => setShowEvolutionModal(true)}
+            style={{
+              padding: '2px 8px',
+              fontSize: '0.92rem',
+              fontWeight: 900,
+              color: '#ffffff',
+              letterSpacing: '-0.01em',
+              display: 'flex',
+              alignItems: 'center',
+              gap: '8px',
+              cursor: 'pointer',
+            }}
+            title="Ver información de etapas"
+          >
+            <i className={`bi ${currentStage.iconClass} text-warning`}></i>
+            <span>{currentStage.name}</span>
+            <i className="bi bi-info-circle text-muted" style={{ fontSize: '0.8rem' }}></i>
+          </div>
+
+          <button
+            type="button"
+            onClick={handleNextStage}
+            aria-label="Etapa siguiente"
+            style={{
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: 'none',
+              color: '#c4f039',
+              width: '32px',
+              height: '32px',
+              borderRadius: '50%',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              cursor: 'pointer',
+              fontSize: '1rem',
+              transition: 'all 0.2s',
+            }}
+          >
+            <i className="bi bi-chevron-right"></i>
+          </button>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* BURBUJA DE DIÁLOGO FLOTANTE CENTRADA SOBRE EL PANDA      */}
+      {/* ======================================================== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '54px',
+          left: '50%',
+          transform: 'translateX(-50%)',
+          zIndex: 25,
+          width: 'calc(100% - 130px)',
+          maxWidth: '360px',
+          pointerEvents: 'auto',
+        }}
+      >
+        <div
+          onClick={handlePandaTap}
+          style={{
+            background: 'rgba(11, 20, 14, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1.5px solid rgba(196, 240, 57, 0.45)',
+            color: '#c4f039',
+            padding: '7px 16px',
+            borderRadius: '9999px',
+            fontSize: '0.8rem',
+            fontWeight: 800,
+            lineHeight: 1.25,
+            boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            textAlign: 'center',
+            animation: 'floatBubble 3s ease-in-out infinite',
+          }}
+          title="Toca al panda para motivarlo"
+        >
+          <i className="bi bi-chat-quote-fill" style={{ fontSize: '0.9rem', color: '#c4f039', flexShrink: 0 }}></i>
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{speechBubble}</span>
+        </div>
+      </div>
+
+      {/* ======================================================== */}
+      {/* COLUMNA IZQUIERDA: BOTONES VERTICALES DE INFORMACIÓN     */}
+      {/* ======================================================== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '110px',
+          left: '12px',
+          zIndex: 35,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}
+      >
+        {/* Nivel y XP */}
+        <button
+          type="button"
+          onClick={() => setShowProgressModal(true)}
+          title="Nivel y Progreso XP"
+          style={{
+            width: '50px',
+            height: '50px',
+            borderRadius: '16px',
+            background: 'rgba(15, 26, 19, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1.5px solid rgba(250, 204, 21, 0.55)',
+            color: '#facc15',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.15rem',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <i className="bi bi-trophy-fill"></i>
+          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#f8fafc', marginTop: '-2px' }}>
+            N{pandaData.nivel}
+          </span>
+        </button>
+
+        {/* Racha */}
+        <button
+          type="button"
+          onClick={() => setShowStreakModal(true)}
+          title="Racha de Asistencias"
+          style={{
+            width: '50px',
+            height: '50px',
+            borderRadius: '16px',
+            background: 'rgba(15, 26, 19, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1.5px solid rgba(248, 113, 113, 0.55)',
+            color: '#f87171',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.15rem',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <i className="bi bi-fire"></i>
+          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#f8fafc', marginTop: '-2px' }}>
+            {pandaData.racha}d
+          </span>
+        </button>
+
+        {/* Bambús */}
+        <button
+          type="button"
+          onClick={() => setShowBambusModal(true)}
+          title="Bambús Disponibles"
+          style={{
+            width: '50px',
+            height: '50px',
+            borderRadius: '16px',
+            background: 'rgba(15, 26, 19, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1.5px solid rgba(196, 240, 57, 0.55)',
+            color: '#c4f039',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.15rem',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <i className="bi bi-gem"></i>
+          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#c4f039', marginTop: '-2px' }}>
+            {pandaData.bambusDisponibles}
+          </span>
+        </button>
+      </div>
+
+      {/* ======================================================== */}
+      {/* COLUMNA DERECHA: BOTONES VERTICALES DE CONTROL Y ACCIÓN  */}
+      {/* ======================================================== */}
+      <div
+        style={{
+          position: 'absolute',
+          top: '110px',
+          right: '12px',
+          zIndex: 35,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: '10px',
+        }}
+      >
+        {/* Etapas de evolución */}
+        <button
+          type="button"
+          onClick={() => setShowEvolutionModal(true)}
+          title="Etapas de Evolución"
+          style={{
+            width: '50px',
+            height: '50px',
+            borderRadius: '16px',
+            background: 'rgba(15, 26, 19, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1.5px solid rgba(196, 240, 57, 0.45)',
+            color: '#c4f039',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.15rem',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.4)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <i className="bi bi-award-fill"></i>
+          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#c4f039', marginTop: '-2px' }}>
+            Evo
+          </span>
+        </button>
+
+        {/* Guía informativa */}
+        <button
+          type="button"
+          onClick={() => setShowGuideModal(true)}
+          title="Guía de Mi Pandita"
+          style={{
+            width: '50px',
+            height: '50px',
+            borderRadius: '16px',
+            background: 'rgba(15, 26, 19, 0.92)',
+            backdropFilter: 'blur(12px)',
+            border: '1.5px solid rgba(255, 255, 255, 0.18)',
+            color: '#94a3b8',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: 'pointer',
+            fontSize: '1.15rem',
+            boxShadow: '0 6px 18px rgba(0,0,0,0.4)',
+            transition: 'all 0.2s ease',
+          }}
+        >
+          <i className="bi bi-question-circle-fill"></i>
+          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', marginTop: '-2px' }}>
+            Guía
+          </span>
+        </button>
+      </div>
+
+      {/* ======================================================== */}
+      {/* ESCENARIO 3D HERO PRINCIPAL (OCUPA TODA LA PANTALLA)    */}
+      {/* ======================================================== */}
+      <div
+        style={{
+          flex: 1,
+          width: '100%',
+          height: '100%',
+          position: 'relative',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          zIndex: 10,
+          paddingTop: '24px',
+        }}
+      >
+        <PandaCharacter3D
+          stage={currentStage.key}
+          isTraining={isTraining}
+          onPandaTap={handlePandaTap}
+          autoRotate={autoRotate}
+          modelViewerRef={modelViewerRef}
+        />
+
+        {/* Partículas flotantes de XP */}
+        {floatingXp.map((item) => (
+          <div
+            key={item.id}
+            style={{
+              position: 'absolute',
+              top: '45%',
+              left: `calc(50% + ${item.offsetX}px)`,
+              transform: 'translate(-50%, -50%)',
+              background: '#c4f039',
+              color: '#111d15',
+              padding: '6px 16px',
+              borderRadius: '9999px',
+              fontSize: '0.9rem',
+              fontWeight: 900,
+              pointerEvents: 'none',
+              animation: 'floatUp 1.1s forwards',
+              boxShadow: '0 4px 18px rgba(196, 240, 57, 0.7)',
+              zIndex: 30,
+              display: 'flex',
+              alignItems: 'center',
+              gap: '4px',
+            }}
+          >
+            <i className="bi bi-lightning-charge-fill"></i>
+            <span>{item.text}</span>
+          </div>
+        ))}
+      </div>
+
+      {/* ======================================================== */}
+      {/* BARRA INFERIOR DE ACCIÓN ERGONÓMICA PARA CELULAR         */}
+      {/* ======================================================== */}
+      <div
+        style={{
+          position: 'relative',
+          zIndex: 30,
+          padding: '12px 16px 16px 16px',
+          background: 'linear-gradient(to top, rgba(7, 13, 9, 0.95) 0%, rgba(7, 13, 9, 0.7) 70%, transparent 100%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: '8px',
+        }}
+      >
+        <div style={{ display: 'flex', width: '100%', maxWidth: '420px', gap: '8px' }}>
+          {/* Botón Principal: Entrenar */}
+          <button
+            type="button"
+            onClick={handlePandaTap}
+            style={{
+              flex: 1.2,
+              background: '#c4f039',
+              color: '#111d15',
+              border: 'none',
+              borderRadius: '16px',
+              padding: '11px 12px',
+              fontSize: '0.84rem',
+              fontWeight: 900,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              boxShadow: '0 6px 20px rgba(196, 240, 57, 0.35)',
+              transition: 'transform 0.15s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <i className="bi bi-heart-pulse-fill" style={{ fontSize: '1rem' }}></i>
+            <span>¡Entrenar! ({repCount})</span>
+          </button>
+
+          {/* Botón Secundario: Dar Bambú */}
+          <button
+            type="button"
+            onClick={handleFeedPanda}
+            style={{
+              flex: 0.9,
+              background: 'rgba(255, 255, 255, 0.08)',
+              border: '1px solid rgba(196, 240, 57, 0.4)',
+              color: '#ffffff',
+              borderRadius: '16px',
+              padding: '11px 10px',
+              fontSize: '0.8rem',
+              fontWeight: 800,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '5px',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            <i className="bi bi-gem text-lime"></i>
+            <span>Bambú (-1)</span>
+          </button>
+
+          {/* Botón Nuevo: Canjear Puntos */}
+          <button
+            type="button"
+            onClick={() => navigate('/app/recompensas')}
+            style={{
+              flex: 1.1,
+              background: 'rgba(196, 240, 57, 0.18)',
+              border: '1.5px solid #c4f039',
+              color: '#c4f039',
+              borderRadius: '16px',
+              padding: '11px 10px',
+              fontSize: '0.8rem',
+              fontWeight: 900,
+              cursor: 'pointer',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '6px',
+              boxShadow: '0 4px 16px rgba(196, 240, 57, 0.2)',
+              transition: 'all 0.2s',
+              whiteSpace: 'nowrap',
+            }}
+            title="Ir a Recompensas y Canjes"
+          >
+            <i className="bi bi-gift-fill" style={{ fontSize: '0.9rem' }}></i>
+            <span>Canjear Puntos</span>
+          </button>
+        </div>
+
+        {/* Botón de Asistencia / Simulación */}
+        <button
+          type="button"
+          onClick={handleToggleCheckIn}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: pandaData.hasCheckedInToday ? '#84cc16' : '#94a3b8',
+            fontSize: '0.74rem',
+            fontWeight: 700,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: '6px',
+            padding: '4px',
+          }}
+        >
+          <i className={pandaData.hasCheckedInToday ? 'bi bi-check-circle-fill text-success' : 'bi bi-circle'}></i>
+          <span>{pandaData.hasCheckedInToday ? 'Asistencia registrada hoy (+100 XP activo)' : 'Marcar asistencia de hoy'}</span>
+        </button>
+      </div>
+
+      {/* ======================================================== */}
+      {/* MODAL 1: PROGRESO DE NIVEL & XP                         */}
+      {/* ======================================================== */}
+      {showProgressModal && (
+        <div className="modal-backdrop-custom" onClick={() => setShowProgressModal(false)}>
+          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-custom">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="bi bi-trophy-fill text-warning" style={{ fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Progreso de Nivel</h5>
+              </div>
+              <button className="btn-close-custom" onClick={() => setShowProgressModal(false)}>
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div style={{ padding: '16px 0' }}>
+              <div style={{ textAlign: 'center', marginBottom: '16px' }}>
+                <span style={{ fontSize: '2rem', fontWeight: 900, color: '#c4f039' }}>{pandaData.xp} XP</span>
+                <p style={{ margin: '4px 0 0 0', color: '#94a3b8', fontSize: '0.85rem' }}>
+                  Nivel {pandaData.nivel} · {currentStage.name}
+                </p>
               </div>
 
-              {/* BARRA GLOW DE XP */}
-              <div
-                style={{
-                  position: 'relative',
-                  width: '100%',
-                  height: '16px',
-                  background: '#09100a',
-                  borderRadius: '9999px',
-                  border: '1px solid #1f3325',
-                  overflow: 'visible',
-                  marginBottom: '8px',
-                  boxShadow: 'inset 0 2px 4px rgba(0,0,0,0.6)',
-                }}
-              >
+              {/* Barra de progreso */}
+              <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', height: '14px', overflow: 'hidden', marginBottom: '8px' }}>
                 <div
                   style={{
                     width: `${progressPercent}%`,
                     height: '100%',
+                    background: 'linear-gradient(90deg, #84cc16 0%, #c4f039 100%)',
                     borderRadius: '9999px',
-                    background: 'linear-gradient(90deg, #65a30d 0%, #84cc16 50%, #c4f039 100%)',
-                    boxShadow: '0 0 16px rgba(196, 240, 57, 0.7), 0 0 4px #c4f039',
-                    transition: 'width 0.6s cubic-bezier(0.4, 0, 0.2, 1)',
+                    transition: 'width 0.4s ease',
                   }}
                 />
-                <div
-                  style={{
-                    position: 'absolute',
-                    right: '-4px',
-                    top: '50%',
-                    transform: 'translateY(-50%)',
-                    width: '24px',
-                    height: '24px',
-                    borderRadius: '50%',
-                    background: 'radial-gradient(circle, #fde047 0%, #ca8a04 100%)',
-                    border: '2px solid #ffffff',
-                    boxShadow: '0 0 12px rgba(253, 224, 71, 0.8)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '0.8rem',
-                  }}
-                >
-                  ⭐
-                </div>
               </div>
 
-              <div className="d-flex justify-content-between align-items-center" style={{ fontSize: '0.78rem', fontWeight: 800 }}>
-                <span style={{ color: '#94a3b8' }}>
-                  {pandaData.xp.toLocaleString()} / {pandaData.nextNivelXp.toLocaleString()} XP ({progressPercent}%)
-                </span>
-                <span style={{ color: '#c4f039' }}>
-                  Faltan {(pandaData.nextNivelXp - pandaData.xp).toLocaleString()} XP para Nivel {pandaData.nivel + 1}
-                </span>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '18px' }}>
+                <span>Nivel {pandaData.nivel} ({pandaData.currentLevelBaseXp} XP)</span>
+                <span>{progressPercent}%</span>
+                <span>Nivel {pandaData.nivel + 1} ({pandaData.nextNivelXp} XP)</span>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '14px', padding: '12px', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.82rem' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>XP faltante para siguiente nivel:</span>
+                  <span style={{ fontWeight: 800, color: '#c4f039' }}>{Math.max(0, pandaData.nextNivelXp - pandaData.xp)} XP</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Visitas al club estimadas:</span>
+                  <span style={{ fontWeight: 800, color: '#ffffff' }}>{Math.max(1, Math.ceil((pandaData.nextNivelXp - pandaData.xp) / 25))} visitas</span>
+                </div>
               </div>
             </div>
 
-            {/* ESCENARIO DEL PANDA INTERACTIVO */}
-            <div
-              style={{
-                position: 'relative',
-                background: 'radial-gradient(circle at 50% 50%, #15271a 0%, #0a110c 75%)',
-                borderRadius: '24px',
-                border: '1px solid rgba(196, 240, 57, 0.2)',
-                padding: '32px 20px 24px',
-                overflow: 'hidden',
-                marginBottom: '20px',
-              }}
+            <button
+              type="button"
+              onClick={() => setShowProgressModal(false)}
+              className="btn-modal-action"
             >
-              {/* Estrellas doradas */}
-              <div
-                style={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  gap: '12px',
-                  fontSize: '1.4rem',
-                  marginBottom: '10px',
-                  filter: 'drop-shadow(0 0 10px rgba(250, 204, 21, 0.75))',
-                }}
-              >
-                <span>⭐</span>
-                <span style={{ transform: 'translateY(-6px)' }}>⭐</span>
-                <span>⭐</span>
-              </div>
-
-              {/* Burbujas de diálogo motivacionales */}
-              <div style={{ position: 'relative', height: '42px', marginBottom: '8px' }}>
-                <div
-                  style={{
-                    position: 'absolute',
-                    left: '12px',
-                    top: 0,
-                    background: '#c4f039',
-                    color: '#111d15',
-                    padding: '6px 14px',
-                    borderRadius: '14px 14px 0 14px',
-                    fontSize: '0.82rem',
-                    fontWeight: 900,
-                    boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                    animation: 'bounce 2.5s infinite',
-                  }}
-                  onClick={handlePandaTap}
-                >
-                  {speechBubbleLeft}
-                </div>
-
-                <div
-                  style={{
-                    position: 'absolute',
-                    right: '12px',
-                    top: 0,
-                    background: '#c4f039',
-                    color: '#111d15',
-                    padding: '6px 14px',
-                    borderRadius: '14px 14px 14px 0',
-                    fontSize: '0.82rem',
-                    fontWeight: 900,
-                    boxShadow: '0 4px 14px rgba(0,0,0,0.3)',
-                    whiteSpace: 'nowrap',
-                    cursor: 'pointer',
-                  }}
-                  onClick={handlePandaTap}
-                >
-                  {speechBubbleRight}
-                </div>
-              </div>
-
-              {/* Escenario y controles de etapa */}
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: '12px',
-                }}
-              >
-                {/* Botón Izquierdo Etapa */}
-                <button
-                  type="button"
-                  onClick={handlePrevStage}
-                  style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    borderRadius: '16px',
-                    padding: '12px 14px',
-                    color: '#ffffff',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.2s',
-                    minWidth: '78px',
-                  }}
-                  title={`Ver ${prevStage.name}`}
-                >
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#c4f039' }}>‹</div>
-                  <div style={{ fontSize: '1.4rem' }}>🐼</div>
-                  <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginTop: '2px' }}>
-                    {prevStage.name}
-                  </div>
-                </button>
-
-                {/* Personaje SVG interactivo */}
-                <div style={{ flex: '1 1 auto', position: 'relative', textAlign: 'center' }}>
-                  <PandaCharacterSVG
-                    stage={currentStage.key}
-                    isTraining={isTraining}
-                    reps={repCount}
-                    onPandaTap={handlePandaTap}
-                  />
-
-                  {/* Burbujas flotantes de XP */}
-                  {floatingXp.map((item) => (
-                    <div
-                      key={item.id}
-                      style={{
-                        position: 'absolute',
-                        top: '40%',
-                        left: `calc(50% + ${item.offsetX}px)`,
-                        transform: 'translate(-50%, -50%)',
-                        background: '#c4f039',
-                        color: '#111d15',
-                        padding: '6px 14px',
-                        borderRadius: '9999px',
-                        fontSize: '0.85rem',
-                        fontWeight: 900,
-                        pointerEvents: 'none',
-                        animation: 'floatUp 1.2s forwards',
-                        boxShadow: '0 4px 16px rgba(196, 240, 57, 0.7)',
-                        zIndex: 20,
-                      }}
-                    >
-                      {item.text}
-                    </div>
-                  ))}
-                </div>
-
-                {/* Botón Derecho Etapa */}
-                <button
-                  type="button"
-                  onClick={handleNextStage}
-                  style={{
-                    background: 'rgba(255,255,255,0.05)',
-                    border: '1px solid rgba(255,255,255,0.15)',
-                    borderRadius: '16px',
-                    padding: '12px 14px',
-                    color: '#ffffff',
-                    cursor: 'pointer',
-                    textAlign: 'center',
-                    transition: 'all 0.2s',
-                    minWidth: '78px',
-                  }}
-                  title={`Ver ${nextStage.name}`}
-                >
-                  <div style={{ fontSize: '1.2rem', fontWeight: 900, color: '#c4f039' }}>›</div>
-                  <div style={{ fontSize: '1.4rem' }}>🦍</div>
-                  <div style={{ fontSize: '0.68rem', color: '#94a3b8', fontWeight: 700, marginTop: '2px' }}>
-                    {nextStage.name}
-                  </div>
-                </button>
-              </div>
-
-              {/* Indicadores y datos de la etapa */}
-              <div style={{ textAlign: 'center', marginTop: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'center', gap: '8px', marginBottom: '8px' }}>
-                  {STAGES.map((s, idx) => (
-                    <button
-                      key={s.key}
-                      type="button"
-                      onClick={() => setActiveStageIndex(idx)}
-                      style={{
-                        width: idx === activeStageIndex ? '24px' : '8px',
-                        height: '8px',
-                        borderRadius: '9999px',
-                        border: 'none',
-                        background: idx === activeStageIndex ? '#c4f039' : 'rgba(255, 255, 255, 0.2)',
-                        cursor: 'pointer',
-                        transition: 'all 0.25s',
-                        padding: 0,
-                      }}
-                    />
-                  ))}
-                </div>
-
-                <div style={{ fontSize: '1.3rem', fontWeight: 900, color: '#ffffff' }}>
-                  {currentStage.name}
-                </div>
-                <div style={{ fontSize: '0.84rem', color: '#84cc16', fontWeight: 800 }}>
-                  {currentStage.levelLabel}
-                </div>
-                <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: '4px 0 0 0' }}>
-                  {currentStage.desc}
-                </p>
-              </div>
-            </div>
-
-            {/* BOTONES DE ENTRENAMIENTO Y ALIMENTACIÓN */}
-            <div className="d-flex flex-wrap justify-content-center align-items-center gap-3">
-              <button
-                type="button"
-                onClick={handlePandaTap}
-                style={{
-                  background: '#1a2e21',
-                  border: '1.5px solid #c4f039',
-                  color: '#c4f039',
-                  padding: '12px 28px',
-                  borderRadius: '14px',
-                  fontSize: '0.92rem',
-                  fontWeight: 900,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  boxShadow: '0 4px 14px rgba(196, 240, 57, 0.2)',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <span style={{ fontSize: '1.1rem' }}>💪</span>
-                <span>¡Hacer Repetición! ({repCount})</span>
-              </button>
-
-              <button
-                type="button"
-                onClick={handleFeedPanda}
-                style={{
-                  background: 'rgba(255,255,255,0.06)',
-                  border: '1.5px solid rgba(255,255,255,0.18)',
-                  color: '#ffffff',
-                  padding: '12px 24px',
-                  borderRadius: '14px',
-                  fontSize: '0.92rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '8px',
-                  transition: 'all 0.2s',
-                }}
-              >
-                <span style={{ fontSize: '1.1rem' }}>🎋</span>
-                <span>Dar Bambú (-1) (+10 XP)</span>
-              </button>
-            </div>
+              Entendido
+            </button>
           </div>
+        </div>
+      )}
 
-          {/* GALERÍA DE LAS 3 ETAPAS DE EVOLUCIÓN */}
-          <div
-            style={{
-              background: '#0d1510',
-              borderRadius: '20px',
-              border: '1px solid #1f3325',
-              padding: '20px 24px',
-            }}
-          >
-            <h4 style={{ fontSize: '0.96rem', fontWeight: 900, color: '#ffffff', marginBottom: '14px' }}>
-              🧬 Fases de Evolución del Panda
-            </h4>
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
-                gap: '14px',
-              }}
-            >
-              {STAGES.map((stg, i) => {
-                const isCurrent = i === activeStageIndex
+      {/* ======================================================== */}
+      {/* MODAL 2: ETAPAS DE EVOLUCIÓN (BLENDER)                  */}
+      {/* ======================================================== */}
+      {showEvolutionModal && (
+        <div className="modal-backdrop-custom" onClick={() => setShowEvolutionModal(false)}>
+          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-custom">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="bi bi-award-fill text-lime" style={{ fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Etapas de Evolución</h5>
+              </div>
+              <button className="btn-close-custom" onClick={() => setShowEvolutionModal(false)}>
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 0' }}>
+              {STAGES.map((s, idx) => {
+                const isSelected = activeStageIndex === idx
                 return (
                   <div
-                    key={stg.key}
-                    onClick={() => setActiveStageIndex(i)}
+                    key={s.key}
+                    onClick={() => {
+                      setActiveStageIndex(idx)
+                      setShowEvolutionModal(false)
+                    }}
                     style={{
-                      background: isCurrent ? '#16271c' : '#111d15',
-                      border: isCurrent ? '1.5px solid #c4f039' : '1px solid #1f3325',
+                      background: isSelected ? 'rgba(196, 240, 57, 0.12)' : 'rgba(255, 255, 255, 0.04)',
+                      border: `1.5px solid ${isSelected ? '#c4f039' : 'rgba(255, 255, 255, 0.1)'}`,
                       borderRadius: '16px',
-                      padding: '14px',
+                      padding: '12px 14px',
                       cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '12px',
                       transition: 'all 0.2s',
                     }}
                   >
-                    <div className="d-flex justify-content-between align-items-center mb-2">
-                      <span style={{ fontSize: '1.4rem' }}>{i === 2 ? '🦍' : '🐼'}</span>
-                      <span
-                        style={{
-                          fontSize: '0.68rem',
-                          fontWeight: 800,
-                          padding: '2px 8px',
-                          borderRadius: '999px',
-                          background: isCurrent ? '#c4f039' : 'rgba(255,255,255,0.08)',
-                          color: isCurrent ? '#111d15' : '#94a3b8',
-                        }}
-                      >
-                        {isCurrent ? 'ACTIVO' : stg.reqXp <= pandaData.xp ? 'DESBLOQUEADO' : 'BLOQUEADO 🔒'}
-                      </span>
+                    <div
+                      style={{
+                        width: '42px',
+                        height: '42px',
+                        borderRadius: '12px',
+                        background: isSelected ? '#c4f039' : 'rgba(255, 255, 255, 0.08)',
+                        color: isSelected ? '#111d15' : '#ffffff',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: '1.25rem',
+                        flexShrink: 0,
+                      }}
+                    >
+                      <i className={`bi ${s.iconClass}`}></i>
                     </div>
-                    <div style={{ fontSize: '0.9rem', fontWeight: 900, color: '#ffffff' }}>
-                      {stg.name}
-                    </div>
-                    <div style={{ fontSize: '0.74rem', color: '#84cc16', fontWeight: 700, margin: '2px 0 4px' }}>
-                      {stg.levelLabel}
-                    </div>
-                    <div style={{ fontSize: '0.72rem', color: '#94a3b8', lineHeight: 1.3 }}>
-                      {stg.desc}
+
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#ffffff' }}>{s.name}</span>
+                        {isSelected && (
+                          <span style={{ fontSize: '0.7rem', color: '#c4f039', fontWeight: 800, textTransform: 'uppercase' }}>
+                            En Pantalla
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#84cc16', fontWeight: 700 }}>{s.levelLabel}</div>
+                      <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#94a3b8', lineHeight: 1.25 }}>
+                        {s.desc}
+                      </p>
                     </div>
                   </div>
                 )
               })}
             </div>
+
+            <button
+              type="button"
+              onClick={() => setShowEvolutionModal(false)}
+              className="btn-modal-action"
+            >
+              Cerrar
+            </button>
           </div>
         </div>
+      )}
 
-        {/* COLUMNA DERECHA: ASISTENCIAS, MÉTRICAS, TIENDA Y GUÍA */}
-        <div className="pandita-right-col">
-          {/* CARD DE ASISTENCIA DEL DÍA (CHECK-IN) */}
-          <div
-            onClick={handleToggleCheckIn}
-            style={{
-              background: 'linear-gradient(135deg, #112015 0%, #15271b 100%)',
-              border: '2px solid #84cc16',
-              borderRadius: '20px',
-              padding: '20px',
-              marginBottom: '20px',
-              cursor: 'pointer',
-              boxShadow: '0 8px 24px rgba(132, 204, 22, 0.2)',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-            }}
-            title="Toca para registrar o simular asistencia"
-          >
-            <div className="d-flex align-items-center gap-3">
-              <div
-                style={{
-                  width: '50px',
-                  height: '50px',
-                  borderRadius: '16px',
-                  background: '#c4f039',
-                  color: '#111d15',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.6rem',
-                  fontWeight: 900,
-                  flexShrink: 0,
-                  boxShadow: '0 0 14px rgba(196, 240, 57, 0.5)',
-                }}
-              >
-                ✓
+      {/* ======================================================== */}
+      {/* MODAL 3: RACHA & HÁBITOS                                */}
+      {/* ======================================================== */}
+      {showStreakModal && (
+        <div className="modal-backdrop-custom" onClick={() => setShowStreakModal(false)}>
+          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-custom">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="bi bi-fire text-danger" style={{ fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Racha de Entrenamientos</h5>
               </div>
-              <div>
-                <div
+              <button className="btn-close-custom" onClick={() => setShowStreakModal(false)}>
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#f87171' }}>
+                {pandaData.racha} DÍAS
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '4px 0 16px 0' }}>
+                {pandaData.racha >= 3
+                  ? '¡Excelente constancia! Tu panda mantiene su masa muscular activa.'
+                  : 'Entrena 3 o más días consecutivos para alcanzar el estado de máxima energía.'}
+              </p>
+
+              <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '14px', padding: '12px', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'left', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Asistencias este mes:</span>
+                  <span style={{ fontWeight: 800, color: '#ffffff' }}>{pandaData.asistenciasMes} días</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#94a3b8' }}>Estado físico del avatar:</span>
+                  <span style={{ fontWeight: 800, color: '#c4f039' }}>Atlético / En forma</span>
+                </div>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowStreakModal(false)}
+              className="btn-modal-action"
+            >
+              ¡Seguir Entrenando!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* MODAL 4: BAMBÚS & CANJES                                */}
+      {/* ======================================================== */}
+      {showBambusModal && (
+        <div className="modal-backdrop-custom" onClick={() => setShowBambusModal(false)}>
+          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-custom">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="bi bi-gem text-lime" style={{ fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Bambús Acumulados</h5>
+              </div>
+              <button className="btn-close-custom" onClick={() => setShowBambusModal(false)}>
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div style={{ textAlign: 'center', padding: '16px 0' }}>
+              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#c4f039' }}>
+                {pandaData.bambusDisponibles} 🎋
+              </div>
+              <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '4px 0 16px 0' }}>
+                Puntos canjeables por suplementos, bebidas y pases en recepción.
+              </p>
+
+              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowBambusModal(false)
+                    navigate('/app/recompensas')
+                  }}
                   style={{
-                    fontSize: '0.96rem',
+                    background: '#c4f039',
+                    color: '#111d15',
+                    border: 'none',
+                    borderRadius: '12px',
+                    padding: '10px 18px',
                     fontWeight: 900,
-                    color: '#c4f039',
-                    lineHeight: 1.25,
+                    fontSize: '0.82rem',
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '6px',
                   }}
                 >
-                  {pandaData.hasCheckedInToday
-                    ? '🏆 ¡ASISTENCIA DEL DÍA REGISTRADA EN RECEPCIÓN!'
-                    : '⚡ REGISTRAR ASISTENCIA DE HOY (+100 XP)'}
-                </div>
-                <div style={{ fontSize: '0.76rem', color: '#94a3b8', marginTop: '4px' }}>
-                  {pandaData.hasCheckedInToday
-                    ? 'Check-in validado en torniquete. ¡Excelente disciplina!'
-                    : 'Pasa por recepción o simula tu entrenamiento diario.'}
-                </div>
+                  <i className="bi bi-gift-fill"></i>
+                  <span>Ver Tienda de Canjes</span>
+                </button>
               </div>
             </div>
-          </div>
-
-          {/* MÉTRICAS DE HÁBITOS & ENTRENAMIENTO */}
-          <div
-            style={{
-              background: '#0d1510',
-              borderRadius: '20px',
-              border: '1px solid #1f3325',
-              padding: '20px',
-              marginBottom: '20px',
-            }}
-          >
-            <h4 style={{ fontSize: '0.94rem', fontWeight: 900, color: '#ffffff', marginBottom: '14px' }}>
-              📊 Estadísticas de Rendimiento
-            </h4>
-
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px', marginBottom: '14px' }}>
-              {/* Asistencias este mes */}
-              <div
-                style={{
-                  background: '#152219',
-                  borderRadius: '16px',
-                  padding: '14px',
-                  border: '1px solid #233c2a',
-                }}
-              >
-                <div className="d-flex align-items-center gap-2 mb-1">
-                  <span style={{ fontSize: '1.3rem' }}>📅</span>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8' }}>ESTE MES</span>
-                </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#ffffff' }}>
-                  {pandaData.asistenciasMes}
-                </div>
-                <div style={{ fontSize: '0.7rem', color: '#84cc16', fontWeight: 700 }}>
-                  Asistencias registradas
-                </div>
-              </div>
-
-              {/* Racha activa */}
-              <div
-                style={{
-                  background: '#152219',
-                  borderRadius: '16px',
-                  padding: '14px',
-                  border: '1px solid #233c2a',
-                }}
-              >
-                <div className="d-flex align-items-center gap-2 mb-1">
-                  <span style={{ fontSize: '1.3rem', animation: 'pulse 1.5s infinite' }}>🔥</span>
-                  <span style={{ fontSize: '0.7rem', fontWeight: 800, color: '#94a3b8' }}>RACHA</span>
-                </div>
-                <div style={{ fontSize: '1.25rem', fontWeight: 900, color: '#f97316' }}>
-                  {pandaData.racha} Días
-                </div>
-                <div style={{ fontSize: '0.7rem', color: '#fdba74', fontWeight: 700 }}>
-                  Fuego de disciplina
-                </div>
-              </div>
-            </div>
-
-            {/* Saldo de Bambús */}
-            <div
-              style={{
-                background: '#152219',
-                borderRadius: '16px',
-                padding: '14px',
-                border: '1px solid #233c2a',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-              }}
-            >
-              <div className="d-flex align-items-center gap-3">
-                <span style={{ fontSize: '1.8rem' }}>🎋</span>
-                <div>
-                  <div style={{ fontSize: '0.72rem', fontWeight: 800, color: '#94a3b8' }}>
-                    SALDO DISPONIBLE
-                  </div>
-                  <div style={{ fontSize: '1.15rem', fontWeight: 900, color: '#c4f039' }}>
-                    {pandaData.bambusDisponibles} Bambús
-                  </div>
-                </div>
-              </div>
-              <button
-                type="button"
-                onClick={() => navigate('/app/recompensas')}
-                style={{
-                  background: '#c4f039',
-                  color: '#111d15',
-                  border: 'none',
-                  padding: '6px 14px',
-                  borderRadius: '10px',
-                  fontWeight: 900,
-                  fontSize: '0.78rem',
-                  cursor: 'pointer',
-                }}
-              >
-                Canjear
-              </button>
-            </div>
-          </div>
-
-          {/* ACCESOS DIRECTOS */}
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: '10px',
-              marginBottom: '20px',
-            }}
-          >
-            <button
-              type="button"
-              onClick={() => navigate('/app/recompensas')}
-              style={{
-                background: '#142218',
-                border: '1.5px solid #c4f039',
-                borderRadius: '16px',
-                padding: '14px 18px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                color: '#ffffff',
-                fontWeight: 900,
-                fontSize: '0.9rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
-            >
-              <div className="d-flex align-items-center gap-3">
-                <span style={{ fontSize: '1.3rem' }}>🎁</span>
-                <span>Tienda de Premios & Descuentos</span>
-              </div>
-              <span style={{ color: '#c4f039' }}>➔</span>
-            </button>
 
             <button
               type="button"
-              onClick={() => navigate('/app/asistencias')}
-              style={{
-                background: '#142218',
-                border: '1px solid #233c2a',
-                borderRadius: '16px',
-                padding: '14px 18px',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                color: '#ffffff',
-                fontWeight: 800,
-                fontSize: '0.88rem',
-                cursor: 'pointer',
-                transition: 'all 0.2s',
-              }}
+              onClick={() => setShowBambusModal(false)}
+              className="btn-modal-action"
             >
-              <div className="d-flex align-items-center gap-3">
-                <span style={{ fontSize: '1.3rem' }}>📖</span>
-                <span>Historial de Asistencias & XP</span>
-              </div>
-              <span style={{ color: '#94a3b8' }}>➔</span>
+              Cerrar
             </button>
-          </div>
-
-          {/* GUÍA Y REGLAS DEL JUEGO */}
-          <div
-            style={{
-              background: '#0d1510',
-              borderRadius: '20px',
-              border: '1px solid #1f3325',
-              padding: '20px',
-            }}
-          >
-            <div className="d-flex justify-content-between align-items-center mb-3">
-              <h4 style={{ fontSize: '0.94rem', fontWeight: 900, color: '#c4f039', margin: 0 }}>
-                🎮 Reglas y Guía de Gamificación
-              </h4>
-              <button
-                type="button"
-                onClick={() => setShowInfoDetails((prev) => !prev)}
-                style={{
-                  background: 'none',
-                  border: 'none',
-                  color: '#84cc16',
-                  fontSize: '0.8rem',
-                  fontWeight: 800,
-                  cursor: 'pointer',
-                }}
-              >
-                {showInfoDetails ? 'Ocultar' : 'Expandir'}
-              </button>
-            </div>
-
-            {showInfoDetails ? (
-              <div style={{ fontSize: '0.8rem', color: '#cbd5e1', lineHeight: 1.55 }}>
-                <div style={{ marginBottom: '10px' }}>
-                  <strong style={{ color: '#c4f039' }}>⚡ +100 XP por Asistencia:</strong>
-                  <p style={{ margin: '2px 0 0 0', color: '#94a3b8' }}>
-                    Cada check-in en el club suma experiencia a tu Panda y acelera su paso al siguiente nivel.
-                  </p>
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <strong style={{ color: '#f97316' }}>🔥 Racha de Disciplina:</strong>
-                  <p style={{ margin: '2px 0 0 0', color: '#94a3b8' }}>
-                    No dejes pasar más de 48 horas sin entrenar para mantener tu racha y ganar bambús extra.
-                  </p>
-                </div>
-                <div style={{ marginBottom: '10px' }}>
-                  <strong style={{ color: '#38bdf8' }}>🐼 Evolución Física:</strong>
-                  <p style={{ margin: '2px 0 0 0', color: '#94a3b8' }}>
-                    0 XP: Panda Bebé · 300 XP: Panda Juvenil · 1,000 XP: Panda Musculoso.
-                  </p>
-                </div>
-                <div>
-                  <strong style={{ color: '#a855f7' }}>🎋 Premios Reales:</strong>
-                  <p style={{ margin: '2px 0 0 0', color: '#94a3b8' }}>
-                    Canjea tus bambús acumulados directamente en recepción por shakes de proteína, pases y merchandising oficial.
-                  </p>
-                </div>
-              </div>
-            ) : (
-              <p style={{ fontSize: '0.8rem', color: '#94a3b8', margin: 0 }}>
-                Suma +100 XP por cada visita al gimnasio, mantén tu racha activa y evoluciona tu Panda de Bebé a Musculoso para canjear premios.
-              </p>
-            )}
           </div>
         </div>
-      </div>
+      )}
 
-      {/* ESTILOS CSS RESPONSIVOS PARA EL GRID DE COMPUTADORA Y MÓVIL */}
+      {/* ======================================================== */}
+      {/* MODAL 5: GUÍA & REGLAS DEL JUEGO                        */}
+      {/* ======================================================== */}
+      {showGuideModal && (
+        <div className="modal-backdrop-custom" onClick={() => setShowGuideModal(false)}>
+          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header-custom">
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <i className="bi bi-question-circle-fill text-warning" style={{ fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>¿Cómo Funciona Mi Pandita?</h5>
+              </div>
+              <button className="btn-close-custom" onClick={() => setShowGuideModal(false)}>
+                <i className="bi bi-x-lg"></i>
+              </button>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 0', fontSize: '0.82rem', color: '#94a3b8' }}>
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '12px', padding: '10px 12px' }}>
+                <span style={{ fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="bi bi-qr-code-scan text-lime"></i> Asistencia al Gimnasio
+                </span>
+                <p style={{ margin: '4px 0 0 0' }}>Cada check-in en recepción suma +100 XP a tu pandita y +10 bambús para canjear.</p>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '12px', padding: '10px 12px' }}>
+                <span style={{ fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="bi bi-award-fill text-warning"></i> Evolución en 3 Etapas
+                </span>
+                <p style={{ margin: '4px 0 0 0' }}>El modelo 3D evoluciona de Bebé a Intermedio y Musculoso a medida que acumulas experiencia.</p>
+              </div>
+
+              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '12px', padding: '10px 12px' }}>
+                <span style={{ fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="bi bi-hand-index-thumb-fill text-lime"></i> Giro 360° en Celular
+                </span>
+                <p style={{ margin: '4px 0 0 0' }}>Arrastra horizontalmente para girar al modelo hacia la izquierda o derecha en ángulo fijo.</p>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => setShowGuideModal(false)}
+              className="btn-modal-action"
+            >
+              ¡Entendido!
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================== */}
+      {/* ESTILOS CSS INCRUSTADOS PARA MODALES Y ANIMACIONES       */}
+      {/* ======================================================== */}
       <style>{`
-        .pandita-desktop-grid {
-          display: grid;
-          grid-template-columns: minmax(0, 1.35fr) minmax(360px, 0.85fr);
-          gap: 24px;
-          align-items: start;
+        .modal-backdrop-custom {
+          position: fixed;
+          inset: 0;
+          z-index: 2000;
+          background: rgba(0, 0, 0, 0.75);
+          backdrop-filter: blur(8px);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          padding: 16px;
+          animation: fadeIn 0.2s ease-out;
         }
-        @media (max-width: 992px) {
-          .pandita-desktop-grid {
-            grid-template-columns: 1fr;
-          }
+
+        .modal-content-custom {
+          background: #111d15;
+          border: 1px solid rgba(196, 240, 57, 0.3);
+          border-radius: 24px;
+          width: 100%;
+          max-width: 420px;
+          padding: 20px;
+          box-shadow: 0 20px 40px rgba(0,0,0,0.6);
+          animation: scaleUp 0.2s ease-out;
         }
+
+        .modal-header-custom {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          padding-bottom: 12px;
+        }
+
+        .btn-close-custom {
+          background: transparent;
+          border: none;
+          color: #94a3b8;
+          font-size: 1.1rem;
+          cursor: pointer;
+          width: 32px;
+          height: 32px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.2s;
+        }
+        .btn-close-custom:hover {
+          color: #ffffff;
+          background: rgba(255, 255, 255, 0.1);
+        }
+
+        .btn-modal-action {
+          width: 100%;
+          background: #c4f039;
+          color: #111d15;
+          border: none;
+          border-radius: 14px;
+          padding: 12px;
+          font-weight: 900;
+          font-size: 0.88rem;
+          cursor: pointer;
+          margin-top: 8px;
+          transition: all 0.2s;
+        }
+
+        .text-lime {
+          color: #c4f039 !important;
+        }
+
+        @keyframes fadeIn {
+          from { opacity: 0; }
+          to { opacity: 1; }
+        }
+
+        @keyframes scaleUp {
+          from { transform: scale(0.95); opacity: 0; }
+          to { transform: scale(1); opacity: 1; }
+        }
+
         @keyframes floatUp {
-          0% { opacity: 0; transform: translate(-50%, 0) scale(0.8); }
-          30% { opacity: 1; transform: translate(-50%, -20px) scale(1.1); }
-          100% { opacity: 0; transform: translate(-50%, -60px) scale(0.9); }
+          0% { opacity: 0; transform: translate(-50%, -20%) scale(0.8); }
+          30% { opacity: 1; transform: translate(-50%, -70%) scale(1.1); }
+          100% { opacity: 0; transform: translate(-50%, -130%) scale(0.9); }
         }
-        @keyframes bounce {
+
+        @keyframes floatBubble {
           0%, 100% { transform: translateY(0); }
           50% { transform: translateY(-4px); }
         }
