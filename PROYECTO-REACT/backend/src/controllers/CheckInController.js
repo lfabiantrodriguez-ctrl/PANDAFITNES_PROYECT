@@ -404,6 +404,7 @@ class CheckInController {
             await ReservationModel.updateStatus(reservation.id, 'confirmada');
 
             // Crear asistencia con método 'huella'
+            const alreadyAttendedToday = require('../services/pandaProgress').progress(await AttendanceModel.getByUser(targetUser.id)).hasCheckedInToday;
             const attendance = await AttendanceModel.create({
                 reservaId: reservation.id,
                 usuarioId: targetUser.id,
@@ -419,8 +420,8 @@ class CheckInController {
                 membership,
                 attendance,
                 horaEntrada: now.toISOString(),
-                xpSumados: 25,
-                bambusSumados: 10,
+                xpSumados: alreadyAttendedToday ? 0 : 25,
+                bambusSumados: alreadyAttendedToday ? 0 : 10,
             });
         } catch (error) {
             console.error("Error en check-in biométrico:", error);

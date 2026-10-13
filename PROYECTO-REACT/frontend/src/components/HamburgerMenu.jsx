@@ -1,3 +1,4 @@
+import UserAvatar from './UserAvatar'
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import '../styles/HamburgerMenu.css'
@@ -113,7 +114,7 @@ export default function HamburgerMenu({ items, sections, user, onLogout, onNavig
           onClick={() => navigate('/app/perfil')}
           title="Mi perfil (Toca para ver tu cuenta)"
         >
-          {userInitials}
+          {<UserAvatar user={user} />}
         </div>
       </div>
 

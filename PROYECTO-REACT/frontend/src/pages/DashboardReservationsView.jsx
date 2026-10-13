@@ -1,3 +1,4 @@
+import {canAccess} from '../utils/access'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ViewTitle from '../components/ViewTitle'
@@ -7,43 +8,18 @@ import { AttendanceService } from '../services/AttendanceService'
 import { MembershipService } from '../services/MembershipService'
 import { ConfigService } from '../services/ConfigService'
 import { DashboardService } from '../services/DashboardService'
+import {
+  formatDateTime,
+  formatDateOnly,
+  formatTimeOnly,
+  getTodayPeru,
+} from '../utils/formatters'
 
 const sections = [
   { key: 'principal', label: 'Vista General' },
   { key: 'aforo', label: 'Control de Aforo' },
   { key: 'clientes', label: 'Búsqueda Socios' },
 ]
-
-function formatDateTime(value) {
-  if (!value) return ''
-  const date = new Date(value.replace ? value.replace(' ', 'T') : value)
-  return new Intl.DateTimeFormat('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
-
-function formatDateOnly(value) {
-  if (!value) return ''
-  const date = new Date(value.replace ? value.replace(' ', 'T') : value)
-  return new Intl.DateTimeFormat('es-ES', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-  }).format(date)
-}
-
-function formatTimeOnly(value) {
-  if (!value) return ''
-  const date = new Date(value.replace ? value.replace(' ', 'T') : value)
-  return new Intl.DateTimeFormat('es-ES', {
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(date)
-}
 
 function getDurationInMinutes(entryStr, exitStr) {
   if (!entryStr || !exitStr) return 'En curso'
@@ -56,14 +32,8 @@ function getDurationInMinutes(entryStr, exitStr) {
 
 export default function DashboardReservationsView({ token, user }) {
   const navigate = useNavigate()
-  const isAdmin = user?.rol === 'admin'
-  const today = useMemo(() => {
-    const now = new Date()
-    const year = now.getFullYear()
-    const month = String(now.getMonth() + 1).padStart(2, '0')
-    const day = String(now.getDate()).padStart(2, '0')
-    return `${year}-${month}-${day}`
-  }, [])
+  const isAdmin = Boolean(user && user.rol !== 'cliente')
+  const today = useMemo(() => getTodayPeru(), [])
 
   // State shared / Admin
   const [activeSection, setActiveSection] = useState('principal')
@@ -540,7 +510,7 @@ export default function DashboardReservationsView({ token, user }) {
                         </span>
                       </td>
                       <td style={{ textAlign: 'right' }}>
-                        <button
+                        {canAccess(user,'socios') && (<button
                           type="button"
                           onClick={() => navigate('/app/socios')}
                           style={{
@@ -556,7 +526,7 @@ export default function DashboardReservationsView({ token, user }) {
                           }}
                         >
                           Renovar →
-                        </button>
+                        </button>)}
                       </td>
                     </tr>
                   ))
@@ -595,7 +565,7 @@ export default function DashboardReservationsView({ token, user }) {
                     <span>{m.plan}</span>
                     <span className="fw-semibold text-dark">Vence: {m.vencimiento}</span>
                   </div>
-                  <button
+                  {canAccess(user,'socios') && (<button
                     type="button"
                     onClick={() => navigate('/app/socios')}
                     className="btn btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-1"
@@ -610,7 +580,7 @@ export default function DashboardReservationsView({ token, user }) {
                   >
                     <i className="bi bi-arrow-repeat"></i>
                     <span>Renovar Membresía</span>
-                  </button>
+                  </button>)}
                 </div>
               ))
             ) : (
@@ -624,7 +594,7 @@ export default function DashboardReservationsView({ token, user }) {
             <span style={{ fontSize: '0.86rem', color: '#5f7165' }}>
               Gestione accesos biométricos y control de entradas desde recepción.
             </span>
-            <button
+            {canAccess(user,'check-in') && (<button
               type="button"
               className="action-btn"
               onClick={() => navigate('/app/check-in')}
@@ -644,7 +614,7 @@ export default function DashboardReservationsView({ token, user }) {
                 <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
               </svg>
               Ir a Check-in Recepción
-            </button>
+            </button>)}
           </div>
         </section>
       </div>
@@ -1277,7 +1247,7 @@ export default function DashboardReservationsView({ token, user }) {
             </p>
           </div>
           <div style={{ display: 'flex', gap: '10px', flexWrap: 'wrap' }}>
-            <button
+            {canAccess(user,'mi-pandita') && (<button
               type="button"
               className="action-btn"
               onClick={() => navigate('/app/mi-pandita')}
@@ -1285,17 +1255,17 @@ export default function DashboardReservationsView({ token, user }) {
             >
               <i className="bi bi-award-fill"></i>
               <span>Mi Pandita</span>
-            </button>
-            <button
+            </button>)}
+            {canAccess(user,'asistencias') && (<button
               type="button"
               className="action-btn"
-              onClick={() => navigate('/app/mis-asistencias')}
+              onClick={() => navigate('/app/asistencias')}
               style={{ display: 'inline-flex', alignItems: 'center', gap: '6px', fontSize: '0.86rem', padding: '8px 16px' }}
             >
               <i className="bi bi-stopwatch"></i>
               <span>Mis Asistencias</span>
-            </button>
-            <button
+            </button>)}
+            {canAccess(user,'recompensas') && (<button
               type="button"
               className="action-btn"
               onClick={() => navigate('/app/recompensas')}
@@ -1303,7 +1273,7 @@ export default function DashboardReservationsView({ token, user }) {
             >
               <i className="bi bi-gift-fill"></i>
               <span>Recompensas</span>
-            </button>
+            </button>)}
           </div>
         </section>
 
@@ -1314,9 +1284,9 @@ export default function DashboardReservationsView({ token, user }) {
               <h2 className="dashboard-panel-title" style={{ margin: 0 }}>Mis Últimos Entrenamientos</h2>
               <p className="dashboard-panel-subtitle" style={{ margin: '4px 0 0' }}>Registro de visitas confirmadas en recepción del club.</p>
             </div>
-            <button
+            {canAccess(user,'asistencias') && (<button
               type="button"
-              onClick={() => navigate('/app/mis-asistencias')}
+              onClick={() => navigate('/app/asistencias')}
               style={{
                 background: 'none',
                 border: 0,
@@ -1327,7 +1297,7 @@ export default function DashboardReservationsView({ token, user }) {
               }}
             >
               Ver historial completo →
-            </button>
+            </button>)}
           </div>
 
           <div className="table-frame d-none d-md-block">
@@ -1476,14 +1446,14 @@ export default function DashboardReservationsView({ token, user }) {
                   </p>
                 </div>
               </div>
-              <button
+              {canAccess(user,'configuracion') && (<button
                 type="button"
                 className="btn btn-sm btn-outline-dark fw-bold px-3 py-1"
                 style={{ borderRadius: '8px', fontSize: '0.8rem', whiteSpace: 'nowrap' }}
                 onClick={() => navigate('/app/configuracion')}
               >
                 ⚙️ Gestionar Aviso
-              </button>
+              </button>)}
             </div>
           )}
 
@@ -1496,7 +1466,7 @@ export default function DashboardReservationsView({ token, user }) {
                 Tu operación de hoy: socios, accesos en sala y crecimiento en un solo lugar.
               </p>
             </div>
-            <button
+            {canAccess(user,'socios') && (<button
               type="button"
               className="primary-action"
               onClick={() => navigate('/app/socios')}
@@ -1514,7 +1484,7 @@ export default function DashboardReservationsView({ token, user }) {
                 <line x1="5" y1="12" x2="19" y2="12"></line>
               </svg>
               Registrar membresía
-            </button>
+            </button>)}
           </div>
         </>
       ) : (

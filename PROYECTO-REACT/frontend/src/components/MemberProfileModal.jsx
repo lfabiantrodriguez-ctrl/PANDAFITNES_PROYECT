@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import ModalDialog from './ModalDialog'
 import { SocioService } from '../services/SocioService'
-import { formatDate } from '../utils/formatters'
+import { formatDate, formatTimePeru } from '../utils/formatters'
 
 export default function MemberProfileModal({
   isOpen,
@@ -286,9 +286,9 @@ export default function MemberProfileModal({
                     ) : (
                       asistencias.map((a) => (
                         <tr key={a.id}>
-                          <td className="px-2 py-2 fw-semibold text-truncate">{a.horaEntrada?.slice(0, 10)}</td>
-                          <td className="px-2 py-2 text-center">{a.horaEntrada?.slice(11, 16)} hrs</td>
-                          <td className="px-2 py-2 text-center text-muted">{a.horaSalida ? `${a.horaSalida.slice(11, 16)} hrs` : 'En curso'}</td>
+                          <td className="px-2 py-2 fw-semibold text-truncate">{formatDate(a.horaEntrada)}</td>
+                          <td className="px-2 py-2 text-center">{formatTimePeru(a.horaEntrada)} hrs</td>
+                          <td className="px-2 py-2 text-center text-muted">{a.horaSalida ? `${formatTimePeru(a.horaSalida)} hrs` : 'En curso'}</td>
                           <td className="px-2 py-2 text-center">
                             <span style={{ color: a.metodoRegistro === 'huella' ? '#15803d' : '#475569', fontWeight: 600, fontSize: '0.78rem' }}>
                               <i className={`bi ${a.metodoRegistro === 'huella' ? 'bi-fingerprint text-success' : 'bi-pen'} me-1`}></i>
@@ -351,7 +351,7 @@ export default function MemberProfileModal({
                         <p className="text-muted small m-0 mt-1">{o.descripcion}</p>
                         {o.fechaFin && (
                           <span className="text-muted" style={{ fontSize: '0.7rem' }}>
-                            Vence el: {o.fechaFin.slice(0, 10)}
+                            Vence el: {formatDate(o.fechaFin)}
                           </span>
                         )}
                       </div>

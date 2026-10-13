@@ -4,6 +4,7 @@ import ViewTitle from '../components/ViewTitle'
 import ModalDialog from '../components/ModalDialog'
 import { RewardService } from '../services/RewardService'
 import { AttendanceService } from '../services/AttendanceService'
+import { formatDate } from '../utils/formatters'
 
 // Galería de imágenes predeterminadas para selección rápida
 const REWARD_PRESETS = [
@@ -108,7 +109,7 @@ function getPartnerImage(partner) {
 
 export default function RewardsView({ token, user }) {
   const navigate = useNavigate()
-  const isAdmin = user?.rol === 'admin'
+  const isAdmin = Boolean(user && user.rol !== 'cliente')
   const [activeTab, setActiveTab] = useState('catalogo')
   const [loading, setLoading] = useState(true)
 
@@ -118,14 +119,15 @@ export default function RewardsView({ token, user }) {
     const handleResize = () => setIsMobile(window.innerWidth <= 768)
     window.addEventListener('resize', handleResize)
     return () => window.removeEventListener('resize', handleResize)
-  }, [])
+  }, [token])
 
   const [rewards, setRewards] = useState([])
   const [partnerships, setPartnerships] = useState([])
   const [myRedemptions, setMyRedemptions] = useState([])
   const [allRedemptions, setAllRedemptions] = useState([])
 
-  const [bambooBalance, setBambooBalance] = useState(240)
+  const [bambooBalance, setBambooBalance] = useState(null)
+  const [canRedeem, setCanRedeem] = useState(false)
   const [status, setStatus] = useState({ loading: false, error: '', success: '' })
 
   const [categories, setCategories] = useState(() => {
@@ -197,148 +199,31 @@ export default function RewardsView({ token, user }) {
 
   useEffect(() => {
     loadAllData()
-  }, [])
+    const update = () => { if (document.visibilityState === 'visible') loadAllData(true) }
+    const timer = setInterval(update, 15000)
+    window.addEventListener('focus', update)
+    window.addEventListener('panda-progress-updated', update)
+    return () => { clearInterval(timer); window.removeEventListener('focus', update); window.removeEventListener('panda-progress-updated', update) }
+  }, [token, isAdmin])
 
-  async function loadAllData() {
-    setLoading(true)
+  async function loadAllData(background = false) {
+    if (!background) setLoading(true)
     try {
-      const pandaRes = await AttendanceService.getPandaStatus(token).catch(() => null)
-      if (pandaRes && pandaRes.bambusDisponibles !== undefined) {
-        setBambooBalance(pandaRes.bambusDisponibles)
-      }
-
-      const recRes = await RewardService.getRewards(token).catch(() => null)
-      if (recRes && recRes.rewards) {
-        setRewards(recRes.rewards)
-      } else {
-        setRewards([
-          {
-            id: 1,
-            nombre: 'Bebida Isotónica Energizante',
-            descripcion: 'Hidratación inmediata con electrolitos y sales minerales en la cafetería del club.',
-            costoBambus: 80,
-            categoria: 'Bebidas e Hidratación',
-            stock: 45,
-            destacado: 1,
-            imagenUrl: 'https://images.unsplash.com/photo-1559839914-17aae19cec71?auto=format&fit=crop&w=800&q=80',
-          },
-          {
-            id: 2,
-            nombre: 'Kit de Bienvenida Panda',
-            descripcion: 'Botilito ergonómico de 750ml libre de BPA y pulsera deportiva oficial Panda Fitness.',
-            costoBambus: 100,
-            categoria: 'Indumentaria & Accesorios',
-            stock: 20,
-            destacado: 1,
-            imagenUrl: 'https://images.unsplash.com/photo-1544816155-12df9643f363?auto=format&fit=crop&w=800&q=80',
-          },
-          {
-            id: 3,
-            nombre: 'Toalla Deportiva Microfibra',
-            descripcion: 'Toalla ultra absorbente de secado rápido con logo bordado Panda Fitness para tus rutinas.',
-            costoBambus: 150,
-            categoria: 'Indumentaria & Accesorios',
-            stock: 35,
-            destacado: 0,
-            imagenUrl: 'https://images.unsplash.com/photo-1606902965551-dce093cda6e7?auto=format&fit=crop&w=800&q=80',
-          },
-          {
-            id: 4,
-            nombre: 'Shake de Proteína Premium 25g',
-            descripcion: 'Batido cremoso de proteína aislada whey con frutas frescas en la barra deportiva del club.',
-            costoBambus: 200,
-            categoria: 'Suplementos & Nutrición',
-            stock: 50,
-            destacado: 1,
-            imagenUrl: 'https://images.unsplash.com/photo-1579722821273-0f6c7d44362f?auto=format&fit=crop&w=800&q=80',
-          },
-          {
-            id: 5,
-            nombre: 'Pase Libre de 1 Día para Amigo',
-            descripcion: 'Permite que un amigo entrene un día completo contigo con acceso total a máquinas y clases.',
-            costoBambus: 300,
-            categoria: 'Servicios & Pases',
-            stock: 25,
-            destacado: 0,
-            imagenUrl: 'https://images.unsplash.com/photo-1534438327276-14e5300c3a48?auto=format&fit=crop&w=800&q=80',
-          },
-          {
-            id: 6,
-            nombre: '15% Descuento en Renovación',
-            descripcion: 'Descuento directo aplicable en tu próxima cuota mensual o renovación de membresía trimestral.',
-            costoBambus: 500,
-            categoria: 'Servicios & Pases',
-            stock: 15,
-            destacado: 0,
-            imagenUrl: 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80',
-          },
-        ])
-      }
-
-      const partRes = await RewardService.getPartnerships(token).catch(() => null)
-      if (partRes && partRes.partnerships) {
-        setPartnerships(partRes.partnerships)
-      } else {
-        setPartnerships([
-          {
-            id: 1,
-            aliadoNombre: 'Optimum Nutrition Store',
-            categoria: 'Nutrición y Suplementos',
-            descuentoTexto: '20% de Descuento',
-            descripcion: 'En proteínas whey, creatinas y pre-entrenos presentando tu membresía activa.',
-            codigoPromocional: 'PANDANUTRITION20',
-            destacado: 1,
-            imagenUrl: 'https://images.unsplash.com/photo-1584735935682-2f2b69dff9d2?auto=format&fit=crop&w=800&q=80',
-          },
-          {
-            id: 2,
-            aliadoNombre: 'Clínica Fisiocare',
-            categoria: 'Salud & Fisioterapia',
-            descuentoTexto: '30% en Descarga Muscular',
-            descripcion: 'Sesiones de recuperación muscular profunda, punción seca y masajes descontracturantes.',
-            codigoPromocional: 'PANDAFISIO30',
-            destacado: 1,
-            imagenUrl: 'https://images.unsplash.com/photo-1576091160399-112ba8d25d1d?auto=format&fit=crop&w=800&q=80',
-          },
-          {
-            id: 3,
-            aliadoNombre: 'SportStyle Indumentaria',
-            categoria: 'Ropa Deportiva',
-            descuentoTexto: '15% en Toda la Tienda',
-            descripcion: 'Prendas transpirables, zapatillas de running y accesorios de compresión de alta calidad.',
-            codigoPromocional: 'PANDASTYLE15',
-            destacado: 0,
-            imagenUrl: 'https://images.unsplash.com/photo-1483721074574-2454b51a8069?auto=format&fit=crop&w=800&q=80',
-          },
-          {
-            id: 4,
-            aliadoNombre: 'GreenBowl Saludable',
-            categoria: 'Gastronomía Saludable',
-            descuentoTexto: '25% en Platos y Ensaladas',
-            descripcion: 'Almuerzos altos en proteína y wraps saludables a sólo 2 cuadras de Panda Fitness.',
-            codigoPromocional: 'PANDAGREEN25',
-            destacado: 0,
-            imagenUrl: 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=800&q=80',
-          },
-        ])
-      }
-
-      const myRedRes = await RewardService.getMyRedemptions(token).catch(() => null)
-      if (myRedRes && myRedRes.redemptions) {
-        setMyRedemptions(myRedRes.redemptions)
-      }
-
-      if (isAdmin) {
-        const allRedRes = await RewardService.getAllRedemptions(token).catch(() => null)
-        if (allRedRes && allRedRes.redemptions) {
-          setAllRedemptions(allRedRes.redemptions)
-        }
-      }
-    } catch {
-      // Manejo silencioso
-    } finally {
-      setLoading(false)
-    }
+      const [panda, catalog, partners, mine, all] = await Promise.all([
+        AttendanceService.getPandaStatus(token), RewardService.getRewards(token), RewardService.getPartnerships(token),
+        RewardService.getMyRedemptions(token), isAdmin ? RewardService.getAllRedemptions(token) : Promise.resolve(null),
+      ])
+      setBambooBalance(panda.bambusDisponibles)
+      setCanRedeem(panda.canRedeem)
+      setRewards(catalog.rewards || [])
+      setPartnerships(partners.partnerships || [])
+      setMyRedemptions(mine.redemptions || [])
+      if (all) setAllRedemptions(all.redemptions || [])
+    } catch (error) {
+      setCanRedeem(false)
+      setBambooBalance(null); setRewards([]); setPartnerships([]); setMyRedemptions([])
+      setStatus({loading:false,error:error.message || 'No se pudieron cargar las recompensas.',success:''})
+    } finally { setLoading(false) }
   }
 
   const carouselItems = useMemo(() => {
@@ -456,6 +341,8 @@ export default function RewardsView({ token, user }) {
   }, [partnerships, searchTerm, selectedCategory])
 
   async function handleRedeemReward(item) {
+    if (status.loading || bambooBalance === null) return
+    if (!canRedeem) { setStatus({loading:false,error:'El saldo y el historial están conectados. Para nuevos canjes falta iniciar el servidor actualizado.',success:''}); return }
     if (bambooBalance < item.costoBambus) {
       setStatus({
         loading: false,
@@ -467,15 +354,12 @@ export default function RewardsView({ token, user }) {
 
     setStatus({ loading: true, error: '', success: '' })
     try {
-      await AttendanceService.redeemReward(token, {
-        recompensaNombre: item.nombre,
-        costoBambus: item.costoBambus,
-      })
+      const result = await AttendanceService.redeemReward(token, { recompensaId: item.id })
 
-      const newBalance = bambooBalance - item.costoBambus
+      const newBalance = result.bambusRestantes
       setBambooBalance(newBalance)
 
-      const redemptionCode = 'PANDA-' + Math.floor(1000 + Math.random() * 9000)
+      const redemptionCode = result.redemption.codigoCanje
       const newClaim = {
         nombre: item.nombre,
         costo: item.costoBambus,
@@ -487,17 +371,8 @@ export default function RewardsView({ token, user }) {
       setClaimedReward(newClaim)
       if (detailModalItem) setDetailModalItem(null)
 
-      setMyRedemptions((prev) => [
-        {
-          id: Date.now(),
-          recompensaNombre: item.nombre,
-          costoBambus: item.costoBambus,
-          codigoCanje: redemptionCode,
-          fechaCanje: new Date().toISOString(),
-          estado: 'canjeado',
-        },
-        ...prev,
-      ])
+      await loadAllData()
+      window.dispatchEvent(new Event('panda-progress-updated'))
 
       setStatus({
         loading: false,
@@ -799,7 +674,7 @@ export default function RewardsView({ token, user }) {
               flex: isMobile ? '1 1 140px' : 'none',
             }}
           >
-            <span style={{ fontSize: '1.15rem' }}>🐼</span>
+            <i className="bi bi-stars" style={{ fontSize: '1.15rem' }} aria-hidden="true" />
             <span>Ver Mi Pandita</span>
           </button>
 
@@ -2131,7 +2006,7 @@ export default function RewardsView({ token, user }) {
                         {r.costoBambus}
                       </td>
                       <td className="px-3 font-monospace fw-bold">{r.codigoCanje || 'PANDA-CANJE'}</td>
-                      <td className="px-3 text-muted">{r.fechaCanje?.slice(0, 10)}</td>
+                      <td className="px-3 text-muted">{formatDate(r.fechaCanje)}</td>
                       <td className="px-3">
                         <span
                           style={{

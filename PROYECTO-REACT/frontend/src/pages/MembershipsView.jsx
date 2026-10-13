@@ -5,10 +5,10 @@ import MemberProfileModal from '../components/MemberProfileModal'
 import OfferModal from '../components/OfferModal'
 import { MembershipService } from '../services/MembershipService'
 import { PlanService } from '../services/PlanService'
-import { formatDate } from '../utils/formatters'
+import { formatDate, getTodayPeru } from '../utils/formatters'
 
 export default function MembershipsView({ token }) {
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const today = useMemo(() => getTodayPeru(), [])
   const [socios, setSocios] = useState([])
   const [plans, setPlans] = useState([])
   const [search, setSearch] = useState('')

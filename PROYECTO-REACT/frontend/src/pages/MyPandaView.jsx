@@ -1,6 +1,7 @@
+import {canAccess} from '../utils/access'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AttendanceService } from '../services/AttendanceService'
+import usePandaAccount from '../hooks/usePandaAccount'
 import PandaCharacter3D from '../components/PandaCharacter3D'
 
 const PANDA_QUOTES = [
@@ -58,28 +59,14 @@ export default function MyPandaView({ token, user }) {
   const modelViewerRef = useRef(null)
 
   // Datos de evolución y asistencia
-  const [pandaData, setPandaData] = useState({
-    xp: 850,
-    nivel: 4,
-    etapa: '02 · PANDA INTERMEDIO',
-    etapaKey: 'intermedio',
-    racha: 3,
-    asistenciasMes: 15,
-    nextNivelXp: 1000,
-    currentLevelBaseXp: 600,
-    xpEnNivel: 250,
-    xpFaltante: 150,
-    bambusDisponibles: 240,
-    bambusGanados: 340,
-    hasCheckedInToday: true,
-  })
+  const {data:pandaData,error,refresh}=usePandaAccount(token)
 
   // Etapa seleccionada en el carrusel (0: bebe, 1: intermedio, 2: musculoso)
-  const [activeStageIndex, setActiveStageIndex] = useState(1)
+  const [activeStageIndex, setActiveStageIndex] = useState(0)
 
   // Estados interactivos
   const [isTraining, setIsTraining] = useState(false)
-  const [repCount, setRepCount] = useState(15)
+  const [repCount, setRepCount] = useState(0)
   const [speechBubble, setSpeechBubble] = useState('¡A entrenar duro hoy! Sin excusas.')
   const [floatingXp, setFloatingXp] = useState([])
   const [autoRotate, setAutoRotate] = useState(false)
@@ -92,36 +79,9 @@ export default function MyPandaView({ token, user }) {
   const [showBambusModal, setShowBambusModal] = useState(false)
   const [showGuideModal, setShowGuideModal] = useState(false)
 
-  useEffect(() => {
-    loadPandaStatus()
-  }, [])
-
-  async function loadPandaStatus() {
-    try {
-      const res = await AttendanceService.getPandaStatus(token)
-      if (res) {
-        setPandaData((prev) => ({
-          ...prev,
-          xp: res.xp ?? prev.xp,
-          nivel: res.nivel ?? prev.nivel,
-          etapa: res.etapa ?? prev.etapa,
-          etapaKey: res.etapaKey ?? prev.etapaKey,
-          racha: res.racha ?? prev.racha,
-          bambusDisponibles: res.bambusDisponibles ?? prev.bambusDisponibles,
-          nextNivelXp: res.nextNivelXp ?? prev.nextNivelXp,
-          currentLevelBaseXp: res.currentLevelBaseXp ?? prev.currentLevelBaseXp,
-          xpEnNivel: res.xpEnNivel ?? prev.xpEnNivel,
-          xpFaltante: res.xpFaltante ?? prev.xpFaltante,
-        }))
-
-        if (res.etapaKey === 'bebe') setActiveStageIndex(0)
-        else if (res.etapaKey === 'musculoso') setActiveStageIndex(2)
-        else setActiveStageIndex(1)
-      }
-    } catch {
-      // Conservar valores iniciales de prueba
-    }
-  }
+  useEffect(()=>{
+    if(pandaData) setActiveStageIndex({bebe:0,intermedio:1,musculoso:2}[pandaData.etapaKey] ?? 0)
+  },[pandaData?.etapaKey])
 
   // Tocar al Panda para entrenar
   function handlePandaTap(e) {
@@ -140,7 +100,7 @@ export default function MyPandaView({ token, user }) {
     // Efecto flotante de XP
     const newId = Date.now() + Math.random()
     const offsetX = (Math.random() - 0.5) * 80
-    setFloatingXp((prev) => [...prev, { id: newId, text: '+5 XP', offsetX }])
+    setFloatingXp((prev) => [...prev, { id: newId, text: '¡Vamos!', offsetX }])
 
     setTimeout(() => {
       setFloatingXp((prev) => prev.filter((item) => item.id !== newId))
@@ -152,52 +112,8 @@ export default function MyPandaView({ token, user }) {
   }
 
   // Alimentar al Panda
-  function handleFeedPanda() {
-    if (pandaData.bambusDisponibles < 1) {
-      setNotification('No tienes suficientes bambús disponibles.')
-      setTimeout(() => setNotification(''), 2500)
-      return
-    }
 
-    setPandaData((prev) => ({
-      ...prev,
-      bambusDisponibles: prev.bambusDisponibles - 1,
-      xp: prev.xp + 10,
-    }))
-    setSpeechBubble('¡Ñam! ¡El bambú me da super energía!')
-    setIsTraining(true)
-    setTimeout(() => setIsTraining(false), 600)
-
-    const newId = Date.now() + Math.random()
-    setFloatingXp((prev) => [...prev, { id: newId, text: '+10 XP', offsetX: 0 }])
-    setTimeout(() => {
-      setFloatingXp((prev) => prev.filter((item) => item.id !== newId))
-    }, 1100)
-
-    setNotification('¡Le diste un bambú a tu Pandita! +10 XP')
-    setTimeout(() => setNotification(''), 2500)
-  }
-
-  // Simular asistencia
-  function handleToggleCheckIn() {
-    setPandaData((prev) => {
-      const nextChecked = !prev.hasCheckedInToday
-      const xpIncrement = nextChecked ? 100 : 0
-      const nextXp = prev.xp + xpIncrement
-      return {
-        ...prev,
-        hasCheckedInToday: nextChecked,
-        xp: nextXp,
-      }
-    })
-
-    if (!pandaData.hasCheckedInToday) {
-      setNotification('¡Asistencia registrada! +100 XP añadidos.')
-    } else {
-      setNotification('Asistencia desmarcada para pruebas.')
-    }
-    setTimeout(() => setNotification(''), 2500)
-  }
+  function handleToggleCheckIn() { navigate('/app/asistencias') }
 
   // Navegación de etapas
   function handlePrevStage() {
@@ -217,6 +133,7 @@ export default function MyPandaView({ token, user }) {
     }
   }
 
+  if(!pandaData) return <div className="panda-view-wrapper" style={{display:'grid',placeItems:'center',color:'#dce8cd',minHeight:500}}><div><p role="status">{error || 'Cargando tu pandita…'}</p>{error&&<button className="btn btn-light" onClick={refresh}>Volver a consultar</button>}</div></div>
   const currentStage = STAGES[activeStageIndex]
   const progressPercent = Math.min(
     100,
@@ -665,37 +582,11 @@ export default function MyPandaView({ token, user }) {
             }}
           >
             <i className="bi bi-heart-pulse-fill" style={{ fontSize: '1rem' }}></i>
-            <span>¡Entrenar! ({repCount})</span>
-          </button>
-
-          {/* Botón Secundario: Dar Bambú */}
-          <button
-            type="button"
-            onClick={handleFeedPanda}
-            style={{
-              flex: 0.9,
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: '1px solid rgba(196, 240, 57, 0.4)',
-              color: '#ffffff',
-              borderRadius: '16px',
-              padding: '11px 10px',
-              fontSize: '0.8rem',
-              fontWeight: 800,
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '5px',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <i className="bi bi-gem text-lime"></i>
-            <span>Bambú (-1)</span>
+            <span>Animar panda</span>
           </button>
 
           {/* Botón Nuevo: Canjear Puntos */}
-          <button
+          {canAccess(user,'recompensas') && (<button
             type="button"
             onClick={() => navigate('/app/recompensas')}
             style={{
@@ -720,7 +611,7 @@ export default function MyPandaView({ token, user }) {
           >
             <i className="bi bi-gift-fill" style={{ fontSize: '0.9rem' }}></i>
             <span>Canjear Puntos</span>
-          </button>
+          </button>)}
         </div>
 
         {/* Botón de Asistencia / Simulación */}
@@ -741,7 +632,7 @@ export default function MyPandaView({ token, user }) {
           }}
         >
           <i className={pandaData.hasCheckedInToday ? 'bi bi-check-circle-fill text-success' : 'bi bi-circle'}></i>
-          <span>{pandaData.hasCheckedInToday ? 'Asistencia registrada hoy (+100 XP activo)' : 'Marcar asistencia de hoy'}</span>
+          <span>{pandaData.hasCheckedInToday ? 'Asistencia registrada hoy' : 'Ver mis asistencias'}</span>
         </button>
       </div>
 
@@ -929,7 +820,7 @@ export default function MyPandaView({ token, user }) {
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
                   <span style={{ color: '#94a3b8' }}>Estado físico del avatar:</span>
-                  <span style={{ fontWeight: 800, color: '#c4f039' }}>Atlético / En forma</span>
+                  <span style={{ fontWeight: 800, color: '#c4f039' }}>{pandaData.etapa}</span>
                 </div>
               </div>
             </div>
@@ -963,14 +854,14 @@ export default function MyPandaView({ token, user }) {
 
             <div style={{ textAlign: 'center', padding: '16px 0' }}>
               <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#c4f039' }}>
-                {pandaData.bambusDisponibles} 🎋
+                {pandaData.bambusDisponibles} 
               </div>
               <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '4px 0 16px 0' }}>
                 Puntos canjeables por suplementos, bebidas y pases en recepción.
               </p>
 
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                <button
+                {canAccess(user,'recompensas') && (<button
                   type="button"
                   onClick={() => {
                     setShowBambusModal(false)
@@ -992,7 +883,7 @@ export default function MyPandaView({ token, user }) {
                 >
                   <i className="bi bi-gift-fill"></i>
                   <span>Ver Tienda de Canjes</span>
-                </button>
+                </button>)}
               </div>
             </div>
 
@@ -1028,7 +919,7 @@ export default function MyPandaView({ token, user }) {
                 <span style={{ fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
                   <i className="bi bi-qr-code-scan text-lime"></i> Asistencia al Gimnasio
                 </span>
-                <p style={{ margin: '4px 0 0 0' }}>Cada check-in en recepción suma +100 XP a tu pandita y +10 bambús para canjear.</p>
+                <p style={{ margin: '4px 0 0 0' }}>Cada día con asistencia registrada suma 25 XP y 10 bambús. Las entradas repetidas el mismo día no duplican puntos.</p>
               </div>
 
               <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '12px', padding: '10px 12px' }}>

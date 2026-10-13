@@ -1,3 +1,4 @@
+import {homeFor} from '../utils/access'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthService } from '../services/AuthService'
@@ -114,7 +115,7 @@ export default function LoginModal({ isOpen, onClose, onLogin, initialDni = '' }
 
       onLogin(data.token, data.user)
       onClose()
-      navigate(ROLE_HOME[data.user.rol] || '/app/perfil', { replace: true })
+      navigate(homeFor(data.user), { replace: true })
     } catch (error) {
       const msg = error.message || 'Error al iniciar sesión'
       const lower = msg.toLowerCase()

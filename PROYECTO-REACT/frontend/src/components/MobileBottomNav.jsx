@@ -1,9 +1,15 @@
+import {staffSections} from '../utils/access'
 import { NavLink } from 'react-router-dom'
 import '../styles/MobileBottomNav.css'
 
 export default function MobileBottomNav({ user }) {
   if (!user) return null
 
+  if(!['admin','cliente'].includes(user.rol)){
+    const items=staffSections(user).flatMap(section=>section.items).filter(item=>item.to!=='/app/perfil').slice(0,4)
+    items.push({to:'/app/perfil',label:'Mi perfil',icon:'bi-person-circle'})
+    return <nav className="mobile-bottom-nav" aria-label="Navegación móvil inferior">{items.map(item=><NavLink key={item.to} to={item.to} className={({isActive})=>`mbn-item ${isActive?'active':''}`}><i className={`bi ${item.icon.startsWith('bi-')?item.icon:'bi-person-circle'}`} style={{fontSize:22}}/><span>{item.label}</span></NavLink>)}</nav>
+  }
   const isAdmin = user.rol === 'admin'
 
   return (

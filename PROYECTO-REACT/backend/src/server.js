@@ -1,3 +1,4 @@
+process.env.TZ = "America/Lima";
 require("dotenv").config({ quiet: true });
 const express = require("express");
 const cors = require("cors");
@@ -5,6 +6,7 @@ const apiRoutes = require("./routes");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
+const HOST = process.env.HOST || '127.0.0.1';
 
 app.use(cors());
 app.use(express.json({ limit: "15mb" }));
@@ -24,8 +26,9 @@ setInterval(() => {
 
 const { runSchemaMigrations } = require("./services/schemaMigration");
 
-runSchemaMigrations().then(() => {
-    app.listen(PORT, () => {
+runSchemaMigrations().then(async () => {
+    await require('./services/roleAccess').init();
+    app.listen(PORT, HOST, () => {
         console.log(`Servidor corriendo en puerto ${PORT}`);
     });
 });

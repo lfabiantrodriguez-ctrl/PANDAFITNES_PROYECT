@@ -1,3 +1,4 @@
+import {homeFor} from '../utils/access'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import LoginModal, { ROLE_HOME } from '../components/LoginModal'
@@ -88,7 +89,7 @@ export default function PandaCinemaPage({ onLogin, token, user, initialLoginOpen
     const observer=new IntersectionObserver(entries=>entries.forEach(entry=>{if(entry.isIntersecting){entry.target.classList.add('pc-visible');observer.unobserve(entry.target)}}),{threshold:.12})
     nodes.forEach(n=>observer.observe(n));return()=>observer.disconnect()
   },[reduced])
-  function access(){setMenuOpen(false);if(token&&user)navigate(ROLE_HOME[user.rol]||'/app/perfil');else setLoginOpen(true)}
+  function access(){setMenuOpen(false);if(token&&user)navigate(homeFor(user));else setLoginOpen(true)}
   async function install(){setMenuOpen(false);if(installPrompt){try{await installPrompt.prompt();const choice=await installPrompt.userChoice;if(choice.outcome==='accepted')setInstalled(true)}catch{installDialog.current?.showModal()}finally{setInstallPrompt(null)}}else installDialog.current?.showModal()}
   const phone=(config.landing_redes_whatsapp||config.landing_gym_telefono||'').replace(/\D/g,'')
   const whatsapp=phone?`https://wa.me/${phone}?text=${encodeURIComponent('Hola, quiero conocer Panda Fitness y sus membresías.')}`:null

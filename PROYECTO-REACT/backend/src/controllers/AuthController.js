@@ -4,6 +4,8 @@ const { publicUser, verifyPassword, signToken } = require("../utils/helpers");
 const { sendEmail } = require("../utils/email");
 const bcrypt = require("bcrypt");
 
+const decorateUser = row => require('../services/roleAccess').decorate(publicUser(row));
+
 class AuthController {
     static async login(req, res) {
         try {
@@ -26,7 +28,7 @@ class AuthController {
                 return res.status(401).json({ message: "Credenciales inválidas" });
             }
 
-            const user = publicUser(userRow);
+            const user = await decorateUser(userRow);
 
             return res.json({
                 token: signToken(user),
@@ -78,7 +80,7 @@ class AuthController {
                 console.log(`Nuevo usuario registrado automáticamente con Google: ${userEmail}`);
             }
 
-            const user = publicUser(userRow);
+            const user = await decorateUser(userRow);
 
             return res.json({
                 message: "Autenticado con Google correctamente",
@@ -226,7 +228,7 @@ class AuthController {
                 return res.status(401).json({ message: "Usuario no disponible" });
             }
 
-            return res.json({ user: publicUser(userRow) });
+            return res.json({ user: await decorateUser(userRow) });
         } catch (error) {
             console.error("Error obteniendo perfil:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
@@ -333,7 +335,7 @@ class AuthController {
 
             const updatedUser = await UserModel.findActiveById(userId);
 
-            return res.json({ message: "Perfil actualizado correctamente", user: publicUser(updatedUser) });
+            return res.json({ message: "Perfil actualizado correctamente", user: await decorateUser(updatedUser) });
         } catch (error) {
             console.error("Error actualizando perfil:", error);
             return res.status(500).json({ message: "Error interno del servidor" });

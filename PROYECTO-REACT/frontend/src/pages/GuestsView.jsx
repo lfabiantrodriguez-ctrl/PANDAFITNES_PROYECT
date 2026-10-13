@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import ViewTitle from '../components/ViewTitle'
 import ModalDialog from '../components/ModalDialog'
 import { GuestService } from '../services/GuestService'
+import { getTodayPeru } from '../utils/formatters'
 
 function formatToLocalDateTime(date) {
   const pad = (value) => String(value).padStart(2, '0')
@@ -56,7 +57,7 @@ function isGymOpenNow() {
 }
 
 export default function GuestsView({ token }) {
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const today = useMemo(() => getTodayPeru(), [])
   const defaultSchedule = useMemo(() => getDefaultGuestSchedule(), [])
   const [gymOpenNow, setGymOpenNow] = useState(isGymOpenNow())
   const [guests, setGuests] = useState([])

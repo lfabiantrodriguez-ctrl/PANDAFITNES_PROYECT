@@ -4,14 +4,14 @@ import ViewTitle from '../components/ViewTitle'
 import ModalDialog from '../components/ModalDialog'
 import MemberProfileModal from '../components/MemberProfileModal'
 import OfferModal from '../components/OfferModal'
-import { formatDate } from '../utils/formatters'
+import { formatDate, getTodayPeru } from '../utils/formatters'
 import { SocioService } from '../services/SocioService'
 import { PlanService } from '../services/PlanService'
 import { DniService } from '../services/DniService'
 import { MembershipService } from '../services/MembershipService'
 
 export default function MembersView({ token }) {
-  const today = useMemo(() => new Date().toISOString().slice(0, 10), [])
+  const today = useMemo(() => getTodayPeru(), [])
   const [members, setMembers] = useState([])
   const [plans, setPlans] = useState([])
   const [showForm, setShowForm] = useState(false)

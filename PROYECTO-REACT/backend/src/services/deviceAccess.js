@@ -22,14 +22,47 @@ function take(id, owner, kind) {
         throw new Error('La verificación expiró. Inténtalo nuevamente.');
     return value;
 }
+function getLanOrigins() {
+    const origins = [];
+    try {
+        const os = require('node:os');
+        const nets = os.networkInterfaces();
+        for (const name of Object.keys(nets)) {
+            for (const net of nets[name]) {
+                if (net.family === 'IPv4' && !net.internal) {
+                    origins.push(`http://${net.address}:8081`);
+                    origins.push(`http://${net.address}:8082`);
+                }
+            }
+        }
+    } catch (_) {}
+    return origins;
+}
+
 function context(req) {
     const defaultOrigins = ['http://localhost:8081', 'http://localhost:8082', 'http://127.0.0.1:8081', 'http://127.0.0.1:8082'];
     const envOrigins = (process.env.WEBAUTHN_ORIGINS || '').split(',').map(x => x.trim()).filter(Boolean);
-    const allowed = [...defaultOrigins, ...envOrigins];
-    const origin = req.headers.origin;
-    if (!origin || !allowed.includes(origin)) throw new Error('Este origen no está habilitado para verificar el dispositivo.');
+    const lanOrigins = getLanOrigins();
+    const allowed = [...defaultOrigins, ...envOrigins, ...lanOrigins];
+    const origin = req?.headers?.origin;
+    if (!origin) throw new Error('Este origen no está habilitado para verificar el dispositivo.');
+
+    let isAllowed = allowed.includes(origin);
+    if (!isAllowed) {
+        const reqHost = req?.headers?.['x-forwarded-host'] || req?.headers?.host;
+        try {
+            const u = new URL(origin);
+            if (u.protocol === 'https:' && reqHost && (u.host === reqHost || reqHost.split(':')[0] === u.hostname)) {
+                isAllowed = true;
+            } else if ((u.hostname === 'localhost' || u.hostname === '127.0.0.1') && u.protocol === 'http:') {
+                isAllowed = true;
+            }
+        } catch (_) {}
+    }
+
+    if (!isAllowed) throw new Error('Este origen no está habilitado para verificar el dispositivo.');
     const url = new URL(origin);
-    const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1';
+    const isLocal = url.hostname === 'localhost' || url.hostname === '127.0.0.1' || url.hostname === '::1' || lanOrigins.includes(origin);
     if (url.protocol !== 'https:' && !isLocal && !envOrigins.includes(origin)) throw new Error('El dispositivo requiere una conexión HTTPS.');
     return { origin, rpID: url.hostname };
 }
@@ -63,4 +96,68 @@ function claim(ticket, owner, dni) {
     if (value.dni !== dni) throw new Error('El DNI cambió. Registra el dispositivo nuevamente.');
     return value;
 }
-module.exports = { init, issue, take, context, verify, save, claim };
+
+const remoteSessions = new Map();
+function createRemoteSession(owner, { action, dni, socioNombre }) {
+    for (const [id, s] of remoteSessions) {
+        if (s.expires < Date.now()) remoteSessions.delete(id);
+    }
+    const id = crypto.randomUUID();
+    const session = {
+        id,
+        owner: String(owner),
+        action, // 'register' | 'authenticate'
+        dni: dni ? String(dni) : null,
+        socioNombre: socioNombre || null,
+        status: 'pending',
+        result: null,
+        error: null,
+        created: Date.now(),
+        expires: Date.now() + 180000,
+    };
+    remoteSessions.set(id, session);
+    return session;
+}
+function getRemoteSession(id, owner) {
+    const s = remoteSessions.get(id);
+    if (!s || s.expires < Date.now()) return null;
+    if (owner && s.owner !== String(owner)) return null;
+    return s;
+}
+function getActiveRemoteSession(owner) {
+    for (const [_, s] of remoteSessions) {
+        if (s.owner === String(owner) && s.status === 'pending' && s.expires > Date.now()) {
+            return s;
+        }
+    }
+    return null;
+}
+function completeRemoteSession(id, result) {
+    const s = remoteSessions.get(id);
+    if (!s || s.expires < Date.now()) throw new Error('La sesión de escaneo móvil expiró.');
+    s.status = 'completed';
+    s.result = result;
+    return s;
+}
+function cancelRemoteSession(id) {
+    const s = remoteSessions.get(id);
+    if (s) {
+        s.status = 'cancelled';
+    }
+    return s;
+}
+
+module.exports = {
+    init,
+    issue,
+    take,
+    context,
+    verify,
+    save,
+    claim,
+    createRemoteSession,
+    getRemoteSession,
+    getActiveRemoteSession,
+    completeRemoteSession,
+    cancelRemoteSession,
+};

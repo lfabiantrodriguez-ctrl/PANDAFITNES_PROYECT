@@ -57,7 +57,9 @@ export class AuthService {
     })
     const data = await response.json()
     if (!response.ok) {
-      throw new Error(data.message || 'Sesión inválida')
+      const error=new Error(data.message || 'Sesión inválida')
+      error.status=response.status
+      throw error
     }
     return data
   }

@@ -248,20 +248,9 @@ async function runSchemaMigrations() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `);
 
-        // Sembrar recompensas iniciales si la tabla está vacía
+        // El catálogo se administra desde el sistema; no insertar ejemplos.
         const [recs] = await db.execute("SELECT COUNT(*) AS total FROM recompensas_catalogo");
-        if (recs[0]?.total === 0) {
-            await db.execute(`
-                INSERT INTO recompensas_catalogo (nombre, descripcion, costo_bambus, categoria, stock) VALUES
-                ('Bebida Isotónica Energizante', 'Hidratación inmediata con electrolitos en la cafetería del club.', 80, 'bebidas', 100),
-                ('Kit de Bienvenida Panda', 'Botilito ergonómico de 750ml y pulsera deportiva oficial.', 100, 'accesorios', 60),
-                ('Toalla Deportiva Microfibra', 'Toalla de secado rápido con logo bordado Panda Fitness.', 150, 'accesorios', 40),
-                ('Shake de Proteína Premium 25g', 'Batido cremoso de proteína whey con frutas en barra deportiva.', 200, 'suplementos', 80),
-                ('Pase Libre de 1 Día para Amigo', 'Permite que un amigo entrene un día completo contigo.', 300, 'servicios', 50),
-                ('15% Descuento en Renovación', 'Descuento directo aplicable en tu próxima cuota o mes.', 500, 'servicios', 30)
-            `);
-            console.log("Recompensas iniciales sembradas en recompensas_catalogo");
-        }
+        
 
         // Columnas de imagen y destacado para recompensas
         await ensureColumnExists(
@@ -301,18 +290,9 @@ async function runSchemaMigrations() {
             "TINYINT(1) DEFAULT 0 AFTER codigo_promocional",
         );
 
-        // Sembrar convenios iniciales si la tabla está vacía
+        // Los convenios se registran desde el sistema; no insertar ejemplos.
         const [partsCount] = await db.execute("SELECT COUNT(*) AS total FROM convenios_comerciales");
-        if (partsCount[0]?.total === 0) {
-            await db.execute(`
-                INSERT INTO convenios_comerciales (aliado_nombre, categoria, imagen_url, descuento_texto, descripcion, codigo_promocional, destacado) VALUES
-                ('Optimum Nutrition Store', 'Nutrición y Suplementos', 'https://images.unsplash.com/photo-1593095948071-474c5cc2989d?auto=format&fit=crop&w=600&q=80', '20% de Descuento', 'En proteínas, creatinas y aminoácidos presentando tu membresía activa.', 'PANDANUTRITION20', 1),
-                ('Clínica Fisiocare', 'Salud & Fisioterapia', 'https://images.unsplash.com/photo-1544367567-0f2fcb009e0b?auto=format&fit=crop&w=600&q=80', '30% en Descarga Muscular', 'Sesiones de recuperación muscular y masajes descontracturantes para socios.', 'PANDAFISIO30', 1),
-                ('SportStyle Indumentaria', 'Ropa Deportiva', 'https://images.unsplash.com/photo-1515886657613-9f3515b0c78f?auto=format&fit=crop&w=600&q=80', '15% en Toda la Tienda', 'Ropa deportiva, zapatillas de running y accesorios de entrenamiento.', 'PANDASTYLE15', 0),
-                ('GreenBowl Saludable', 'Gastronomía Saludable', 'https://images.unsplash.com/photo-1512621776951-a57141f2eefd?auto=format&fit=crop&w=600&q=80', '25% en Platos y Ensaladas', 'Almuerzos y cenas proteicas a 2 cuadras de Panda Fitness.', 'PANDAGREEN25', 1)
-            `);
-            console.log("Convenios iniciales sembrados");
-        }
+        
 
         // Actualizar imágenes iniciales para recompensas que no tengan imagen
         await db.execute(`
@@ -368,17 +348,9 @@ async function runSchemaMigrations() {
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `);
 
-        // Sembrar ofertas iniciales si la tabla está vacía
+        // Las ofertas se registran desde el sistema; no insertar ejemplos.
         const [ofertasExist] = await db.execute("SELECT COUNT(*) AS total FROM ofertas_socios");
-        if (ofertasExist[0]?.total === 0) {
-            await db.execute(`
-                INSERT INTO ofertas_socios (usuario_id, titulo, descripcion, tipo, valor, codigo_cupon, fecha_fin, estado) VALUES
-                (NULL, 'Promoción General: 15% OFF en Plan Trimestral', 'Válido para todos los socios activos al renovar con anticipación.', 'descuento_porcentaje', 15.00, 'PROMO15', DATE_ADD(CURDATE(), INTERVAL 30 DAY), 'activo'),
-                (2, 'Beneficio Socio VIP: 20% de Descuento Exclusivo', 'Premio por tu constancia y lealtad entrenando en Panda Fitness.', 'descuento_porcentaje', 20.00, 'VIP20BRAYAN', DATE_ADD(CURDATE(), INTERVAL 45 DAY), 'activo'),
-                (3, 'Plan Reactivación: 7 Días Adicionales de Regalo', 'Vuelve a entrenar con nosotros y recibe una semana extra sin costo.', 'dias_gratis', 7.00, 'REACTIVA7', DATE_ADD(CURDATE(), INTERVAL 15 DAY), 'activo')
-            `);
-            console.log("Ofertas iniciales sembradas en ofertas_socios");
-        }
+        
     } catch (error) {
         console.error("Error ejecutando migraciones de esquema:", error);
     }

@@ -9,6 +9,7 @@ const pool = mysql.createPool({
     database: process.env.DB_NAME || "panda_fitness",
     waitForConnections: true,
     connectionLimit: 10,
+    timezone: "-05:00",
 });
 
 module.exports = pool;

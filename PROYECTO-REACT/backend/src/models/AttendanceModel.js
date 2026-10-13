@@ -164,21 +164,37 @@ class AttendanceModel {
         return true;
     }
 
-    static async redeemReward(usuarioId, { recompensaNombre, costoBambus }) {
-        await db.execute(
-            `INSERT INTO canjes_recompensas (usuario_id, recompensa_nombre, costo_bambus) VALUES (?, ?, ?)`,
-            [usuarioId, recompensaNombre, costoBambus],
-        );
-        await db.execute(
-            `UPDATE usuarios SET bambus_canjeados = COALESCE(bambus_canjeados, 0) + ? WHERE id = ?`,
-            [costoBambus, usuarioId],
-        );
-        return true;
+    static async redeemReward(usuarioId, { recompensaId }) {
+        if (!Number.isInteger(Number(recompensaId)) || Number(recompensaId) < 1) throw new Error('Selecciona una recompensa del catálogo.');
+        const connection = await db.getConnection();
+        try {
+            await connection.beginTransaction();
+            // Serialize spending for the account and lock stock before calculating the balance.
+            const [users] = await connection.execute('SELECT id FROM usuarios WHERE id=? FOR UPDATE', [usuarioId]);
+            if (!users[0]) throw new Error('Socio no encontrado.');
+            const [rewards] = await connection.execute('SELECT id, nombre, costo_bambus, stock FROM recompensas_catalogo WHERE id=? AND activo=1 FOR UPDATE', [recompensaId]);
+            const reward = rewards[0];
+            if (!reward || Number(reward.stock) < 1 || !Number.isFinite(Number(reward.costo_bambus)) || Number(reward.costo_bambus) < 1) throw new Error('Esta recompensa no está disponible.');
+            const [entries] = await connection.execute('SELECT hora_entrada AS horaEntrada FROM asistencias WHERE usuario_id=?', [usuarioId]);
+            const [spent] = await connection.execute('SELECT costo_bambus AS costoBambus, estado FROM canjes_recompensas WHERE usuario_id=?', [usuarioId]);
+            const balance = require('../services/pandaProgress').progress(entries, {}, spent).bambusDisponibles;
+            const cost = Number(reward.costo_bambus);
+            if (balance < cost) throw new Error(`Bambús insuficientes. Disponibles: ${balance}. Necesarios: ${cost}.`);
+            const codigoCanje = 'PANDA-' + require('node:crypto').randomUUID();
+            // Keep within the existing 30-character column.
+            const code = codigoCanje.slice(0, 30);
+            const [insert] = await connection.execute('INSERT INTO canjes_recompensas (usuario_id, recompensa_nombre, costo_bambus, codigo_canje, estado) VALUES (?, ?, ?, ?, ?)', [usuarioId, reward.nombre, cost, code, 'pendiente']);
+            await connection.execute('UPDATE recompensas_catalogo SET stock=stock-1 WHERE id=?', [reward.id]);
+            await connection.execute('UPDATE usuarios SET bambus_canjeados=COALESCE(bambus_canjeados,0)+? WHERE id=?', [cost, usuarioId]);
+            await connection.commit();
+            return {bambusRestantes:balance-cost, redemption:{id:insert.insertId,recompensaNombre:reward.nombre,costoBambus:cost,codigoCanje:code,estado:'pendiente'}};
+        } catch (error) { await connection.rollback(); throw error; }
+        finally { connection.release(); }
     }
 
     static async getUserRedemptions(usuarioId) {
         const [rows] = await db.execute(
-            `SELECT id, recompensa_nombre AS recompensaNombre, costo_bambus AS costoBambus, fecha_canje AS fechaCanje, estado
+            `SELECT id, recompensa_nombre AS recompensaNombre, costo_bambus AS costoBambus, codigo_canje AS codigoCanje, fecha_canje AS fechaCanje, estado
              FROM canjes_recompensas
              WHERE usuario_id = ?
              ORDER BY fecha_canje DESC`,

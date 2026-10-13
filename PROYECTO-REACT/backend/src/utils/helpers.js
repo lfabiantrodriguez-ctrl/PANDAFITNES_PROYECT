@@ -64,7 +64,15 @@ function isValidDni(dni) {
 }
 
 function toDateOnly(date) {
-    return date.toISOString().slice(0, 10);
+    if (!date) return "";
+    const d = date instanceof Date ? date : new Date(date);
+    if (isNaN(d.getTime())) return "";
+    return new Intl.DateTimeFormat("en-CA", {
+        timeZone: "America/Lima",
+        year: "numeric",
+        month: "2-digit",
+        day: "2-digit",
+    }).format(d);
 }
 
 function addDays(dateValue, days) {

@@ -3,7 +3,7 @@ import ModalDialog from '../components/ModalDialog'
 import { ProfileService } from '../services/ProfileService'
 import { MembershipService } from '../services/MembershipService'
 import { saveStoredSession } from '../utils/session'
-import { formatDate } from '../utils/formatters'
+import { formatDate, getTodayPeru } from '../utils/formatters'
 
 export default function ProfileView({ user, token, setUser }) {
   const [showPwdModal, setShowPwdModal] = useState(false)
@@ -214,6 +214,7 @@ export default function ProfileView({ user, token, setUser }) {
       const updatedUser = res.user
       saveStoredSession(token, updatedUser)
       if (setUser) setUser(updatedUser)
+      window.dispatchEvent(new CustomEvent('panda-profile-updated',{detail:updatedUser}))
       setMessage('✓ Tus cambios han sido guardados exitosamente.')
       setMessageType('success')
     } catch (err) {
@@ -406,7 +407,7 @@ export default function ProfileView({ user, token, setUser }) {
                       {form.nombre || 'Usuario'} {form.apellido || ''}
                     </h4>
                     <p className="text-muted small mb-2">
-                      {socioCode} · {user?.rol === 'admin' ? 'Administrador' : 'Socio activo'}
+                      {socioCode} · {user?.roleLabel || (user?.rol === 'admin' ? 'Administrador' : user?.rol === 'cliente' ? 'Socio activo' : user?.rol)}
                     </p>
 
                     <div className="d-flex align-items-center gap-2">
@@ -553,7 +554,7 @@ export default function ProfileView({ user, token, setUser }) {
                       className="form-control"
                       style={{ borderRadius: '10px', borderColor: '#cbd5e1' }}
                       value={form.fecha_nacimiento}
-                      max={new Date().toISOString().slice(0, 10)}
+                      max={getTodayPeru()}
                       onChange={(e) => updateField('fecha_nacimiento', e.target.value)}
                     />
                     <small className="text-muted" style={{ fontSize: '0.74rem' }}>

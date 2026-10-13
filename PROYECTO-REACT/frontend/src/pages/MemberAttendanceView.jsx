@@ -4,6 +4,9 @@ import { AttendanceService } from '../services/AttendanceService'
 import { MembershipService } from '../services/MembershipService'
 import ModalDialog from '../components/ModalDialog'
 import '../styles/MemberAttendance.css'
+import usePandaAccount from '../hooks/usePandaAccount'
+import {peruDate} from '../utils/pandaProgress'
+import { formatTimePeru, formatDate } from '../utils/formatters'
 
 const DAYS_NAMES = ['Lu', 'Ma', 'Mi', 'Ju', 'Vi', 'Sá', 'Do']
 const MONTH_NAMES = [
@@ -13,8 +16,9 @@ const MONTH_NAMES = [
 
 export default function MemberAttendanceView({ token, user }) {
   const navigate = useNavigate()
+  const {data:account,error,refresh}=usePandaAccount(token)
   // Fecha actual de referencia (por defecto Septiembre 2026 de la maqueta demo o fecha real navegada)
-  const [currentDate, setCurrentDate] = useState(new Date(2026, 8, 22))
+  const [currentDate, setCurrentDate] = useState(new Date(peruDate(new Date())+'T12:00:00'))
   const [loading, setLoading] = useState(true)
   const [attendanceData, setAttendanceData] = useState([])
   const [userGoals, setUserGoals] = useState({
@@ -23,24 +27,10 @@ export default function MemberAttendanceView({ token, user }) {
   })
 
   // Membresía del socio para validar días bloqueados fuera de matrícula
-  const [membership, setMembership] = useState({
-    fechaInicio: '2026-09-01',
-    fechaFin: '2026-09-30',
-    estado: 'activa',
-    planNombre: 'Plan Full Mensual',
-  })
+  const [membership, setMembership] = useState(null)
 
   // Recompensas Generales por Asistencia Habitual (XP & Bambús)
-  const [generalRewards, setGeneralRewards] = useState(() => {
-    try {
-      const saved = localStorage.getItem('panda_general_attendance_rewards')
-      if (saved) return JSON.parse(saved)
-    } catch {}
-    return {
-      baseXp: 50,
-      baseBambus: 15,
-    }
-  })
+  const generalRewards={baseXp:account?.baseXp ?? 25,baseBambus:account?.baseBambus ?? 10}
   const [tempGeneralXp, setTempGeneralXp] = useState(50)
   const [tempGeneralBambus, setTempGeneralBambus] = useState(15)
   const [generalFeedback, setGeneralFeedback] = useState('')
@@ -50,16 +40,7 @@ export default function MemberAttendanceView({ token, user }) {
   const [bonusAdminTab, setBonusAdminTab] = useState('general')
 
   // Mapa de Bonos XP y Bambús asignables por el Administrador para eventos especiales
-  const [xpBonuses, setXpBonuses] = useState(() => {
-    try {
-      const saved = localStorage.getItem('panda_calendar_xp_bonuses')
-      if (saved) return JSON.parse(saved)
-    } catch {}
-    return {
-      '2026-09-25': { xp: 50, bambus: 20, label: 'Viernes Pierna x2 XP' },
-      '2026-09-30': { xp: 100, bambus: 30, label: 'Cierre de Mes +100 XP' },
-    }
-  })
+  const xpBonuses={}
 
   // Modal para días bloqueados fuera de matrícula
   const [showRenewModal, setShowRenewModal] = useState(false)
@@ -89,125 +70,19 @@ export default function MemberAttendanceView({ token, user }) {
   // Modal para detalles de un día seleccionado
   const [selectedDayDetail, setSelectedDayDetail] = useState(null)
 
-  // Carga inicial de datos de asistencia vinculados a recepción y huella digital
-  useEffect(() => {
-    loadData()
-  }, [])
-
-  async function loadData() {
-    setLoading(true)
-    try {
-      const res = await AttendanceService.getMyAttendanceHistory(token)
-      if (res) {
-        setAttendanceData(Array.isArray(res.asistencias) ? res.asistencias : [])
-        if (res.goals) {
-          const loadedDays = Array.isArray(res.goals.diasObjetivo) ? res.goals.diasObjetivo : [1, 2, 4, 5]
-          setUserGoals({
-            diasObjetivo: loadedDays,
-            horarioPreferido: 'Acceso Libre',
-          })
-          setTempGoals(loadedDays)
-        }
-      }
-    } catch {
-      // Si ocurre error de red, mantener configuración local para demo interactiva
-    }
-
-    try {
-      const memRes = await MembershipService.getMyMembership(token)
-      if (memRes && memRes.membership) {
-        setMembership(memRes.membership)
-      }
-    } catch {
-      // Membresía demo por defecto que cubre hasta el 30 de Septiembre 2026
-      setMembership({
-        fechaInicio: '2026-09-01',
-        fechaFin: '2026-09-30',
-        estado: 'activa',
-        planNombre: 'Plan Full Mensual',
-      })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  // Guardar configuración general de asistencia (XP & Bambús por día normal)
-  function handleSaveGeneralRewards(e) {
-    e.preventDefault()
-    const errors = {}
-    const xpVal = Number(tempGeneralXp)
-    const bambusVal = Number(tempGeneralBambus)
-
-    if (isNaN(xpVal) || xpVal <= 0) {
-      errors.xp = 'Ingrese un valor de XP numérico mayor a 0 (ej: 50)'
-    }
-    if (isNaN(bambusVal) || bambusVal < 0) {
-      errors.bambus = 'Ingrese un valor de Bambús mayor o igual a 0 (ej: 15)'
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setGeneralErrors(errors)
-      return
-    }
-
-    const updated = {
-      baseXp: Math.round(xpVal),
-      baseBambus: Math.round(bambusVal),
-    }
-    setGeneralRewards(updated)
-    localStorage.setItem('panda_general_attendance_rewards', JSON.stringify(updated))
-    setGeneralErrors({})
-    setGeneralFeedback(`¡Guardado con éxito! Cada asistencia general otorgará +${updated.baseXp} XP y +${updated.baseBambus} Bambús.`)
-    setTimeout(() => setGeneralFeedback(''), 4000)
-  }
-
-  // Guardar un nuevo bono de XP y Bambús por Evento / Fecha especial
-  function handleSaveBonus(e) {
-    e.preventDefault()
-    const errors = {}
-    if (!newBonusDate) errors.date = 'Selecciona una fecha para el evento'
-
-    const xpNum = Number(newBonusXp)
-    if (isNaN(xpNum) || xpNum <= 0) {
-      errors.xp = 'Ingresa un puntaje de XP válido mayor a 0 (ej: 100)'
-    }
-
-    const bambusNum = Number(newBonusBambus)
-    if (isNaN(bambusNum) || bambusNum < 0) {
-      errors.bambus = 'Ingresa 0 o más bambús extra para el evento'
-    }
-
-    if (!newBonusLabel?.trim()) {
-      errors.label = 'Ingresa el motivo o nombre del evento'
-    }
-
-    if (Object.keys(errors).length > 0) {
-      setBonusErrors(errors)
-      return
-    }
-
-    setBonusErrors({})
-    const updated = {
-      ...xpBonuses,
-      [newBonusDate]: {
-        xp: Math.round(xpNum),
-        bambus: Math.round(bambusNum || 0),
-        label: newBonusLabel.trim(),
-      },
-    }
-    setXpBonuses(updated)
-    localStorage.setItem('panda_calendar_xp_bonuses', JSON.stringify(updated))
-    setBonusFeedback(`¡Bono (+${Math.round(xpNum)} XP${bambusNum > 0 ? ` · +${Math.round(bambusNum)} 🎋` : ''}) asignado con éxito al ${newBonusDate}!`)
-    setTimeout(() => setBonusFeedback(''), 4000)
-  }
-
-  // Eliminar bono de XP
-  function handleDeleteBonus(dateStr) {
-    const updated = { ...xpBonuses }
-    delete updated[dateStr]
-    setXpBonuses(updated)
-    localStorage.setItem('panda_calendar_xp_bonuses', JSON.stringify(updated))
-  }
+  const loadData=refresh
+  useEffect(()=>{
+    if(!account) return
+    setAttendanceData(account.asistencias)
+    setUserGoals(account.goals)
+    setTempGoals(account.goals.diasObjetivo)
+    setLoading(false)
+  },[account])
+  useEffect(()=>{
+    let active=true
+    MembershipService.getMyMembership(token).then(res=>{if(active)setMembership(res.membership || null)}).catch(()=>{if(active)setMembership(null)})
+    return ()=>{active=false}
+  },[token])
 
   // Navegación de meses
   function handlePrevMonth() {
@@ -219,7 +94,7 @@ export default function MemberAttendanceView({ token, user }) {
   }
 
   function handleGoToToday() {
-    setCurrentDate(new Date(2026, 8, 22))
+    setCurrentDate(new Date(peruDate(new Date())+'T12:00:00'))
   }
 
   // Guardar nuevo objetivo semanal (días seleccionados con horario libre)
@@ -263,11 +138,9 @@ export default function MemberAttendanceView({ token, user }) {
   const daysInMonth = new Date(year, month + 1, 0).getDate()
   const firstDayWeekIndex = (new Date(year, month, 1).getDay() + 6) % 7 // 0=Lun, 6=Dom
 
-  // Definición de "Hoy": Si estamos en Septiembre 2026 (mes demo Figma), hoy es el día 22
-  const isDemoMonth = year === 2026 && month === 8
-  const realNow = new Date()
-  const isRealCurrentMonth = year === realNow.getFullYear() && month === realNow.getMonth()
-  const todayNumber = isRealCurrentMonth ? realNow.getDate() : (isDemoMonth ? 22 : null)
+  const realNow=new Date((account?.today || peruDate(new Date()))+'T12:00:00')
+  const isRealCurrentMonth=year===realNow.getFullYear() && month===realNow.getMonth()
+  const todayNumber=isRealCurrentMonth?realNow.getDate():null
 
   // Mapeo de asistencias del usuario registradas en este mes y año
   const attendancesInViewMonth = useMemo(() => {
@@ -275,30 +148,15 @@ export default function MemberAttendanceView({ token, user }) {
     if (Array.isArray(attendanceData)) {
       attendanceData.forEach((att) => {
         if (!att.horaEntrada) return
-        const d = new Date(att.horaEntrada.replace ? att.horaEntrada.replace(' ', 'T') : att.horaEntrada)
+        const d = new Date(peruDate(att.horaEntrada)+'T12:00:00')
         if (d.getFullYear() === year && d.getMonth() === month) {
           const dayNum = d.getDate()
           map[dayNum] = att
         }
       })
     }
-    // Para el mes de prueba Septiembre 2026, complementar con los días de asistencia demo
-    if (isDemoMonth) {
-      const demoDays = [1, 3, 4, 7, 10, 11, 14, 15, 18, 21, 22]
-      demoDays.forEach((d) => {
-        if (!map[d]) {
-          map[d] = {
-            id: `demo-${d}`,
-            horaEntrada: `2026-09-${String(d).padStart(2, '0')} 09:30:00`,
-            horaSalida: `2026-09-${String(d).padStart(2, '0')} 11:00:00`,
-            estado: 'finalizado',
-            metodoRegistro: 'huella',
-          }
-        }
-      })
-    }
     return map
-  }, [attendanceData, year, month, isDemoMonth])
+  }, [attendanceData, year, month ])
 
   // Construcción de las celdas del calendario y métricas de desempeño
   const { calendarCells, totalAsistencias, totalInasistencias, cumplimientoPorcentaje, rachaDias } = useMemo(() => {
@@ -332,16 +190,17 @@ export default function MemberAttendanceView({ token, user }) {
 
       // Fecha en formato string YYYY-MM-DD
       const dateString = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`
-      const thisDayDate = new Date(year, month, day, 23, 59, 59)
-      const membershipEndDate = membership?.fechaFin
-        ? new Date(membership.fechaFin.replace ? membership.fechaFin.replace(' ', 'T') : membership.fechaFin)
-        : new Date(2026, 8, 30, 23, 59, 59)
-
       // ¿Día fuera del período de matrícula activa del socio?
-      const isLockedByMembership = isFuture && thisDayDate > membershipEndDate
+      const isLockedByMembership = !isAttended && (!membership?.fechaInicio || !membership?.fechaFin || dateString < String(membership.fechaInicio).slice(0,10) || dateString > String(membership.fechaFin).slice(0,10))
       const bonusConfig = xpBonuses[dateString]
 
-      if (isPast) {
+      if (isLockedByMembership) {
+        statusKey = 'bloqueado-membresia'
+        statusTitle = 'Fuera de plan'
+        statusBadge = 'Sin matrícula'
+        badgeType = 'locked'
+        sublabel = 'Sin plan vigente para esta fecha'
+      } else if (isPast) {
         if (isAttended) {
           statusKey = 'asistido'
           statusTitle = 'Asistido'
@@ -375,13 +234,13 @@ export default function MemberAttendanceView({ token, user }) {
           // HOY: El día aún no ha terminado, por lo tanto NO es inasistencia, está PENDIENTE
           statusKey = 'hoy-pendiente'
           statusTitle = 'Pendiente'
-          statusBadge = bonusConfig ? `⚡ +${bonusConfig.xp} XP` : 'HOY'
+          statusBadge = bonusConfig ? ` +${bonusConfig.xp} XP` : 'HOY'
           badgeType = bonusConfig ? 'bonus' : 'today'
           sublabel = bonusConfig ? bonusConfig.label : 'Por entrenar hoy'
         } else {
           statusKey = 'hoy-descanso'
           statusTitle = 'Descanso'
-          statusBadge = bonusConfig ? `⚡ +${bonusConfig.xp} XP` : 'HOY'
+          statusBadge = bonusConfig ? ` +${bonusConfig.xp} XP` : 'HOY'
           badgeType = bonusConfig ? 'bonus' : 'today'
           sublabel = bonusConfig ? bonusConfig.label : 'Día libre programado'
         }
@@ -389,7 +248,7 @@ export default function MemberAttendanceView({ token, user }) {
         // DÍA FUERA DE MATRÍCULA ACTIVA (BLOQUEADO)
         statusKey = 'bloqueado-membresia'
         statusTitle = 'Sin Matrícula'
-        statusBadge = '🔒 Bloqueado'
+        statusBadge = ' Bloqueado'
         badgeType = 'locked'
         sublabel = 'Renovar matrícula'
       } else {
@@ -397,7 +256,7 @@ export default function MemberAttendanceView({ token, user }) {
         if (bonusConfig) {
           statusKey = 'futuro-objetivo'
           statusTitle = 'Bono Especial'
-          statusBadge = `⚡ +${bonusConfig.xp} XP`
+          statusBadge = ` +${bonusConfig.xp} XP`
           badgeType = 'bonus'
           sublabel = bonusConfig.label
         } else if (isTargetDay) {
@@ -437,8 +296,8 @@ export default function MemberAttendanceView({ token, user }) {
     }
 
     const totalEvaluados = asistCount + inasistCount
-    const cumplimiento = totalEvaluados > 0 ? Math.round((asistCount / totalEvaluados) * 100) : 100
-    const racha = asistCount >= 3 ? 3 : asistCount
+    const cumplimiento = totalEvaluados > 0 ? Math.round((asistCount / totalEvaluados) * 100) : 0
+    const racha = account?.racha ?? 0
 
     return {
       calendarCells: cells,
@@ -447,8 +306,12 @@ export default function MemberAttendanceView({ token, user }) {
       cumplimientoPorcentaje: cumplimiento,
       rachaDias: racha,
     }
-  }, [year, month, daysInMonth, firstDayWeekIndex, todayNumber, currentDate, realNow, userGoals.diasObjetivo, attendancesInViewMonth, xpBonuses, generalRewards])
+  }, [year, month, daysInMonth, firstDayWeekIndex, todayNumber, currentDate, realNow, userGoals.diasObjetivo, attendancesInViewMonth, xpBonuses, generalRewards, account?.racha, membership?.fechaInicio, membership?.fechaFin])
 
+  if(!account) return <div className="attendance-view-container"><h1>Tu constancia, día a día</h1><p role="status">{error || 'Cargando tus registros…'}</p>{error&&<button className="btn btn-dark" onClick={refresh}>Volver a consultar</button>}</div>
+  const weekStart=new Date(realNow);weekStart.setDate(realNow.getDate()-((realNow.getDay()+6)%7))
+  const weekKey=peruDate(weekStart)
+  const weekCount=account.diasAsistidos.filter(d=>d>=weekKey && d<=account.today).length
   return (
     <div className="attendance-view-container">
       {/* ----------------------------------------------------------------------
@@ -458,7 +321,7 @@ export default function MemberAttendanceView({ token, user }) {
         <div className="attendance-title-area">
           <h1>Tu constancia, día a día</h1>
           <p>
-            {MONTH_NAMES[month]} {year} · Hoy es martes 22. Las inasistencias solo se computan una vez finalizado el día.
+            {MONTH_NAMES[month]} {year} · Hoy es {realNow.toLocaleDateString('es-PE',{weekday:'long',day:'numeric'})}. Las inasistencias solo se computan una vez finalizado el día.
           </p>
         </div>
 
@@ -466,7 +329,7 @@ export default function MemberAttendanceView({ token, user }) {
           {/* KPI 1: Asistencias */}
           <div className="attendance-kpi-chip">
             <div className="attendance-kpi-icon" style={{ background: '#ecfccb', color: '#15803d' }}>
-              ✓
+              <i className="bi bi-check-lg" aria-hidden="true" />
             </div>
             <div className="attendance-kpi-info">
               <span className="attendance-kpi-value">{totalAsistencias}</span>
@@ -477,7 +340,7 @@ export default function MemberAttendanceView({ token, user }) {
           {/* KPI 2: Inasistencias */}
           <div className="attendance-kpi-chip">
             <div className="attendance-kpi-icon" style={{ background: '#fee2e2', color: '#dc2626' }}>
-              ✕
+              <i className="bi bi-x-lg" aria-hidden="true" />
             </div>
             <div className="attendance-kpi-info">
               <span className="attendance-kpi-value">{totalInasistencias}</span>
@@ -487,9 +350,7 @@ export default function MemberAttendanceView({ token, user }) {
 
           {/* KPI 3: Cumplimiento */}
           <div className="attendance-kpi-chip">
-            <div className="attendance-kpi-icon" style={{ background: '#ecfccb', color: '#15803d' }}>
-              📈
-            </div>
+            <div className="attendance-kpi-icon" style={{ background: '#ecfccb', color: '#15803d' }}><i className="bi bi-graph-up-arrow" aria-hidden="true"/></div>
             <div className="attendance-kpi-info">
               <span className="attendance-kpi-value">{cumplimientoPorcentaje}%</span>
               <span className="attendance-kpi-label">Cumplimiento</span>
@@ -498,9 +359,7 @@ export default function MemberAttendanceView({ token, user }) {
 
           {/* KPI 4: Racha Activa */}
           <div className="attendance-kpi-chip">
-            <div className="attendance-kpi-icon" style={{ background: 'rgba(196, 240, 57, 0.35)', color: '#111d15' }}>
-              🔥
-            </div>
+            <div className="attendance-kpi-icon" style={{ background: 'rgba(196, 240, 57, 0.35)', color: '#111d15' }}><i className="bi bi-fire" aria-hidden="true"/></div>
             <div className="attendance-kpi-info">
               <span className="attendance-kpi-value">{rachaDias} días</span>
               <span className="attendance-kpi-label">En racha</span>
@@ -565,8 +424,8 @@ export default function MemberAttendanceView({ token, user }) {
                     }}
                     title="Configurar valores generales de asistencia y bonos por evento"
                   >
-                    <span>⚡</span>
-                    <span>Recompensas & Bonos</span>
+                    <span><i className="bi bi-lightning-charge" aria-hidden="true"/></span>
+                    <span>Reglas de puntos</span>
                   </button>
                 )}
               </div>
@@ -576,11 +435,11 @@ export default function MemberAttendanceView({ token, user }) {
             <div className="calendar-legend-bar">
               <div className="calendar-legend-item">
                 <span className="calendar-legend-dot" style={{ background: '#22c55e' }}></span>
-                <span>Asistido (+{generalRewards.baseXp} XP · +{generalRewards.baseBambus} 🎋)</span>
+                <span>Asistido (+{generalRewards.baseXp} XP · +{generalRewards.baseBambus} )</span>
               </div>
               <div className="calendar-legend-item">
                 <span className="calendar-legend-dot" style={{ background: '#fef08a', border: '1px solid #eab308' }}></span>
-                <span>⚡ Bono Evento</span>
+                <span> Bono Evento</span>
               </div>
               <div className="calendar-legend-item">
                 <span className="calendar-legend-dot" style={{ background: '#ef4444' }}></span>
@@ -592,7 +451,7 @@ export default function MemberAttendanceView({ token, user }) {
               </div>
               <div className="calendar-legend-item">
                 <span className="calendar-legend-dot" style={{ background: '#e2e8f0', border: '1px dashed #94a3b8' }}></span>
-                <span>🔒 Fuera de plan</span>
+                <span> Fuera de plan</span>
               </div>
               <div className="calendar-legend-item">
                 <span className="calendar-legend-dot" style={{ background: '#94a3b8' }}></span>
@@ -687,10 +546,10 @@ export default function MemberAttendanceView({ token, user }) {
 
             <div style={{ margin: '10px 0 14px' }}>
               <div className="goal-week-progress-title">
-                Esta semana: 2 de {userGoals.diasObjetivo.length} cumplidos
+                Esta semana: {weekCount} de {userGoals.diasObjetivo.length} cumplidos
               </div>
               <p className="goal-week-progress-detail">
-                Lunes y martes completados. Jueves y viernes aún futuros.
+                Las visitas confirmadas en recepción actualizan tu objetivo.
               </p>
             </div>
 
@@ -774,7 +633,7 @@ export default function MemberAttendanceView({ token, user }) {
             </div>
 
             <p style={{ fontSize: '0.82rem', color: '#5f7165', margin: '14px 0 0', lineHeight: 1.45 }}>
-              💡 <strong>Acceso libre total:</strong> Tu membresía te permite ingresar a sala a cualquier hora dentro del horario de atención del club. No requieres agendar ningún horario fijo.
+               <strong>Acceso libre total:</strong> Tu membresía te permite ingresar a sala a cualquier hora dentro del horario de atención del club. No requieres agendar ningún horario fijo.
             </p>
           </div>
 
@@ -873,42 +732,42 @@ export default function MemberAttendanceView({ token, user }) {
             <div style={{ background: '#f8fafc', borderRadius: '12px', padding: '12px 14px', fontSize: '0.82rem', color: '#334155', lineHeight: 1.55 }}>
               {selectedDayDetail.statusKey === 'asistido' ? (
                 <>
-                  <div>✓ Check-in verificado por recepción (huella / DNI).</div>
+                  <div> Check-in verificado por recepción (huella / DNI).</div>
                   {selectedDayDetail.attRecord?.horaEntrada && (
                     <div style={{ color: '#15803d', fontWeight: 700 }}>
-                      ✓ Ingreso: {selectedDayDetail.attRecord.horaEntrada.slice(11, 16)} hrs {selectedDayDetail.attRecord.horaSalida ? `· Salida: ${selectedDayDetail.attRecord.horaSalida.slice(11, 16)} hrs` : '(En curso)'}
+                       Ingreso: {formatTimePeru(selectedDayDetail.attRecord.horaEntrada)} hrs {selectedDayDetail.attRecord.horaSalida ? `· Salida: ${formatTimePeru(selectedDayDetail.attRecord.horaSalida)} hrs` : '(En curso)'}
                     </div>
                   )}
                   <div>
-                    ✓ Recompensa otorgada:{' '}
+                     Recompensa otorgada:{' '}
                     <strong>
                       +{selectedDayDetail.bonusConfig?.xp || generalRewards.baseXp} XP
                     </strong>{' '}
                     y{' '}
                     <strong>
-                      +{selectedDayDetail.bonusConfig?.bambus != null ? selectedDayDetail.bonusConfig.bambus : generalRewards.baseBambus} bambús 🎋
+                      +{selectedDayDetail.bonusConfig?.bambus != null ? selectedDayDetail.bonusConfig.bambus : generalRewards.baseBambus} bambús 
                     </strong>.
                   </div>
-                  <div>✓ Tu pandita sumó energía para su evolución de nivel.</div>
+                  <div> Tu pandita sumó energía para su evolución de nivel.</div>
                 </>
               ) : selectedDayDetail.statusKey === 'inasistencia' ? (
                 <>
-                  <div>⚠ No registraste ingreso en este día programado de tu objetivo.</div>
-                  <div>💡 El sistema no penaliza tu salud: puedes recuperar asistiendo un día extra de descanso.</div>
+                  <div> No registraste ingreso en este día programado de tu objetivo.</div>
+                  <div> El sistema no penaliza tu salud: puedes recuperar asistiendo un día extra de descanso.</div>
                 </>
               ) : selectedDayDetail.statusKey === 'hoy-pendiente' ? (
                 <>
-                  <div>🕒 Hoy es un día de tu objetivo de entrenamiento.</div>
-                  <div>👆 Solo acércate a recepción con tu huella digital o DNI para validar tu acceso y marcar tu asistencia.</div>
+                  <div> Hoy es un día de tu objetivo de entrenamiento.</div>
+                  <div> Solo acércate a recepción con tu huella digital o DNI para validar tu acceso y marcar tu asistencia.</div>
                 </>
               ) : selectedDayDetail.statusKey === 'futuro-objetivo' ? (
                 <>
-                  <div>🎯 Tienes planeado entrenar este día según tu objetivo semanal.</div>
-                  <div>🌱 El acceso estará disponible en cualquier momento durante el horario de atención.</div>
+                  <div> Tienes planeado entrenar este día según tu objetivo semanal.</div>
+                  <div> El acceso estará disponible en cualquier momento durante el horario de atención.</div>
                 </>
               ) : (
                 <>
-                  <div>🌿 Día de descanso programado. Los días de descanso te permiten recuperarte sin perder tu racha activa de nivel.</div>
+                  <div> Día de descanso programado. Los días de descanso te permiten recuperarte sin perder tu racha activa de nivel.</div>
                 </>
               )}
             </div>
@@ -941,7 +800,7 @@ export default function MemberAttendanceView({ token, user }) {
       <ModalDialog
         isOpen={showRenewModal}
         onClose={() => setShowRenewModal(false)}
-        title="🔒 Día Fuera de Matrícula Activa"
+        title=" Día Fuera de Matrícula Activa"
         subtitle="Acceso al gimnasio bloqueado para esta fecha"
         badge="RENOVAR PLAN"
         size="sm"
@@ -962,14 +821,14 @@ export default function MemberAttendanceView({ token, user }) {
                 flexShrink: 0,
               }}
             >
-              🔒
+              
             </div>
             <div>
               <h4 style={{ margin: 0, fontWeight: 900, color: '#111d15', fontSize: '1.02rem' }}>
                 Día {lockedDayInfo?.day} de {MONTH_NAMES[month]} {year}
               </h4>
               <p style={{ margin: '3px 0 0', fontSize: '0.78rem', color: '#64748b' }}>
-                Tu plan actual finaliza el {membership?.fechaFin ? membership.fechaFin.slice(0, 10) : '30 de Septiembre 2026'}.
+                Tu plan actual finaliza el {membership?.fechaFin ? formatDate(membership.fechaFin) : 'Sin membresía registrada'}.
               </p>
             </div>
           </div>
@@ -987,7 +846,7 @@ export default function MemberAttendanceView({ token, user }) {
             }}
           >
             <p style={{ margin: '0 0 8px 0', fontWeight: 700, color: '#0f172a' }}>
-              🛡️ Para entrenar este día y mantener a tu Pandita en racha:
+               Para entrenar este día y mantener a tu Pandita en racha:
             </p>
             <ul style={{ margin: 0, paddingLeft: '18px' }}>
               <li style={{ marginBottom: '4px' }}>Este día está fuera del período cubierto por tu membresía (<strong>{membership?.planNombre || 'Plan Activo'}</strong>).</li>
@@ -1031,7 +890,7 @@ export default function MemberAttendanceView({ token, user }) {
                 boxShadow: '0 4px 12px rgba(196, 240, 57, 0.35)',
               }}
             >
-              💳 Ver Planes y Renovar
+               Ver Planes y Renovar
             </button>
           </div>
         </div>
@@ -1040,355 +899,7 @@ export default function MemberAttendanceView({ token, user }) {
       {/* ----------------------------------------------------------------------
           MODAL: ADMINISTRACIÓN DE BONOS XP POR DÍA (SOLO ADMIN)
           ---------------------------------------------------------------------- */}
-      <ModalDialog
-        isOpen={showBonusAdminModal}
-        onClose={() => setShowBonusAdminModal(false)}
-        title="⚡ Configurar Recompensas y Bonos de Asistencia"
-        subtitle="Define el valor base por cada asistencia habitual o programa bonos especiales para fechas de eventos"
-        badge="CONTROL ADMIN"
-        size="md"
-      >
-        <div>
-          {/* TABS SUPERIORES: GENERAL VS EVENTOS */}
-          <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', marginBottom: '16px' }}>
-            <button
-              type="button"
-              onClick={() => {
-                setBonusAdminTab('general')
-                setGeneralFeedback('')
-              }}
-              style={{
-                flex: 1,
-                padding: '10px 14px',
-                borderRadius: '10px',
-                border: bonusAdminTab === 'general' ? '2px solid #111d15' : '1px solid #e2e8f0',
-                background: bonusAdminTab === 'general' ? '#111d15' : '#f8fafc',
-                color: bonusAdminTab === 'general' ? '#c4f039' : '#475569',
-                fontWeight: 800,
-                fontSize: '0.84rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                transition: 'all 0.2s',
-              }}
-            >
-              <span>⚙️</span>
-              <span>1. General (Cada Asistencia)</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => {
-                setBonusAdminTab('eventos')
-                setBonusFeedback('')
-              }}
-              style={{
-                flex: 1,
-                padding: '10px 14px',
-                borderRadius: '10px',
-                border: bonusAdminTab === 'eventos' ? '2px solid #111d15' : '1px solid #e2e8f0',
-                background: bonusAdminTab === 'eventos' ? '#111d15' : '#f8fafc',
-                color: bonusAdminTab === 'eventos' ? '#c4f039' : '#475569',
-                fontWeight: 800,
-                fontSize: '0.84rem',
-                cursor: 'pointer',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: '6px',
-                transition: 'all 0.2s',
-              }}
-            >
-              <span>📅</span>
-              <span>2. Eventos (Fechas Especiales)</span>
-            </button>
-          </div>
-
-          {/* CONTENIDO SEGÚN LA PESTAÑA ACTIVA */}
-          {bonusAdminTab === 'general' ? (
-            <div>
-              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
-                <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#111d15', marginBottom: '4px' }}>
-                  ⚙️ Recompensa Habitual por Cada Asistencia
-                </div>
-                <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.45 }}>
-                  Escribe manualmente cuántos puntos de <strong>XP</strong> y cuántos <strong>Bambús</strong> gana un socio cada vez que registra una asistencia normal en recepción o torniquete.
-                </div>
-              </div>
-
-              {generalFeedback && (
-                <div style={{ padding: '10px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', marginBottom: '14px' }}>
-                  ✓ {generalFeedback}
-                </div>
-              )}
-
-              <form onSubmit={handleSaveGeneralRewards} style={{ display: 'grid', gap: '14px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
-                  <div className="form-element">
-                    <label className="element-label" style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>⚡</span> <span>Experiencia Base (XP) *</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      className={`input-field ${generalErrors.xp ? 'is-invalid' : ''}`}
-                      value={tempGeneralXp}
-                      onChange={(e) => {
-                        setTempGeneralXp(e.target.value)
-                        if (generalErrors.xp) setGeneralErrors((prev) => ({ ...prev, xp: '' }))
-                      }}
-                      placeholder="Ej: 50"
-                      style={generalErrors.xp ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
-                      required
-                    />
-                    {generalErrors.xp && (
-                      <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem', color: '#dc2626' }}>
-                        <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{generalErrors.xp}</span>
-                      </div>
-                    )}
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px' }}>
-                      Suma al progreso de nivel de Mi Pandita
-                    </span>
-                  </div>
-
-                  <div className="form-element">
-                    <label className="element-label" style={{ fontSize: '0.8rem', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>🎋</span> <span>Bambús por Visita (🎋) *</span>
-                    </label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      className={`input-field ${generalErrors.bambus ? 'is-invalid' : ''}`}
-                      value={tempGeneralBambus}
-                      onChange={(e) => {
-                        setTempGeneralBambus(e.target.value)
-                        if (generalErrors.bambus) setGeneralErrors((prev) => ({ ...prev, bambus: '' }))
-                      }}
-                      placeholder="Ej: 15"
-                      style={generalErrors.bambus ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
-                      required
-                    />
-                    {generalErrors.bambus && (
-                      <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem', color: '#dc2626' }}>
-                        <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{generalErrors.bambus}</span>
-                      </div>
-                    )}
-                    <span style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '3px' }}>
-                      Moneda virtual canjeable en Recompensas
-                    </span>
-                  </div>
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                  <button
-                    type="submit"
-                    style={{
-                      padding: '10px 20px',
-                      background: '#c4f039',
-                      color: '#111d15',
-                      border: 'none',
-                      borderRadius: '10px',
-                      fontWeight: 900,
-                      fontSize: '0.86rem',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(196, 240, 57, 0.35)',
-                    }}
-                  >
-                    💾 Guardar Configuración General
-                  </button>
-                </div>
-              </form>
-            </div>
-          ) : (
-            <div>
-              <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: '12px', border: '1px solid #e2e8f0', marginBottom: '16px' }}>
-                <div style={{ fontSize: '0.84rem', fontWeight: 800, color: '#111d15', marginBottom: '4px' }}>
-                  📅 Bonos Extra para Fechas de Eventos
-                </div>
-                <div style={{ fontSize: '0.78rem', color: '#64748b', lineHeight: 1.45 }}>
-                  Marca una fecha en el calendario y escribe manualmente el puntaje de <strong>XP</strong> y <strong>Bambús</strong> especiales que otorgará ese día.
-                </div>
-              </div>
-
-              {bonusFeedback && (
-                <div style={{ padding: '10px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', marginBottom: '14px' }}>
-                  ✓ {bonusFeedback}
-                </div>
-              )}
-
-              <form onSubmit={handleSaveBonus} style={{ display: 'grid', gap: '12px', marginBottom: '20px' }}>
-                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '12px' }}>
-                  <div className="form-element">
-                    <label className="element-label" style={{ fontSize: '0.8rem' }}>Fecha del Evento *</label>
-                    <input
-                      type="date"
-                      className={`input-field ${bonusErrors.date ? 'is-invalid' : ''}`}
-                      value={newBonusDate}
-                      onChange={(e) => {
-                        setNewBonusDate(e.target.value)
-                        if (bonusErrors.date) setBonusErrors((prev) => ({ ...prev, date: '' }))
-                      }}
-                      style={bonusErrors.date ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
-                      required
-                    />
-                    {bonusErrors.date && (
-                      <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem', color: '#dc2626' }}>
-                        <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{bonusErrors.date}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="form-element">
-                    <label className="element-label" style={{ fontSize: '0.8rem' }}>XP del Evento (⚡) *</label>
-                    <input
-                      type="number"
-                      min="1"
-                      step="1"
-                      className={`input-field ${bonusErrors.xp ? 'is-invalid' : ''}`}
-                      value={newBonusXp}
-                      onChange={(e) => {
-                        setNewBonusXp(e.target.value)
-                        if (bonusErrors.xp) setBonusErrors((prev) => ({ ...prev, xp: '' }))
-                      }}
-                      placeholder="Ej: 100"
-                      style={bonusErrors.xp ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
-                      required
-                    />
-                    {bonusErrors.xp && (
-                      <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem', color: '#dc2626' }}>
-                        <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{bonusErrors.xp}</span>
-                      </div>
-                    )}
-                  </div>
-
-                  <div className="form-element">
-                    <label className="element-label" style={{ fontSize: '0.8rem' }}>Bambús Extra (🎋)</label>
-                    <input
-                      type="number"
-                      min="0"
-                      step="1"
-                      className={`input-field ${bonusErrors.bambus ? 'is-invalid' : ''}`}
-                      value={newBonusBambus}
-                      onChange={(e) => {
-                        setNewBonusBambus(e.target.value)
-                        if (bonusErrors.bambus) setBonusErrors((prev) => ({ ...prev, bambus: '' }))
-                      }}
-                      placeholder="Ej: 25"
-                      style={bonusErrors.bambus ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
-                    />
-                    {bonusErrors.bambus && (
-                      <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem', color: '#dc2626' }}>
-                        <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{bonusErrors.bambus}</span>
-                      </div>
-                    )}
-                  </div>
-                </div>
-
-                <div className="form-element">
-                  <label className="element-label" style={{ fontSize: '0.8rem' }}>Etiqueta / Motivo del Evento *</label>
-                  <input
-                    type="text"
-                    className={`input-field ${bonusErrors.label ? 'is-invalid' : ''}`}
-                    value={newBonusLabel}
-                    onChange={(e) => {
-                      setNewBonusLabel(e.target.value)
-                      if (bonusErrors.label) setBonusErrors((prev) => ({ ...prev, label: '' }))
-                    }}
-                    placeholder="Ej: Reto Fin de Semana x2 XP o Cierre de Mes"
-                    style={bonusErrors.label ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
-                    required
-                  />
-                  {bonusErrors.label && (
-                    <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem', color: '#dc2626' }}>
-                      <i className="bi bi-exclamation-circle-fill"></i>
-                      <span>{bonusErrors.label}</span>
-                    </div>
-                  )}
-                </div>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
-                  <button
-                    type="submit"
-                    style={{
-                      padding: '9px 18px',
-                      background: '#c4f039',
-                      color: '#111d15',
-                      border: 'none',
-                      borderRadius: '10px',
-                      fontWeight: 900,
-                      fontSize: '0.84rem',
-                      cursor: 'pointer',
-                      boxShadow: '0 4px 12px rgba(196, 240, 57, 0.35)',
-                    }}
-                  >
-                    + Asignar Bono a Esta Fecha
-                  </button>
-                </div>
-              </form>
-
-              <h5 style={{ margin: '0 0 10px', fontSize: '0.88rem', fontWeight: 800, color: '#0f172a' }}>
-                📅 Bonos de Eventos Activos en el Calendario:
-              </h5>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
-                {Object.entries(xpBonuses).length === 0 ? (
-                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>No hay bonos de eventos configurados actualmente.</p>
-                ) : (
-                  Object.entries(xpBonuses).map(([dStr, bData]) => (
-                    <div
-                      key={dStr}
-                      style={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        padding: '8px 12px',
-                        background: '#f8fafc',
-                        borderRadius: '10px',
-                        border: '1px solid #e2e8f0',
-                      }}
-                    >
-                      <div>
-                        <strong style={{ fontSize: '0.82rem', color: '#111d15' }}>{dStr}</strong>: {bData.label}
-                        <span style={{ marginLeft: '8px', background: '#fef08a', color: '#854d0e', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
-                          +{bData.xp} XP
-                        </span>
-                        {bData.bambus ? (
-                          <span style={{ marginLeft: '6px', background: '#ecfccb', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
-                            +{bData.bambus} 🎋
-                          </span>
-                        ) : null}
-                      </div>
-                      <button
-                        type="button"
-                        onClick={() => handleDeleteBonus(dStr)}
-                        style={{
-                          background: 'none',
-                          border: 'none',
-                          color: '#ef4444',
-                          cursor: 'pointer',
-                          fontSize: '0.82rem',
-                          fontWeight: 700,
-                        }}
-                        title="Eliminar bono"
-                      >
-                        ✕ Quitar
-                      </button>
-                    </div>
-                  ))
-                )}
-              </div>
-            </div>
-          )}
-        </div>
-      </ModalDialog>
+      <ModalDialog isOpen={showBonusAdminModal} onClose={()=>setShowBonusAdminModal(false)} title="Puntos por asistencia" badge="Reglas del club"><p>Cada día con una entrada registrada suma {generalRewards.baseXp} XP y {generalRewards.baseBambus} bambús. Los descansos programados no cortan tu racha. Los canjes descuentan el saldo guardado.</p><button className="btn btn-dark" onClick={()=>setShowBonusAdminModal(false)}>Entendido</button></ModalDialog>
     </div>
   )
 }

@@ -21,6 +21,7 @@ router.use("/auth", authRoutes);
 router.use("/dni", dniRoutes);
 router.use("/admin/planes", planRoutes);
 router.use("/admin/socios", socioRoutes);
+router.use('/admin/usuarios',require('./staffRoutes'));
 router.use("/admin/dispositivos", require('./deviceRoutes'));
 router.use("/admin/asistencias", attendanceRoutes);
 router.use("/asistencias", attendanceRoutes);

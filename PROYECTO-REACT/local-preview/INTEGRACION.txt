@@ -1,0 +1,13 @@
+Panda Fitness integrado — 12 de octubre de 2026
+
+Página activa: http://localhost:8081/
+Ruta de acceso comprobada: http://localhost:8081/login
+
+Se incorporaron PublicHome.jsx, PandaCinemaPage.jsx, PandaCinema.css, CapacityPanel.jsx y los recursos public/images/panda-story al frontend del proyecto real. La configuración de Vite conserva el puerto 8081 y el proxy del sistema existente.
+
+Validación: compilación de producción correcta; vista nueva comprobada en navegador; imágenes cargadas; capítulos de apertura y transición al club; encabezado sticky comprobado en escritorio; etapas bebé/intermedia/musculosa; galería siguiente/anterior; pregunta desplegable; instrucciones de instalación; menú móvil abierto y cerrado al navegar; formulario de ingreso existente abierto desde el inicio y desde /login; aforo con datos en vivo; consola sin errores observados.
+
+No se realizó una autenticación con credenciales ni operaciones de canje. No se modificaron cuentas ni datos del club.
+
+Respaldo del código anterior: local-backups/panda-cinema-20261012-191532.
+Capturas: local-preview/Panda_Fitness_integrado.png y local-preview/Panda_Fitness_evolucion.png.

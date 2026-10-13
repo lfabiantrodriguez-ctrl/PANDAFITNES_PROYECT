@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import UserAvatar from '../components/UserAvatar'
+import UsersRolesView from '../pages/UsersRolesView'
+import {canAccess,homeFor,staffSections} from '../utils/access'
 import CapacityView from '../pages/CapacityView'
 import DashboardReservationsView from '../pages/DashboardReservationsView'
 import CheckInView from '../pages/CheckInView'
@@ -22,6 +25,7 @@ export const ROLE_HOME = {
 }
 
 function MenuIcon({ name }) {
+  if(name?.startsWith('bi-'))return <i className={`bi ${name}`} style={{fontSize:18}} aria-hidden="true" />
   const iconProps = {
     width: 18,
     height: 18,
@@ -174,6 +178,7 @@ export const MENU_SECTIONS = {
       category: 'CONFIGURACIÓN DEL SISTEMA',
       items: [
         { to: '/app/configuracion', label: 'Configuración Empresa', icon: 'settings' },
+        { to: '/app/usuarios', label: 'Usuarios y roles', icon: 'bi-person-lock' },
         { to: '/app/perfil', label: 'Mi perfil', icon: 'profile' },
       ],
     },
@@ -212,8 +217,8 @@ export const MENU_ITEMS = {
 export default function AppLayout({ token, user, onLogout, setUser }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const sections = MENU_SECTIONS[user?.rol] || []
-  const items = MENU_ITEMS[user?.rol] || []
+  const sections = MENU_SECTIONS[user?.rol] || staffSections(user)
+  const items = sections.flatMap(section=>section.items)
   const [companyInfo, setCompanyInfo] = useState({
     nombre: 'Panda Fitness',
     logo: '/logo-panda.png',
@@ -290,7 +295,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
           <button
             className="sidebar-brand"
             type="button"
-            onClick={() => navigate(ROLE_HOME[user.rol] || '/app/perfil')}
+            onClick={() => navigate(homeFor(user))}
             style={{ display: 'flex', alignItems: 'center', gap: '12px', textAlign: 'left', marginBottom: '14px', background: 'none', border: 'none', cursor: 'pointer', padding: 0 }}
           >
             <div
@@ -358,7 +363,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
               marginBottom: '22px',
             }}
           >
-            {user.rol === 'admin' ? 'ADMINISTRACIÓN / SEDE CENTRO' : 'ÁREA CLIENTE / SEDE CENTRO'}
+            {user.rol === 'admin' ? 'ADMINISTRACIÓN / SEDE CENTRO' : user.rol === 'cliente' ? 'ÁREA CLIENTE / SEDE CENTRO' : `EQUIPO / ${user.roleLabel || user.rol}`}
           </div>
 
           {/* Navigation links */}
@@ -406,14 +411,14 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
                     flexShrink: 0,
                   }}
                 >
-                  {userInitials}
+                  {<UserAvatar user={user} />}
                 </div>
                 <div style={{ minWidth: 0, flex: 1 }}>
                   <p style={{ margin: 0, color: '#f4f6f4', fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                     {user.nombre}
                   </p>
                   <span style={{ color: '#8fa295', fontSize: '0.74rem' }}>
-                    {user.rol === 'admin' ? 'Administrador' : 'Socio'}
+                    {user.roleLabel || (user.rol === 'admin' ? 'Administrador' : user.rol === 'cliente' ? 'Socio' : user.rol)}
                   </span>
                 </div>
               </div>
@@ -461,7 +466,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
         sections={sections}
         user={user} 
         onLogout={onLogout}
-        homeRoute={ROLE_HOME[user.rol] || '/app/perfil'}
+        homeRoute={homeFor(user)}
         companyInfo={companyInfo}
       />
 
@@ -482,7 +487,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
           }}
         >
           <div style={{ color: '#5f7165', fontWeight: 600 }}>
-            {user.rol === 'admin' ? 'Administración' : 'Mi Portal'}{' '}
+            {user.rol !== 'cliente' ? 'Administración' : 'Mi Portal'}{' '}
             <span style={{ color: '#8fa295', margin: '0 4px' }}>/</span>{' '}
             <span style={{ color: '#111d15', fontWeight: 700 }}>{currentItem?.label || 'Inicio'}</span>
           </div>
@@ -546,7 +551,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
               onClick={() => navigate('/app/perfil')}
               title={`Perfil: ${user.nombre}`}
             >
-              {userInitials}
+              {<UserAvatar user={user} />}
             </div>
           </div>
         </div>
@@ -566,6 +571,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
           <Route path="recompensas" element={<RoleGate user={user} roles={['admin', 'cliente']}><RewardsView token={token} user={user} /></RoleGate>} />
           <Route path="mi-membresia" element={<RoleGate user={user} roles={['admin', 'cliente']}><MemberMembershipView token={token} user={user} /></RoleGate>} />
           <Route path="configuracion" element={<RoleGate user={user} roles={['admin']}><CompanySettingsView token={token} /></RoleGate>} />
+          <Route path="usuarios" element={<RoleGate user={user} roles={['admin']}><UsersRolesView token={token} user={user} /></RoleGate>} />
           <Route path="perfil" element={<ProfileView user={user} token={token} setUser={setUser} />} />
         </Routes>
       </main>
@@ -580,12 +586,14 @@ function RoleRedirect({ user }) {
     return <Navigate to="/login" replace />
   }
 
-  return <Navigate to={ROLE_HOME[user.rol] || '/app/perfil'} replace />
+  return <Navigate to={homeFor(user)} replace />
 }
 
-function RoleGate({ user, roles, children }) {
-  if (!roles.includes(user?.rol)) {
-    return <Navigate to={ROLE_HOME[user?.rol] || '/app/perfil'} replace />
+function RoleGate({ user, children }) {
+  const location=useLocation()
+  const key=location.pathname.split('/')[2]
+  if (!canAccess(user,key)) {
+    return <Navigate to={homeFor(user)} replace />
   }
 
   return children

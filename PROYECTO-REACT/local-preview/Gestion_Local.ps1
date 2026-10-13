@@ -1,0 +1,52 @@
+
+$ErrorActionPreference='Stop';
+try {
+ $projectRoot=[IO.Path]::GetFullPath($env:PANDA_LOCAL_ROOT);
+ $backend=Join-Path $projectRoot 'backend';
+ $frontend=Join-Path $projectRoot 'frontend';
+ if(!(Test-Path -LiteralPath (Join-Path $backend 'src\server.js')) -or !(Test-Path -LiteralPath (Join-Path $frontend 'vite.config.js'))){throw 'No se encontro el proyecto Panda Fitness.';};
+ $records=@(Get-CimInstance Win32_Process -Filter 'name = ''node.exe''');
+ $targets=[System.Collections.Generic.HashSet[int]]::new();
+ foreach($process in $records){$line=[string]$process.CommandLine;if($line.IndexOf($projectRoot,[StringComparison]::OrdinalIgnoreCase) -ge 0 -and $line -match 'vite|nodemon|src[\\/]server\.js|http-server'){[void]$targets.Add([int]$process.ProcessId);};};
+ $listeners=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object {$_.LocalPort -in @(3000,8081,8082)});
+ foreach($listener in $listeners){
+  if($targets.Contains([int]$listener.OwningProcess)){continue;};
+  $process=$records | Where-Object {$_.ProcessId -eq $listener.OwningProcess} | Select-Object -First 1;
+  if(!$process){continue;};
+  $line=[string]$process.CommandLine;
+  if($listener.LocalPort -eq 3000 -and $line -match 'src[\\/]server\.js'){
+   $config=Invoke-RestMethod 'http://127.0.0.1:3000/api/configuracion' -TimeoutSec 5;
+   if([string]$config.empresa_nombre -match 'Panda'){[void]$targets.Add([int]$process.ProcessId);};
+  } elseif($listener.LocalPort -in @(8081,8082) -and $line -match 'vite|http-server'){
+   $url='http://127.0.0.1:'+[string]$listener.LocalPort+'/';
+   $page=Invoke-WebRequest $url -UseBasicParsing -TimeoutSec 5;
+   if($page.Content -match '<title>Panda Fitness'){[void]$targets.Add([int]$process.ProcessId);};
+  };
+ };
+ foreach($process in $records){if($targets.Contains([int]$process.ProcessId)){$parent=$records | Where-Object {$_.ProcessId -eq $process.ParentProcessId} | Select-Object -First 1;if($parent -and [string]$parent.CommandLine -match 'nodemon' -and ([string]$parent.CommandLine).IndexOf($projectRoot,[StringComparison]::OrdinalIgnoreCase) -ge 0){[void]$targets.Add([int]$parent.ProcessId);};};};
+ foreach($process in $records){if($targets.Contains([int]$process.ProcessId) -and [string]$process.CommandLine -match 'nodemon'){Stop-Process -Id $process.ProcessId -ErrorAction SilentlyContinue;};};
+ foreach($serverId in $targets){Stop-Process -Id $serverId -ErrorAction SilentlyContinue;};
+ foreach($serverId in $targets){$stillRunning=Get-Process -Id $serverId -ErrorAction SilentlyContinue;if($stillRunning){throw ('Windows no permitio cerrar la instancia '+$serverId+'. No se iniciaron servidores nuevos.');};};
+ Write-Host ('Instancias anteriores de Panda cerradas: '+$targets.Count);
+ if($false){
+  $remaining=@(Get-NetTCPConnection -State Listen -ErrorAction Stop | Where-Object {$_.LocalPort -in @(3000,8081)});
+  if($remaining.Count){throw 'Los puertos 3000 u 8081 siguen ocupados. No se iniciaron servidores duplicados ni se cerraron otros programas.';};
+  $node=(Get-Command node -ErrorAction Stop).Source;
+  $runtime=Join-Path $projectRoot 'local-preview\runtime';
+  [void](New-Item -ItemType Directory -Path $runtime -Force);
+  $stamp=Get-Date -Format 'yyyyMMdd-HHmmss';
+  $env:PORT='3000';$env:HOST='127.0.0.1';
+  $api=Start-Process -FilePath $node -ArgumentList @('src/server.js') -WorkingDirectory $backend -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtime ('backend-'+$stamp+'.log')) -RedirectStandardError (Join-Path $runtime ('backend-'+$stamp+'.err.log'));
+  $ready=$false;
+  for($attempt=0;$attempt -lt 20;$attempt++){try{$health=Invoke-RestMethod 'http://127.0.0.1:3000/api/health' -TimeoutSec 1;if($health.ok){$ready=$true;break;};}catch{};Start-Sleep -Milliseconds 500;};
+  if(!$ready){Stop-Process -Id $api.Id -ErrorAction SilentlyContinue;throw ('El backend no inicio. Revisa los registros en '+$runtime);};
+  $vite=Join-Path $frontend 'node_modules\vite\bin\vite.js';
+  $web=Start-Process -FilePath $node -ArgumentList @((([char]34).ToString()+$vite+([char]34).ToString()),'--host','127.0.0.1','--port','8081','--strictPort') -WorkingDirectory $frontend -WindowStyle Hidden -PassThru -RedirectStandardOutput (Join-Path $runtime ('frontend-'+$stamp+'.log')) -RedirectStandardError (Join-Path $runtime ('frontend-'+$stamp+'.err.log'));
+  $webReady=$false;
+  for($attempt=0;$attempt -lt 20;$attempt++){try{$page=Invoke-WebRequest 'http://127.0.0.1:8081/' -UseBasicParsing -TimeoutSec 1;if($page.StatusCode -eq 200){$webReady=$true;break;};}catch{};Start-Sleep -Milliseconds 500;};
+  if(!$webReady){Stop-Process -Id $web.Id -ErrorAction SilentlyContinue;Stop-Process -Id $api.Id -ErrorAction SilentlyContinue;throw ('La pagina no inicio. Revisa los registros en '+$runtime);};
+  @{backend=$api.Id;frontend=$web.Id;url='http://localhost:8081'} | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $runtime 'procesos-locales.json');
+  Write-Host 'Panda Fitness preparado solo en esta computadora: http://localhost:8081/app/usuarios' -ForegroundColor Green;
+ } else {Write-Host 'El proyecto queda guardado en disco. No se inicio ningun servidor.' -ForegroundColor Green;};
+ exit 0;
+} catch {Write-Host $_.Exception.Message -ForegroundColor Red;exit 1;};

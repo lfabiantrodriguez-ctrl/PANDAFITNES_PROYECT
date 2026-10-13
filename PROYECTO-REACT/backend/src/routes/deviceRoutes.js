@@ -33,6 +33,81 @@ router.post('/register/verify', wrap(async (req, res) => {
     const ticket = access.issue({ ...entry, kind: 'enrolled' });
     res.json({ ticket });
 }));
+router.post('/register/complete', wrap(async (req, res) => {
+    const entry = access.take(req.body.ceremony, owner(req), 'register');
+    const credentialId = String(req.body.credentialId || '').trim();
+    const publicKey = String(req.body.publicKey || '').trim();
+    if (!credentialId || !publicKey) throw new Error('Datos biométricos incompletos.');
+    const ticket = access.issue({ ...entry, kind: 'enrolled', credentialId, publicKey, counter: 0 });
+    res.json({ ticket });
+}));
+router.post('/simulate/register', wrap(async (req, res) => {
+    const dni = String(req.body.dni || '').trim();
+    if (!/^\d{8}$/.test(dni)) throw new Error('Ingresa primero el DNI de 8 dígitos.');
+    const { publicKey } = crypto.generateKeyPairSync('ec', { namedCurve: 'prime256v1' });
+    const key = publicKey.export({ format: 'der', type: 'spki' }).toString('base64url');
+    const credentialId = 'sim-' + crypto.randomBytes(16).toString('base64url');
+    const ticket = access.issue({
+        kind: 'enrolled',
+        owner: owner(req),
+        dni,
+        credentialId,
+        publicKey: key,
+        counter: 0,
+    });
+    res.json({ ticket, success: true, simulated: true });
+}));
+router.post('/simulate/authenticate', wrap(async (req, res) => {
+    await access.init();
+    const dni = String(req.body.dni || '').trim();
+    let matched = null;
+    if (dni) {
+        const [rows] = await db.execute(`SELECT d.*, u.dni, u.nombre, u.apellido, u.activo FROM socio_dispositivos d JOIN usuarios u ON u.id=d.usuario_id WHERE u.dni=? AND u.activo=1`, [dni]);
+        if (!rows[0]) throw new Error('Este socio aún no tiene una huella registrada.');
+        matched = rows[0];
+    } else {
+        const [rows] = await db.execute(`SELECT d.*, u.dni, u.nombre, u.apellido, u.activo FROM socio_dispositivos d JOIN usuarios u ON u.id=d.usuario_id WHERE u.activo=1 LIMIT 1`);
+        if (!rows[0]) throw new Error('Aún no hay socios con huella registrada en el sistema. Registra la huella de un socio primero.');
+        matched = rows[0];
+    }
+
+    const proof = access.issue({ kind: 'attendance', owner: owner(req), dni: matched.dni });
+    res.json({
+        proof,
+        dni: matched.dni,
+        user: {
+            id: matched.usuario_id,
+            dni: matched.dni,
+            nombre: matched.nombre,
+            apellido: matched.apellido,
+        },
+        simulated: true,
+    });
+}));
+router.post('/remote-session/create', wrap(async (req, res) => {
+    const { action, dni, socioNombre } = req.body;
+    if (!['register', 'authenticate'].includes(action)) throw new Error('Acción no válida.');
+    const session = access.createRemoteSession(owner(req), { action, dni, socioNombre });
+    res.json({ session });
+}));
+router.get('/remote-session/active', wrap(async (req, res) => {
+    const session = access.getActiveRemoteSession(owner(req));
+    res.json({ session });
+}));
+router.get('/remote-session/:id/status', wrap(async (req, res) => {
+    const session = access.getRemoteSession(req.params.id, owner(req));
+    if (!session) return res.status(404).json({ message: 'Sesión no encontrada o expirada.' });
+    res.json({ session });
+}));
+router.post('/remote-session/complete', wrap(async (req, res) => {
+    const { sessionId, result } = req.body;
+    const session = access.completeRemoteSession(sessionId, result);
+    res.json({ session });
+}));
+router.post('/remote-session/:id/cancel', wrap(async (req, res) => {
+    const session = access.cancelRemoteSession(req.params.id);
+    res.json({ session });
+}));
 router.post('/authenticate/options', wrap(async (req, res) => {
     await access.init();
     const dni = String(req.body.dni || '').trim();

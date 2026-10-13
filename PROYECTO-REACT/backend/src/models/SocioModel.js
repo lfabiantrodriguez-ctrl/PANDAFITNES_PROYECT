@@ -194,6 +194,7 @@ class SocioModel {
             segmentoBadge = 'Activo';
         }
 
+        const panda = await require('../services/pandaAccount')(socioId);
         return {
             socio: {
                 ...socio,
@@ -217,8 +218,8 @@ class SocioModel {
                 planActual: membresiaActual ? membresiaActual.planNombre : 'Sin plan',
                 estadoMembresia: esActivo ? 'activo' : 'expirado',
                 fechaFin: membresiaActual ? membresiaActual.fechaFin : null,
-                xpTotal: totalAsistencias * 25,
-                bambusGanados: totalAsistencias * 10 + 240,
+                xpTotal: panda.xp,
+                bambusGanados: panda.bambusGanados,
             },
             membresiaActual,
             membresias,

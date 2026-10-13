@@ -4,6 +4,7 @@ import ViewTitle from '../components/ViewTitle'
 import ModalDialog from '../components/ModalDialog'
 import { CheckInService } from '../services/CheckInService'
 import { formatDate, formatTimePeru, getMinutesElapsed } from '../utils/formatters'
+import BiometricModal from '../components/BiometricModal'
 
 export default function CheckInView({ token }) {
   // Pestaña activa: 'huella' | 'manual'
@@ -26,6 +27,7 @@ export default function CheckInView({ token }) {
   const [isScanning, setIsScanning] = useState(false)
   const [biometricResult, setBiometricResult] = useState(null)
   const [biometricError, setBiometricError] = useState('')
+  const [showBiometricModal, setShowBiometricModal] = useState(false)
 
   // Lista de clientes activos en sala en tiempo real
   const [activeClients, setActiveClients] = useState([])
@@ -62,7 +64,7 @@ export default function CheckInView({ token }) {
   // =========================================================
   // MODO 1: VALIDACIÓN BIOMÉTRICA CON HUELLA DIGITAL (1-TOUCH)
   // =========================================================
-  async function handleFingerprintScan(dniToScan = null) {
+  function handleFingerprintScan(dniToScan = null) {
     if (isScanning) return
     const rawDni = (dniToScan !== null ? dniToScan : biometricDni).trim()
     setBiometricError('')
@@ -70,25 +72,21 @@ export default function CheckInView({ token }) {
       setBiometricError('El DNI debe tener 8 dígitos numéricos.')
       return
     }
-    await executeBiometricVerification(rawDni || null)
+    setShowBiometricModal(true)
   }
 
-  async function executeBiometricVerification(dni = null, forceExit = false) {
-    if (isScanning) return
+  async function handleBiometricSuccess(authRes) {
+    const targetDni = authRes.dni || biometricDni.trim()
     setIsScanning(true)
     setBiometricResult(null)
     setBiometricError('')
     try {
-      // Autenticación con sensor / celular (sin requerir DNI previo si es null)
-      const authRes = await DeviceService.authenticate(token, dni)
-      const targetDni = authRes.dni || dni
-
       const res = await CheckInService.biometricCheckIn(token, {
         dni: targetDni,
         deviceProof: authRes.proof,
         durationMinutes: 60,
         minDurationMinutes: minTrainingMinutes,
-        forceExit,
+        forceExit: false,
       })
 
       setIsScanning(false)
@@ -107,6 +105,27 @@ export default function CheckInView({ token }) {
         })
       }
       await loadActiveClients()
+    } catch (err) {
+      setIsScanning(false)
+      const msg = err.message || 'Error al validar la huella digital del socio.'
+      setBiometricError(msg)
+      setStatus({
+        loading: false,
+        error: msg,
+        success: '',
+      })
+    }
+  }
+
+  async function executeBiometricVerification(dni = null, forceExit = false) {
+    if (isScanning) return
+    setIsScanning(true)
+    setBiometricResult(null)
+    setBiometricError('')
+    try {
+      // Autenticación con sensor / celular (sin requerir DNI previo si es null)
+      const authRes = await DeviceService.authenticate(token, dni)
+      await handleBiometricSuccess(authRes)
     } catch (err) {
       setIsScanning(false)
       const msg = err.message || 'Error al validar la huella digital del socio.'
@@ -477,7 +496,7 @@ export default function CheckInView({ token }) {
                       <div><strong>Hora de Ingreso:</strong> {formatTimePeru(biometricResult.horaEntrada || new Date())} hrs (Hora Perú)</div>
                       <div style={{ color: '#166534', fontWeight: 700, marginTop: '4px' }}>
                         <i className="bi bi-lightning-charge-fill text-warning me-1"></i>
-                        +25 XP y +10 bambús otorgados a Mi Pandita
+                        +{biometricResult.xpSumados ?? 0} XP y +{biometricResult.bambusSumados ?? 0} bambús otorgados a Mi Pandita
                       </div>
                     </div>
                   </>
@@ -786,7 +805,7 @@ export default function CheckInView({ token }) {
                         {client.nombre} {client.apellido}
                       </td>
                       <td className="px-3 text-muted">{client.dni}</td>
-                      <td className="px-3 font-monospace">{client.horaEntrada?.slice(11, 16)} hrs</td>
+                      <td className="px-3 font-monospace">{formatTimePeru(client.horaEntrada)} hrs</td>
                       <td className="px-3">
                         <span
                           style={{
@@ -878,7 +897,7 @@ export default function CheckInView({ token }) {
                         <div className="mobile-card-label">Hora Ingreso</div>
                         <div className="mobile-card-value font-monospace">
                           <i className="bi bi-clock me-1 text-muted"></i>
-                          {client.horaEntrada?.slice(11, 16)} hrs
+                          {formatTimePeru(client.horaEntrada)} hrs
                         </div>
                       </div>
 
@@ -980,7 +999,7 @@ export default function CheckInView({ token }) {
               </div>
               {manualMembership && (
                 <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>
-                  Vence el: {manualMembership.fechaFin?.slice(0, 10)}
+                  Vence el: {formatDate(manualMembership.fechaFin)}
                 </div>
               )}
             </div>
@@ -1014,7 +1033,7 @@ export default function CheckInView({ token }) {
                 <div style={{ maxHeight: '140px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
                   {manualHistory.slice(0, 3).map((h) => (
                     <div key={h.id} style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
-                      <span>{h.horaEntrada?.slice(0, 10)} ({h.horaEntrada?.slice(11, 16)} hrs)</span>
+                      <span>{formatDate(h.horaEntrada)} ({formatTimePeru(h.horaEntrada)} hrs)</span>
                       <span style={{ fontWeight: 700, color: h.metodoRegistro === 'huella' ? '#15803d' : '#475569' }}>
                         {h.metodoRegistro === 'huella' ? '👆 Huella' : '✍️ Manual'}
                       </span>
@@ -1026,6 +1045,15 @@ export default function CheckInView({ token }) {
           </div>
         )}
       </ModalDialog>
+
+      <BiometricModal
+        isOpen={showBiometricModal}
+        onClose={() => setShowBiometricModal(false)}
+        token={token}
+        mode="authenticate"
+        dni={biometricDni.trim() || null}
+        onSuccess={handleBiometricSuccess}
+      />
     </div>
   )
 }
