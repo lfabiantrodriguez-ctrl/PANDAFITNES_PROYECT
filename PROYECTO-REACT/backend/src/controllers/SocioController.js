@@ -47,7 +47,11 @@ class SocioController {
                 return res.status(409).json({ message: "Ya existe un usuario con ese DNI o email" });
             }
 
+            const deviceAccess = require('../services/deviceAccess');
+            const device = deviceAccess.claim(req.body.deviceTicket, String(req.auth.id), cleanDni);
+            if (device) await deviceAccess.init();
             const socio = await SocioModel.create({
+                device,
                 dni: cleanDni,
                 nombre: cleanName,
                 apellido: cleanLastName,
@@ -135,6 +139,36 @@ class SocioController {
             console.error("Error obteniendo ficha del socio:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
         }
+    }
+
+    static async updateSocio(req, res) {
+        const db = require('../config/database');
+        const access = require('../services/deviceAccess');
+        let connection;
+        try {
+            const id = Number(req.params.id);
+            const dni = String(req.body.dni || '').trim();
+            const nombre = String(req.body.nombre || '').trim();
+            const apellido = String(req.body.apellido || '').trim();
+            const email = String(req.body.email || '').trim().toLowerCase();
+            const telefono = String(req.body.telefono || '').trim();
+            if (!id || !isValidDni(dni) || !nombre || !apellido || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email) || (telefono && !/^\d{9}$/.test(telefono)))
+                return res.status(400).json({ message: 'Revisa DNI, nombres, correo y teléfono.' });
+            const device = access.claim(req.body.deviceTicket, String(req.auth.id), dni);
+            if (device) await access.init();
+            connection = await db.getConnection();
+            await connection.beginTransaction();
+            const [rows] = await connection.execute(`SELECT u.id FROM usuarios u JOIN roles r ON r.id=u.rol_id WHERE u.id=? AND r.nombre='cliente' FOR UPDATE`, [id]);
+            if (!rows[0]) throw new Error('Socio no encontrado.');
+            await connection.execute('UPDATE usuarios SET dni=?, nombre=?, apellido=?, email=?, telefono=? WHERE id=?', [dni, nombre, apellido, email, telefono || null, id]);
+            if (device) await connection.execute(`INSERT INTO socio_dispositivos (usuario_id, credential_id, public_key, counter) VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE credential_id=VALUES(credential_id), public_key=VALUES(public_key), counter=VALUES(counter)`, [id, device.credentialId, device.publicKey, device.counter]);
+            await connection.commit();
+            res.json({ message: 'Datos del socio actualizados.' });
+        } catch (error) {
+            if (connection) await connection.rollback();
+            res.status(400).json({ message: error.code === 'ER_DUP_ENTRY' ? 'Ya existe otro usuario con ese DNI o correo.' : error.message });
+        } finally { connection?.release(); }
     }
 
     static async createOffer(req, res) {

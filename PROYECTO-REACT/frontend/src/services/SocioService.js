@@ -1,4 +1,11 @@
 export class SocioService {
+  static async updateSocio(token, id, form) {
+    const response = await fetch(`/api/admin/socios/${id}`, { method: 'PUT',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(form) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.message || 'No se pudo actualizar el socio');
+    return data;
+  }
   static async getSocios(token) {
     const response = await fetch('/api/admin/socios', {
       headers: { Authorization: `Bearer ${token}` },

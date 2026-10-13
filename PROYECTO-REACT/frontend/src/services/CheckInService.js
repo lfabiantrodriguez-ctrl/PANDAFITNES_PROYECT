@@ -67,14 +67,14 @@ export class CheckInService {
     return this.finalizeReservation(token, asistenciaId)
   }
 
-  static async biometricCheckIn(token, { userId, dni, durationMinutes = 60, minDurationMinutes = 20, forceExit = false }) {
+  static async biometricCheckIn(token, { userId, dni, deviceProof, durationMinutes = 60, minDurationMinutes = 20, forceExit = false }) {
     const response = await fetch('/api/admin/checkin/biometric', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ userId, dni, durationMinutes, minDurationMinutes, forceExit }),
+      body: JSON.stringify({ userId, dni, deviceProof, durationMinutes, minDurationMinutes, forceExit }),
     })
     const data = await response.json()
     if (!response.ok) {

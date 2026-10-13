@@ -274,7 +274,7 @@ class SocioModel {
         return rows[0] || null;
     }
 
-    static async create({ dni, nombre, apellido, email, telefono, planId, fechaInicio, metodoPago }) {
+    static async create({ dni, nombre, apellido, email, telefono, planId, fechaInicio, metodoPago, device }) {
         const connection = await db.getConnection();
 
         try {
@@ -324,6 +324,8 @@ class SocioModel {
                 [userId, plan.precio, fechaInicio, metodoPago || "efectivo", membershipResult.insertId],
             );
 
+            if (device) await connection.execute('INSERT INTO socio_dispositivos (usuario_id, credential_id, public_key, counter) VALUES (?, ?, ?, ?)',
+                [userId, device.credentialId, device.publicKey, device.counter]);
             await connection.commit();
 
             return {

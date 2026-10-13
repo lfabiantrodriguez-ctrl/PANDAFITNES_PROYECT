@@ -21,12 +21,14 @@ router.use("/auth", authRoutes);
 router.use("/dni", dniRoutes);
 router.use("/admin/planes", planRoutes);
 router.use("/admin/socios", socioRoutes);
+router.use("/admin/dispositivos", require('./deviceRoutes'));
 router.use("/admin/asistencias", attendanceRoutes);
 router.use("/asistencias", attendanceRoutes);
 router.use("/aforo", capacityRoutes);
 router.use("/admin/checkin", checkInRoutes);
 router.use("/membresias", membershipRoutes);
 router.use("/invitados", guestRoutes);
+router.use("/admin/dashboard", require("./dashboardRoutes"));
 router.use("/configuracion", configRoutes);
 router.use("/recompensas", rewardRoutes);
 

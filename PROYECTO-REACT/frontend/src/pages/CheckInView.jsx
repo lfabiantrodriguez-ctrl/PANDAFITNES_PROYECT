@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
+import { DeviceService } from '../services/DeviceService'
 import ViewTitle from '../components/ViewTitle'
 import ModalDialog from '../components/ModalDialog'
 import { CheckInService } from '../services/CheckInService'
@@ -9,7 +10,7 @@ export default function CheckInView({ token }) {
   const [activeTab, setActiveTab] = useState('huella')
 
   // Tiempo mínimo de entrenamiento para permitir salida biométrica (por defecto 20 min)
-  const [minTrainingMinutes, setMinTrainingMinutes] = useState(20)
+  const minTrainingMinutes = 20
 
   // Estado para Validación Manual
   const [manualCode, setManualCode] = useState('')
@@ -21,8 +22,8 @@ export default function CheckInView({ token }) {
 
   // Estado para Validación Biométrica (Huella Digital)
   const [biometricDni, setBiometricDni] = useState('')
+  const [showDniFallback, setShowDniFallback] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
-  const [scanProgress, setScanProgress] = useState(0)
   const [biometricResult, setBiometricResult] = useState(null)
   const [biometricError, setBiometricError] = useState('')
 
@@ -59,38 +60,32 @@ export default function CheckInView({ token }) {
   }
 
   // =========================================================
-  // MODO 1: VALIDACIÓN BIOMÉTRICA CON HUELLA DIGITAL
+  // MODO 1: VALIDACIÓN BIOMÉTRICA CON HUELLA DIGITAL (1-TOUCH)
   // =========================================================
   async function handleFingerprintScan(dniToScan = null) {
-    const dni = (dniToScan || biometricDni).trim()
+    if (isScanning) return
+    const rawDni = (dniToScan !== null ? dniToScan : biometricDni).trim()
     setBiometricError('')
-
-    if (!dni || dni.length !== 8) {
-      setBiometricError('Ingresa un DNI válido de 8 dígitos numéricos para validar huella')
+    if (rawDni && !/^\d{8}$/.test(rawDni)) {
+      setBiometricError('El DNI debe tener 8 dígitos numéricos.')
       return
     }
-
-    setStatus({ loading: false, error: '', success: '' })
-    setIsScanning(true)
-    setScanProgress(0)
-    setBiometricResult(null)
-
-    // Simulación de escaneo biométrico con animación realista de lectura
-    let current = 0
-    const interval = setInterval(() => {
-      current += 20
-      setScanProgress(current)
-      if (current >= 100) {
-        clearInterval(interval)
-        executeBiometricVerification(dni)
-      }
-    }, 120)
+    await executeBiometricVerification(rawDni || null)
   }
 
-  async function executeBiometricVerification(dni, forceExit = false) {
+  async function executeBiometricVerification(dni = null, forceExit = false) {
+    if (isScanning) return
+    setIsScanning(true)
+    setBiometricResult(null)
+    setBiometricError('')
     try {
+      // Autenticación con sensor / celular (sin requerir DNI previo si es null)
+      const authRes = await DeviceService.authenticate(token, dni)
+      const targetDni = authRes.dni || dni
+
       const res = await CheckInService.biometricCheckIn(token, {
-        dni,
+        dni: targetDni,
+        deviceProof: authRes.proof,
         durationMinutes: 60,
         minDurationMinutes: minTrainingMinutes,
         forceExit,
@@ -108,15 +103,17 @@ export default function CheckInView({ token }) {
         setStatus({
           loading: false,
           error: '',
-          success: res.message || '¡Operación biométrica completada con éxito!',
+          success: res.message || '¡Acceso verificado con éxito!',
         })
       }
       await loadActiveClients()
     } catch (err) {
       setIsScanning(false)
+      const msg = err.message || 'Error al validar la huella digital del socio.'
+      setBiometricError(msg)
       setStatus({
         loading: false,
-        error: err.message || 'Error al validar la huella digital del socio.',
+        error: msg,
         success: '',
       })
     }
@@ -187,7 +184,7 @@ export default function CheckInView({ token }) {
       if (client.id) {
         await CheckInService.finalizeReservation(token, client.id)
       } else {
-        await CheckInService.biometricCheckIn(token, { dni: client.dni, forceExit: true })
+        throw new Error('Selecciona una asistencia válida para registrar la salida.')
       }
       setStatus({ loading: false, error: '', success: `¡Salida registrada para ${client.nombre} ${client.apellido}!` })
       await loadActiveClients()
@@ -203,7 +200,7 @@ export default function CheckInView({ token }) {
         <div>
           <ViewTitle
             title="Control de Acceso y Asistencias"
-            subtitle="Validación biométrica con huella dactilar y confirmación manual en recepción."
+            subtitle=""
           />
         </div>
 
@@ -320,209 +317,106 @@ export default function CheckInView({ token }) {
           ===================================================== */}
       {activeTab === 'huella' && (
         <div className="checkin-biometric-grid">
-          {/* Card del Lector Biométrico */}
           <div className="checkin-scanner-card">
-            <div style={{ maxWidth: '440px', margin: '0 auto' }}>
-              <span
-                style={{
-                  fontSize: '0.74rem',
-                  fontWeight: 800,
-                  textTransform: 'uppercase',
-                  background: 'rgba(196, 240, 57, 0.25)',
-                  color: '#166534',
-                  padding: '4px 14px',
-                  borderRadius: '9999px',
-                  letterSpacing: '0.06em',
-                  display: 'inline-block',
-                  marginBottom: '16px',
-                }}
-              >
-                Sensor Biométrico Óptico Activo
-              </span>
-
-              <h3 style={{ fontSize: '1.45rem', fontWeight: 900, color: '#111d15', marginBottom: '8px' }}>
-                Coloca la huella digital en el lector
-              </h3>
-              <p style={{ fontSize: '0.88rem', color: '#5f7165', marginBottom: '28px' }}>
-                El sensor verificará la membresía del socio en 0.5s y registrará automáticamente la entrada o salida sumando +25 XP a su pandita.
-              </p>
-
-              {/* Animación del Sensor de Huella */}
+            <div style={{ maxWidth: 440, margin: '0 auto', textAlign: 'center' }}>
               <div
-                onClick={() => !isScanning && handleFingerprintScan()}
                 style={{
-                  width: '160px',
-                  height: '160px',
-                  margin: '0 auto 28px',
+                  width: '100px',
+                  height: '100px',
                   borderRadius: '50%',
-                  background: isScanning
-                    ? 'radial-gradient(circle, rgba(196, 240, 57, 0.4) 0%, rgba(17, 29, 21, 0.95) 75%)'
-                    : 'radial-gradient(circle, #f4f6f3 0%, #ffffff 80%)',
-                  border: isScanning ? '3px solid #c4f039' : '3px dashed #cbd5e1',
-                  boxShadow: isScanning ? '0 0 35px rgba(196, 240, 57, 0.6)' : '0 4px 16px rgba(0,0,0,0.04)',
+                  background: isScanning ? '#111d15' : '#f0fdf4',
+                  border: isScanning ? '3px solid #c4f039' : '2px dashed #86efac',
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  cursor: isScanning ? 'wait' : 'pointer',
-                  position: 'relative',
-                  overflow: 'hidden',
+                  margin: '0 auto 18px',
                   transition: 'all 0.3s ease',
+                  boxShadow: isScanning ? '0 0 25px rgba(196, 240, 57, 0.45)' : 'none',
                 }}
-                title="Presiona para escanear huella digital"
               >
-                {/* SVG Huella Dactilar */}
-                <svg
-                  width="78"
-                  height="78"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke={isScanning ? '#c4f039' : '#111d15'}
-                  strokeWidth="1.8"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  style={{ transition: 'stroke 0.2s ease' }}
+                <i
+                  className={`bi ${isScanning ? 'bi-hourglass-split' : 'bi-fingerprint'}`}
+                  style={{
+                    fontSize: 52,
+                    color: isScanning ? '#c4f039' : '#15803d',
+                    transition: 'all 0.3s ease',
+                  }}
+                  aria-hidden="true"
+                />
+              </div>
+
+              <h3 className="mt-2 mb-2" style={{ fontWeight: 800, color: '#111d15' }}>
+                Control de Acceso Biométrico
+              </h3>
+              <p className="text-muted small mb-4">
+                Coloca tu huella en el lector o confirma en tu celular vinculado para validar tu ingreso o salida automáticamente.
+              </p>
+
+              <button
+                type="button"
+                className="btn w-100 py-3 fw-bold mb-3 shadow-sm"
+                style={{
+                  background: isScanning ? '#111d15' : '#c4f039',
+                  color: isScanning ? '#c4f039' : '#111d15',
+                  fontSize: '1.05rem',
+                  borderRadius: '14px',
+                  border: 'none',
+                  transition: 'all 0.2s ease',
+                }}
+                disabled={isScanning}
+                onClick={() => handleFingerprintScan()}
+              >
+                <i className={`bi ${isScanning ? 'bi-hourglass-split' : 'bi-fingerprint'} me-2`} />
+                {isScanning ? 'Leyendo huella… Confirma en el dispositivo' : 'Colocar huella / Validar'}
+              </button>
+
+              {/* Opción secundaria: Validar por DNI específico */}
+              <div className="text-center mt-2">
+                <button
+                  type="button"
+                  className="btn btn-link text-decoration-none small text-muted p-0"
+                  style={{ fontSize: '0.8rem' }}
+                  onClick={() => setShowDniFallback(!showDniFallback)}
                 >
-                  <path d="M12 12c0-3 2.5-5.5 5.5-5.5.8 0 1.5.2 2.2.5"></path>
-                  <path d="M8.5 7.5A6.5 6.5 0 0 1 12 6.5c4.1 0 7.5 3.4 7.5 7.5 0 2.2-.9 4.3-2.3 5.8"></path>
-                  <path d="M5 12c0-3.9 3.1-7 7-7 2.3 0 4.4 1.1 5.7 2.8"></path>
-                  <path d="M12 21a9 9 0 0 1-9-9c0-2.5 1-4.7 2.6-6.4"></path>
-                  <path d="M12 15a3 3 0 0 1-3-3c0-.8.3-1.6.9-2.1"></path>
-                  <path d="M12 18a6 6 0 0 1-6-6"></path>
-                  <path d="M12 12v6"></path>
-                </svg>
-
-                {/* Línea Láser Escáner */}
-                {isScanning && (
-                  <div
-                    style={{
-                      position: 'absolute',
-                      top: `${scanProgress}%`,
-                      left: 0,
-                      right: 0,
-                      height: '3px',
-                      background: '#c4f039',
-                      boxShadow: '0 0 14px 4px #c4f039',
-                      transition: 'top 0.1s linear',
-                    }}
-                  />
-                )}
+                  <i className={`bi ${showDniFallback ? 'bi-chevron-up' : 'bi-sliders'} me-1`}></i>
+                  {showDniFallback ? 'Ocultar búsqueda por DNI' : '¿Validar por un DNI específico?'}
+                </button>
               </div>
 
-              {/* Selector de tiempo mínimo de permanencia para salida */}
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', background: '#f8fafc', padding: '10px 14px', borderRadius: '12px', border: '1px solid #e2e8f0' }}>
-                <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#334155' }}>
-                  <i className="bi bi-stopwatch me-1 text-success"></i>
-                  Tiempo mín. permanencia para salida:
-                </span>
-                <select
-                  value={minTrainingMinutes}
-                  onChange={(e) => setMinTrainingMinutes(Number(e.target.value))}
-                  className="form-select form-select-sm"
-                  style={{ width: 'auto', borderRadius: '8px', fontSize: '0.8rem', fontWeight: 700 }}
-                >
-                  <option value={1}>1 min (modo prueba)</option>
-                  <option value={15}>15 minutos</option>
-                  <option value={20}>20 minutos (estándar)</option>
-                  <option value={30}>30 minutos</option>
-                  <option value={45}>45 minutos</option>
-                </select>
-              </div>
-
-              {/* Selector / Ingreso rápido de DNI para simulación */}
-              <div style={{ marginBottom: '20px' }}>
-                <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, color: '#334155', marginBottom: '8px' }}>
-                  DNI del Socio para Lector Biométrico:
-                </label>
-                <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                  <input
-                    type="text"
-                    inputMode="numeric"
-                    maxLength={8}
-                    value={biometricDni}
-                    onChange={(e) => {
-                      setBiometricDni(e.target.value.replace(/\D/g, '').slice(0, 8))
-                      if (biometricError) setBiometricError('')
-                    }}
-                    onKeyDown={(e) => e.key === 'Enter' && handleFingerprintScan()}
-                    placeholder="Ingresa DNI (ej: 12345678)..."
-                    className={`form-control ${biometricError ? 'is-invalid' : ''}`}
-                    style={{
-                      flex: '1 1 180px',
-                      borderRadius: '12px',
-                      padding: '12px 16px',
-                      fontSize: '0.95rem',
-                      border: biometricError ? '1.5px solid #ef4444' : '1.5px solid #cbd5e1',
-                      backgroundColor: biometricError ? '#fef2f2' : '#ffffff',
-                    }}
-                  />
-                  <button
-                    type="button"
-                    disabled={isScanning || !biometricDni.trim()}
-                    onClick={() => handleFingerprintScan()}
-                    style={{
-                      padding: '12px 20px',
-                      borderRadius: '12px',
-                      border: 'none',
-                      background: '#c4f039',
-                      color: '#111d15',
-                      fontWeight: 800,
-                      fontSize: '0.92rem',
-                      cursor: isScanning || !biometricDni.trim() ? 'not-allowed' : 'pointer',
-                      whiteSpace: 'nowrap',
-                      boxShadow: '0 4px 12px rgba(196, 240, 57, 0.35)',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: '6px',
-                    }}
-                  >
-                    <i className="bi bi-fingerprint"></i>
-                    <span>{isScanning ? 'Escaneando...' : 'Validar Huella'}</span>
-                  </button>
-                </div>
-                {biometricError && (
-                  <div className="text-danger small mt-2 d-flex align-items-center gap-1" style={{ fontSize: '0.8rem' }}>
-                    <i className="bi bi-exclamation-circle-fill"></i>
-                    <span>{biometricError}</span>
-                  </div>
-                )}
-              </div>
-
-              {/* Socios rápidos para prueba rápida de huella */}
-              <div style={{ textAlign: 'left', background: '#f8fafc', padding: '14px 18px', borderRadius: '14px', border: '1px solid #e2e8f0' }}>
-                <span style={{ fontSize: '0.76rem', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', display: 'block', marginBottom: '8px' }}>
-                  Prueba rápida de huellas enroladas:
-                </span>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '8px' }}>
-                  {[
-                    { nombre: 'Brayan García', dni: '12345678' },
-                    { nombre: 'Valeria Torres', dni: '71234567' },
-                    { nombre: 'Diego Salas', dni: '72345678' },
-                    { nombre: 'Camila Ríos', dni: '73456789' },
-                    { nombre: 'Jorge Méndez', dni: '74567890' },
-                  ].map((s) => (
+              {showDniFallback && (
+                <div className="mt-3 p-3 rounded-3 bg-light border text-start" style={{ animation: 'fadeIn 0.2s ease' }}>
+                  <label htmlFor="device-checkin-dni" className="form-label small fw-bold text-dark mb-1">
+                    DNI específico (Opcional)
+                  </label>
+                  <div className="d-flex gap-2">
+                    <input
+                      id="device-checkin-dni"
+                      className="form-control form-control-sm"
+                      inputMode="numeric"
+                      maxLength={8}
+                      placeholder="8 dígitos"
+                      value={biometricDni}
+                      disabled={isScanning}
+                      onChange={(e) => setBiometricDni(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                    />
                     <button
-                      key={s.dni}
                       type="button"
-                      onClick={() => {
-                        setBiometricDni(s.dni)
-                        handleFingerprintScan(s.dni)
-                      }}
-                      style={{
-                        padding: '6px 12px',
-                        background: '#ffffff',
-                        border: '1px solid #cbd5e1',
-                        borderRadius: '8px',
-                        fontSize: '0.78rem',
-                        fontWeight: 700,
-                        color: '#111d15',
-                        cursor: 'pointer',
-                      }}
+                      className="btn btn-sm btn-dark px-3 fw-bold"
+                      disabled={isScanning || biometricDni.length !== 8}
+                      onClick={() => handleFingerprintScan(biometricDni)}
                     >
-                      {s.nombre} ({s.dni})
+                      Validar
                     </button>
-                  ))}
+                  </div>
                 </div>
-              </div>
+              )}
+
+              {biometricError && (
+                <p role="alert" className="text-danger small mt-3 mb-0">
+                  <i className="bi bi-exclamation-triangle-fill me-1"></i>
+                  {biometricError}
+                </p>
+              )}
             </div>
           </div>
 
@@ -579,7 +473,7 @@ export default function CheckInView({ token }) {
                     </p>
 
                     <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '14px', textAlign: 'left', fontSize: '0.82rem', color: '#334155', lineHeight: 1.6, marginBottom: '16px' }}>
-                      <div><strong>Método:</strong> Sensor Biométrico de Huella Digital <i className="bi bi-fingerprint text-success ms-1"></i></div>
+                      <div><strong>Método:</strong> Dispositivo verificado <i className="bi bi-fingerprint text-success ms-1"></i></div>
                       <div><strong>Hora de Ingreso:</strong> {formatTimePeru(biometricResult.horaEntrada || new Date())} hrs (Hora Perú)</div>
                       <div style={{ color: '#166534', fontWeight: 700, marginTop: '4px' }}>
                         <i className="bi bi-lightning-charge-fill text-warning me-1"></i>

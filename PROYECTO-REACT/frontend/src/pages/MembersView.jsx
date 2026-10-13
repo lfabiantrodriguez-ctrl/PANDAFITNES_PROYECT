@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import DeviceEnrollment from '../components/DeviceEnrollment'
 import ViewTitle from '../components/ViewTitle'
 import ModalDialog from '../components/ModalDialog'
 import MemberProfileModal from '../components/MemberProfileModal'
@@ -14,6 +15,7 @@ export default function MembersView({ token }) {
   const [members, setMembers] = useState([])
   const [plans, setPlans] = useState([])
   const [showForm, setShowForm] = useState(false)
+  const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
   const [formStatus, setFormStatus] = useState({ loading: false, dniLoading: false, error: '' })
@@ -88,13 +90,14 @@ export default function MembersView({ token }) {
     if (field === 'dni') cleanValue = value.replace(/\D/g, '').slice(0, 8)
     if (field === 'telefono') cleanValue = value.replace(/\D/g, '').slice(0, 9)
     if (field === 'nombre' || field === 'apellido') cleanValue = value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')
-    setForm((current) => ({ ...current, [field]: cleanValue }))
+    setForm((current) => ({ ...current, [field]: cleanValue, ...(field === 'dni' ? {deviceTicket: ''} : {}) }))
     if (fieldErrors[field]) {
       setFieldErrors((prev) => ({ ...prev, [field]: '' }))
     }
   }
 
   function resetForm() {
+    setEditingId(null)
     setForm({
       dni: '',
       nombre: '',
@@ -172,7 +175,7 @@ export default function MembersView({ token }) {
     }
 
     // Validación Fecha de inicio
-    if (!form.fechaInicio) {
+    if (!editingId && !form.fechaInicio) {
       errors.fechaInicio = 'Selecciona la fecha de inicio de la membresía'
     }
 
@@ -185,8 +188,9 @@ export default function MembersView({ token }) {
     setFieldErrors({})
 
     try {
-      await SocioService.createSocio(token, form)
-      setMessage(`Socio ${form.nombre} ${form.apellido} registrado exitosamente. Se envió correo con credenciales de acceso.`)
+      if (editingId) await SocioService.updateSocio(token, editingId, form)
+      else await SocioService.createSocio(token, form)
+      setMessage(editingId ? 'Datos del socio actualizados.' : `Socio ${form.nombre} ${form.apellido} registrado exitosamente.`)
       resetForm()
       setShowForm(false)
       loadData()
@@ -534,6 +538,11 @@ export default function MembersView({ token }) {
                       {/* Acciones */}
                       <td className="px-3 text-end">
                         <div className="d-flex justify-content-end gap-1 flex-wrap">
+                          <button type="button" className="btn btn-sm btn-outline-dark fw-bold" onClick={() => {
+                            resetForm(); setEditingId(socio.id);
+                            setForm({dni:socio.dni,nombre:socio.nombre,apellido:socio.apellido,email:socio.email || '',telefono:socio.telefono || '',deviceTicket:''});
+                            setShowForm(true);
+                          }}><i className="bi bi-pencil-square me-1" />Editar</button>
                           {/* Botón Ver Ficha 360 */}
                           <button
                             className="btn btn-sm btn-outline-dark fw-bold px-2 py-1 d-inline-flex align-items-center gap-1"
@@ -730,9 +739,9 @@ export default function MembersView({ token }) {
       <ModalDialog
         isOpen={showForm}
         onClose={() => setShowForm(false)}
-        title="Registrar Nuevo Socio"
-        subtitle="Ingresa los datos personales del socio y selecciona su plan de membresía inicial"
-        badge="Alta de Socio"
+        title={editingId ? "Editar socio" : "Registrar Nuevo Socio"}
+        subtitle={editingId ? "Actualiza sus datos o vincula otro dispositivo." : "Ingresa los datos personales y selecciona su membresía."}
+        badge={editingId ? "Datos del socio" : "Alta de Socio"}
         size="lg"
       >
         <form onSubmit={handleCreateMember}>
@@ -780,6 +789,7 @@ export default function MembersView({ token }) {
               )}
             </div>
 
+            {!editingId && <>
             <div className="col-12 col-md-6">
               <label className="form-label fw-bold small text-dark" htmlFor="new-plan">
                 Plan de Membresía *
@@ -800,6 +810,7 @@ export default function MembersView({ token }) {
               </select>
             </div>
 
+            </>}
             <div className="col-12 col-md-6">
               <label className="form-label fw-bold small text-dark" htmlFor="new-nombre">
                 Nombres *
@@ -903,6 +914,7 @@ export default function MembersView({ token }) {
               )}
             </div>
 
+            {!editingId && <>
             <div className="col-12 col-md-6">
               <label className="form-label fw-bold small text-dark" htmlFor="new-fecha-inicio">
                 Fecha Inicio *
@@ -928,6 +940,8 @@ export default function MembersView({ token }) {
               )}
             </div>
 
+            </>}
+            {!editingId && <>
             <div className="col-12 col-md-6">
               <label className="form-label fw-bold small text-dark" htmlFor="new-pago">
                 Método de Pago *
@@ -945,9 +959,10 @@ export default function MembersView({ token }) {
                 <option value="transferencia">Transferencia Bancaria</option>
               </select>
             </div>
+            </>}
           </div>
 
-          {selectedNewPlan && (
+          {!editingId && selectedNewPlan && (
             <div className="p-3 mt-4 rounded-3 border bg-light d-flex justify-content-between align-items-center">
               <div>
                 <strong className="text-dark">{selectedNewPlan.nombre}</strong>
@@ -958,6 +973,9 @@ export default function MembersView({ token }) {
               </span>
             </div>
           )}
+
+          <DeviceEnrollment key={editingId || 'new'} socioId={editingId} token={token} dni={form.dni} ticket={form.deviceTicket}
+            disabled={formStatus.loading} onRegistered={ticket => setForm(current => ({...current, deviceTicket:ticket}))} />
 
           <div className="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
             <button
@@ -974,7 +992,7 @@ export default function MembersView({ token }) {
               disabled={formStatus.loading}
               style={{ background: '#c4f039', color: '#111d15', fontWeight: 800, border: 'none', borderRadius: '10px' }}
             >
-              {formStatus.loading ? 'Registrando...' : 'Registrar Socio'}
+              {formStatus.loading ? 'Guardando...' : editingId ? 'Guardar cambios' : 'Registrar Socio'}
             </button>
           </div>
         </form>

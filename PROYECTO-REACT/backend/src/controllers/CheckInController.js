@@ -287,7 +287,13 @@ class CheckInController {
 
     static async biometricCheckIn(req, res) {
         try {
-            const { userId, dni, durationMinutes } = req.body;
+            const { userId, durationMinutes } = req.body;
+            const access = require('../services/deviceAccess');
+            let proof;
+            try { proof = access.take(req.body.deviceProof, String(req.auth.id), 'attendance'); }
+            catch (error) { return res.status(403).json({ message: error.message }); }
+            const dni = req.body.dni || proof.dni;
+            if (!dni || userId || proof.dni !== String(dni)) return res.status(403).json({ message: 'Confirma la huella de este socio antes de marcar.' });
             const MembershipModel = require("../models/MembershipModel");
 
             let targetUser = null;

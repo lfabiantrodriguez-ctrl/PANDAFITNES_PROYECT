@@ -8,10 +8,11 @@ export const DEMO_CAPACITY = {
   actualizadoEn: '2026-06-12T10:00:00.000Z',
 }
 
-export default function CapacityPanel() {
+export default function CapacityPanel({ showDemo = true }) {
   const [capacity, setCapacity] = useState(DEMO_CAPACITY)
   const [source, setSource] = useState('demo')
   const [isLoading, setIsLoading] = useState(true)
+  const [retry, setRetry] = useState(0)
 
   useEffect(() => {
     let isMounted = true
@@ -46,6 +47,7 @@ export default function CapacityPanel() {
       }
     }
 
+    setIsLoading(true)
     loadCapacity()
 
     const timer = setInterval(loadCapacity, 15000)
@@ -54,7 +56,7 @@ export default function CapacityPanel() {
       isMounted = false
       clearInterval(timer)
     }
-  }, [])
+  }, [retry])
 
   const availability = useMemo(() => {
     const freeSlots = Math.max(capacity.maximo - capacity.actual, 0)
@@ -76,6 +78,14 @@ export default function CapacityPanel() {
       month: 'short',
     }).format(new Date(capacity.actualizadoEn))
   }, [capacity.actualizadoEn])
+
+  if (!showDemo && source !== 'api') {
+    return <section className="pc-capacity-unavailable" aria-label="Estado del aforo" aria-live="polite">
+      <h3>{isLoading ? 'CONSULTANDO…' : 'VOLVEMOS EN UN MOMENTO.'}</h3>
+      <p>{isLoading ? 'Estamos consultando la disponibilidad del club.' : 'No pudimos actualizar el aforo. Inténtalo de nuevo o consulta con recepción.'}</p>
+      {!isLoading && <button type="button" className="pc-text-link" onClick={() => setRetry(v => v + 1)}>Volver a consultar <span>↻</span></button>}
+    </section>
+  }
 
   return (
     <section className="capacity-panel" aria-label="Aforo en tiempo real">

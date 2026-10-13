@@ -6,6 +6,7 @@ import { SocioService } from '../services/SocioService'
 import { AttendanceService } from '../services/AttendanceService'
 import { MembershipService } from '../services/MembershipService'
 import { ConfigService } from '../services/ConfigService'
+import { DashboardService } from '../services/DashboardService'
 
 const sections = [
   { key: 'principal', label: 'Vista General' },
@@ -72,6 +73,15 @@ export default function DashboardReservationsView({ token, user }) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [config, setConfig] = useState(null)
+  const [metrics, setMetrics] = useState({
+    totalSocios: 0,
+    ingresosMes: 0,
+    mesActual: '',
+    weeklyData: [],
+    averageDaily: '0.0',
+    recentActivity: [],
+    renewals: [],
+  })
 
   // State for Socio
   const [socioAsistencias, setSocioAsistencias] = useState([])
@@ -152,11 +162,12 @@ export default function DashboardReservationsView({ token, user }) {
 
     try {
       if (isAdmin) {
-        const [capacityData, socioData, attendanceData, configData] = await Promise.all([
+        const [capacityData, socioData, attendanceData, configData, metricsData] = await Promise.all([
           CapacityService.getCapacity(),
           SocioService.getSocios(token).catch(() => ({ socios: [] })),
           AttendanceService.getActiveClients(token).catch(() => ({ clients: [] })),
           ConfigService.getConfig().catch(() => null),
+          DashboardService.getMetrics(token).catch(() => null),
         ])
 
         setCapacity({
@@ -168,6 +179,7 @@ export default function DashboardReservationsView({ token, user }) {
         setClients(Array.isArray(socioData.socios) ? socioData.socios : [])
         setActiveClients(Array.isArray(attendanceData.clients) ? attendanceData.clients : [])
         if (configData) setConfig(configData)
+        if (metricsData) setMetrics(metricsData)
       } else {
         const [capacityData, attHistory, memData, pandaRes, configData] = await Promise.all([
           CapacityService.getCapacity().catch(() => ({ actual: 0, maximo: 100 })),
@@ -281,19 +293,21 @@ export default function DashboardReservationsView({ token, user }) {
   // -----------------------------------------------------------------
 
   function renderPrincipalAdmin() {
-    const weeklyData = [
-      { day: 'Mié 16', count: 92, height: 74 },
-      { day: 'Jue 17', count: 112, height: 90 },
-      { day: 'Vie 18', count: 106, height: 85 },
-      { day: 'Sáb 19', count: 74, height: 60 },
-      { day: 'Dom 20', count: 62, height: 50 },
-      { day: 'Lun 21', count: 124, height: 100 },
-      { day: 'Hoy', count: capacity.actual > 0 ? capacity.actual : 86, height: 69, isToday: true },
-    ]
+    const weeklyData = metrics.weeklyData && metrics.weeklyData.length > 0
+      ? metrics.weeklyData
+      : [
+          { day: 'Hoy', count: capacity.actual, height: 25, isToday: true },
+        ]
+
+    const totalSociosRegistrados = metrics.totalSocios !== undefined ? metrics.totalSocios : totalClients
+    const totalPersonasEnSala = totalActiveClients > 0 ? totalActiveClients : capacity.actual
+    const facturacionMes = Number(metrics.ingresosMes || 0).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+    const nombreMes = metrics.mesActual || 'este mes'
+    const promedioEntradas = metrics.averageDaily || '0.0'
 
     return (
       <div style={{ display: 'grid', gap: '24px' }}>
-        {/* Fila de 4 Tarjetas de Métricas Principales */}
+        {/* Fila de 4 Tarjetas de Métricas Principales Reales */}
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           {/* Card 1: Socios activos */}
           <article className="dashboard-info-card" style={{ padding: '22px' }}>
@@ -309,7 +323,7 @@ export default function DashboardReservationsView({ token, user }) {
               </div>
             </div>
             <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
-              {totalClients > 0 ? totalClients : 428}
+              {totalSociosRegistrados}
             </strong>
             <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
               Registrados en el sistema
@@ -350,7 +364,7 @@ export default function DashboardReservationsView({ token, user }) {
               </div>
             </div>
             <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
-              {totalActiveClients > 0 ? totalActiveClients : capacity.actual}
+              {totalPersonasEnSala}
             </strong>
             <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
               Con check-in activo en recepción
@@ -369,10 +383,10 @@ export default function DashboardReservationsView({ token, user }) {
               </div>
             </div>
             <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
-              S/68,450
+              S/ {facturacionMes}
             </strong>
             <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
-              PEN · Facturación acumulada
+              PEN · Facturación acumulada de {nombreMes}
             </p>
           </article>
         </div>
@@ -401,12 +415,12 @@ export default function DashboardReservationsView({ token, user }) {
                     fontSize: '0.78rem',
                   }}
                 >
-                  Promedio: 94 entradas
+                  Promedio: {promedioEntradas} entradas
                 </span>
               </div>
             </div>
 
-            {/* Gráfico de barras vertical estilo deportivo */}
+            {/* Gráfico de barras vertical estilo deportivo con datos reales */}
             <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '170px', padding: '10px 10px 0', borderBottom: '1px solid #e3e8e2', gap: '12px' }}>
               {weeklyData.map((item, idx) => (
                 <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' }}>
@@ -448,34 +462,36 @@ export default function DashboardReservationsView({ token, user }) {
             </div>
 
             <div style={{ display: 'grid', gap: '14px' }}>
-              {[
-                { name: 'Valeria Torres', time: '10:42', detail: 'Check-in ingreso · +25 XP Bambús', badge: 'Autorizado', bg: '#ecfccb', col: '#1b4d24' },
-                { name: 'Diego Salas', time: '10:36', detail: 'Renovación trimestral · S/ 280', badge: 'Membresía activa', bg: '#dcfce7', col: '#166534' },
-                { name: 'Camila Ríos', time: '10:31', detail: 'Pase de un día · S/ 15', badge: 'Acceso pagado', bg: '#dcfce7', col: '#166534' },
-                { name: 'Jorge Méndez', time: '10:18', detail: 'Membresía vencida · Notificado', badge: 'Vencido', bg: '#fee2e2', col: '#991b1b' },
-              ].map((act, i) => (
-                <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: i < 3 ? '12px' : '0', borderBottom: i < 3 ? '1px solid #f0f4f0' : 'none' }}>
-                  <div>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                      <strong style={{ fontSize: '0.9rem', color: '#111d15' }}>{act.name}</strong>
-                      <span style={{ fontSize: '0.78rem', color: '#8fa295' }}>{act.time}</span>
+              {metrics.recentActivity && metrics.recentActivity.length > 0 ? (
+                metrics.recentActivity.map((act, i) => (
+                  <div key={i} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', paddingBottom: i < metrics.recentActivity.length - 1 ? '12px' : '0', borderBottom: i < metrics.recentActivity.length - 1 ? '1px solid #f0f4f0' : 'none' }}>
+                    <div>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <strong style={{ fontSize: '0.9rem', color: '#111d15' }}>{act.name}</strong>
+                        <span style={{ fontSize: '0.78rem', color: '#8fa295' }}>{act.time}</span>
+                      </div>
+                      <span style={{ fontSize: '0.8rem', color: '#5f7165' }}>{act.detail}</span>
                     </div>
-                    <span style={{ fontSize: '0.8rem', color: '#5f7165' }}>{act.detail}</span>
+                    <span
+                      style={{
+                        padding: '4px 10px',
+                        borderRadius: '999px',
+                        background: act.bg,
+                        color: act.col,
+                        fontSize: '0.74rem',
+                        fontWeight: 800,
+                      }}
+                    >
+                      {act.badge}
+                    </span>
                   </div>
-                  <span
-                    style={{
-                      padding: '4px 10px',
-                      borderRadius: '999px',
-                      background: act.bg,
-                      color: act.col,
-                      fontSize: '0.74rem',
-                      fontWeight: 800,
-                    }}
-                  >
-                    {act.badge}
-                  </span>
+                ))
+              ) : (
+                <div style={{ textAlign: 'center', padding: '24px 12px', color: '#5f7165', fontSize: '0.86rem' }}>
+                  <i className="bi bi-clock-history me-1"></i>
+                  Aún no se ha registrado actividad reciente en recepción.
                 </div>
-              ))}
+              )}
             </div>
           </section>
         </div>
@@ -487,7 +503,7 @@ export default function DashboardReservationsView({ token, user }) {
               Membresías por renovar
             </h3>
             <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
-              Socios con vencimiento próximo en los próximos 7 días.
+              Socios con vencimiento próximo o con membresía activa en el club.
             </p>
           </div>
 
@@ -503,99 +519,105 @@ export default function DashboardReservationsView({ token, user }) {
                 </tr>
               </thead>
               <tbody>
-                {[
-                  { socio: 'Lucía Herrera', plan: 'Plan Mensual Panda', vencimiento: '24 sep 2026', estado: 'Por vencer' },
-                  { socio: 'Andrés Castro', plan: 'Plan Trimestral Fuerza', vencimiento: '26 sep 2026', estado: 'Por vencer' },
-                  { socio: 'Sofía Luna', plan: 'Plan Anual VIP', vencimiento: '28 sep 2026', estado: 'Por vencer' },
-                ].map((m, idx) => (
-                  <tr key={idx}>
-                    <td style={{ fontWeight: 700 }}>{m.socio}</td>
-                    <td style={{ color: '#5f7165' }}>{m.plan}</td>
-                    <td style={{ color: '#5f7165' }}>{m.vencimiento}</td>
-                    <td>
-                      <span
-                        style={{
-                          padding: '4px 10px',
-                          borderRadius: '999px',
-                          background: '#fef3c7',
-                          color: '#b45309',
-                          fontSize: '0.76rem',
-                          fontWeight: 800,
-                        }}
-                      >
-                        {m.estado}
-                      </span>
-                    </td>
-                    <td style={{ textAlign: 'right' }}>
-                      <button
-                        type="button"
-                        onClick={() => navigate('/app/socios')}
-                        style={{
-                          background: 'none',
-                          border: 0,
-                          color: '#235833',
-                          fontWeight: 800,
-                          fontSize: '0.86rem',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '4px',
-                        }}
-                      >
-                        Renovar →
-                      </button>
+                {metrics.renewals && metrics.renewals.length > 0 ? (
+                  metrics.renewals.map((m, idx) => (
+                    <tr key={idx}>
+                      <td style={{ fontWeight: 700 }}>{m.socio}</td>
+                      <td style={{ color: '#5f7165' }}>{m.plan}</td>
+                      <td style={{ color: '#5f7165' }}>{m.vencimiento}</td>
+                      <td>
+                        <span
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: '999px',
+                            background: m.estadoBg,
+                            color: m.estadoCol,
+                            fontSize: '0.76rem',
+                            fontWeight: 800,
+                          }}
+                        >
+                          {m.estado}
+                        </span>
+                      </td>
+                      <td style={{ textAlign: 'right' }}>
+                        <button
+                          type="button"
+                          onClick={() => navigate('/app/socios')}
+                          style={{
+                            background: 'none',
+                            border: 0,
+                            color: '#235833',
+                            fontWeight: 800,
+                            fontSize: '0.86rem',
+                            cursor: 'pointer',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                          }}
+                        >
+                          Renovar →
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan="5" style={{ textAlign: 'center', padding: '24px', color: '#5f7165' }}>
+                      No hay membresías por vencer próximamente. Todos los socios están al día.
                     </td>
                   </tr>
-                ))}
+                )}
               </tbody>
             </table>
           </div>
 
           {/* VISTA MÓVIL: TARJETAS DE UN SOLO VISTAZO */}
           <div className="d-block d-md-none mobile-card-list mt-2">
-            {[
-              { socio: 'Lucía Herrera', plan: 'Plan Mensual Panda', vencimiento: '24 sep 2026', estado: 'Por vencer' },
-              { socio: 'Andrés Castro', plan: 'Plan Trimestral Fuerza', vencimiento: '26 sep 2026', estado: 'Por vencer' },
-              { socio: 'Sofía Luna', plan: 'Plan Anual VIP', vencimiento: '28 sep 2026', estado: 'Por vencer' },
-            ].map((m, idx) => (
-              <div key={idx} className="mobile-data-card" style={{ padding: '14px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                  <strong style={{ fontSize: '0.94rem', color: '#111d15' }}>{m.socio}</strong>
-                  <span
+            {metrics.renewals && metrics.renewals.length > 0 ? (
+              metrics.renewals.map((m, idx) => (
+                <div key={idx} className="mobile-data-card" style={{ padding: '14px' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <strong style={{ fontSize: '0.94rem', color: '#111d15' }}>{m.socio}</strong>
+                    <span
+                      style={{
+                        padding: '3px 10px',
+                        borderRadius: '999px',
+                        background: m.estadoBg,
+                        color: m.estadoCol,
+                        fontSize: '0.72rem',
+                        fontWeight: 800,
+                      }}
+                    >
+                      {m.estado}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#5f7165', marginBottom: '10px' }}>
+                    <span>{m.plan}</span>
+                    <span className="fw-semibold text-dark">Vence: {m.vencimiento}</span>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => navigate('/app/socios')}
+                    className="btn btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-1"
                     style={{
-                      padding: '3px 10px',
-                      borderRadius: '999px',
-                      background: '#fef3c7',
-                      color: '#b45309',
-                      fontSize: '0.72rem',
-                      fontWeight: 800,
+                      background: '#f0fdf4',
+                      border: '1px solid #bbf7d0',
+                      color: '#166534',
+                      borderRadius: '10px',
+                      fontSize: '0.82rem',
+                      padding: '8px',
                     }}
                   >
-                    {m.estado}
-                  </span>
+                    <i className="bi bi-arrow-repeat"></i>
+                    <span>Renovar Membresía</span>
+                  </button>
                 </div>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.82rem', color: '#5f7165', marginBottom: '10px' }}>
-                  <span>{m.plan}</span>
-                  <span className="fw-semibold text-dark">Vence: {m.vencimiento}</span>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => navigate('/app/socios')}
-                  className="btn btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-1"
-                  style={{
-                    background: '#f0fdf4',
-                    border: '1px solid #bbf7d0',
-                    color: '#166534',
-                    borderRadius: '10px',
-                    fontSize: '0.82rem',
-                    padding: '8px',
-                  }}
-                >
-                  <i className="bi bi-arrow-repeat"></i>
-                  <span>Renovar Membresía</span>
-                </button>
+              ))
+            ) : (
+              <div style={{ textAlign: 'center', padding: '24px', color: '#5f7165', fontSize: '0.85rem' }}>
+                No hay membresías por vencer próximamente.
               </div>
-            ))}
+            )}
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '18px', flexWrap: 'wrap', gap: '12px' }}>
