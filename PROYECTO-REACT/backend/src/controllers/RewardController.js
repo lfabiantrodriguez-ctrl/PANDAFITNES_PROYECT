@@ -160,7 +160,7 @@ class RewardController {
     // Ver historial de canjes del usuario
     static async getMyRedemptions(req, res) {
         try {
-            const userId = req.auth.id;
+            const userId = req.memberId;
             const [rows] = await db.execute(
                 `SELECT id, recompensa_nombre AS recompensaNombre, costo_bambus AS costoBambus,
                         codigo_canje AS codigoCanje, fecha_canje AS fechaCanje, estado

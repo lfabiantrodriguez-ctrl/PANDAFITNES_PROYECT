@@ -2,9 +2,10 @@ const router=require('express').Router();
 const db=require('../config/database');
 const bcrypt=require('bcrypt');
 const access=require('../services/roleAccess');
+const memberLinks=require('../services/staffMemberLink');
 const {authenticateToken,requirePermission}=require('../middleware/authMiddleware');
 router.use(authenticateToken,requirePermission('usuarios'));
-const wrap=fn=>async(req,res)=>{try{await fn(req,res);}catch(e){console.error('Usuarios y roles:',e.message);const duplicate=e.code==='ER_DUP_ENTRY';res.status(duplicate?409:e.code?503:400).json({message:duplicate?'Ya existe un registro con ese DNI, correo o nombre de rol.':e.code?'No se pudo acceder a los datos. Vuelve a intentarlo.':e.message});}};
+const wrap=fn=>async(req,res)=>{try{await fn(req,res);}catch(e){console.error('Usuarios y roles:',e.message);const duplicate=e.code==='ER_DUP_ENTRY';res.status(duplicate?409:e.status|| (e.code?503:400)).json({message:duplicate?'Ya existe un registro con ese DNI, correo, rol o socio vinculado.':e.code?'No se pudo acceder a los datos. Vuelve a intentarlo.':e.message});}};
 function roleData(body) {
     const etiqueta=String(body.etiqueta||'').trim(),descripcion=String(body.descripcion||'').trim();
     const nombre=etiqueta.normalize('NFD').replace(/[\u0300-\u036f]/g,'').toLowerCase().replace(/\s+/g,'_');
@@ -28,8 +29,22 @@ router.get('/',wrap(async(req,res)=>{
     const [roles]=await db.execute(`SELECT r.id,r.nombre,a.etiqueta,a.descripcion,a.permisos,
         (SELECT COUNT(*) FROM usuarios u WHERE u.rol_id=r.id) AS usuarios FROM roles r LEFT JOIN role_access a ON a.rol_id=r.id WHERE r.nombre<>'cliente' ORDER BY r.nombre='admin' DESC,r.nombre`);
     const [users]=await db.execute(`SELECT u.id,u.dni,u.nombre,u.apellido,u.email,u.telefono,u.avatar_url,u.activo,u.rol_id AS rolId,r.nombre AS rol,
-        COALESCE(a.etiqueta,r.nombre) AS roleLabel FROM usuarios u JOIN roles r ON r.id=u.rol_id LEFT JOIN role_access a ON a.rol_id=r.id WHERE r.nombre<>'cliente' ORDER BY u.id DESC`);
-    res.json({users:users.map(u=>({...u,activo:Boolean(u.activo)})),roles:roles.map(r=>({id:r.id,nombre:r.nombre,etiqueta:r.etiqueta||(r.nombre==='admin'?'Administrador':r.nombre),descripcion:r.descripcion||'',permissions:access.permissions(r.nombre,r.permisos),usuarios:Number(r.usuarios),protected:r.nombre==='admin'})),modules:access.MODULES});
+        COALESCE(a.etiqueta,r.nombre) AS roleLabel,m.id AS memberId,m.dni AS memberDni,m.nombre AS memberNombre,m.apellido AS memberApellido,m.activo AS memberActivo
+        FROM usuarios u JOIN roles r ON r.id=u.rol_id LEFT JOIN role_access a ON a.rol_id=r.id
+        LEFT JOIN staff_member_links l ON l.staff_user_id=u.id LEFT JOIN usuarios m ON m.id=l.member_user_id
+        WHERE r.nombre<>'cliente' ORDER BY u.id DESC`);
+    res.json({users:users.map(u=>({...u,activo:Boolean(u.activo),memberLink:memberLinks.fromRow(u)})),roles:roles.map(r=>({id:r.id,nombre:r.nombre,etiqueta:r.etiqueta||(r.nombre==='admin'?'Administrador':r.nombre),descripcion:r.descripcion||'',permissions:access.permissions(r.nombre,r.permisos),usuarios:Number(r.usuarios),protected:r.nombre==='admin'})),modules:access.MODULES});
+}));
+router.get('/:id/socio',wrap(async(req,res)=>{
+    if(!memberLinks.canManage(req.auth))return res.status(403).json({message:'Necesitas acceso a Usuarios y roles y Gestión de socios & membresías.'});
+    const id=Number(req.params.id);
+    if(!Number.isSafeInteger(id)||id<1)return res.status(400).json({message:'Usuario inválido.'});
+    res.json({socios:await memberLinks.candidates(id)});
+}));
+router.put('/:id/socio',wrap(async(req,res)=>{
+    const memberId=req.body.memberId===null?null:Number(req.body.memberId);
+    await memberLinks.save(req.auth,Number(req.params.id),memberId);
+    res.json({message:memberId===null?'Socio desvinculado. Su historial se conserva.':'Perfil de socio vinculado. El rol del trabajador se conserva.'});
 }));
 async function saveRole(req,res,editing) {
     const data=roleData(req.body);
@@ -64,7 +79,7 @@ async function saveUser(req,res,editing) {
         await connection.execute("SELECT id FROM roles WHERE nombre='admin' FOR UPDATE");
         const [roles]=await connection.execute(`SELECT r.id,r.nombre,a.permisos FROM roles r LEFT JOIN role_access a ON a.rol_id=r.id WHERE r.id=?`,[data.rolId]);
         const role=roles[0];
-        if(!role||role.nombre==='cliente')throw new Error('Está prohibido crear o convertir clientes desde Usuarios y roles. Usa Gestión de socios.');
+        if(!role||role.nombre==='cliente')throw new Error('Está prohibido crear o convertir clientes desde Usuarios y roles. Usa Gestión de socios & membresías.');
         if(!access.mayGrant(req.auth,role.nombre,access.permissions(role.nombre,role.permisos)))throw new Error('No puedes asignar este rol.');
         let id=Number(req.params.id);
         if(editing){

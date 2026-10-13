@@ -17,6 +17,10 @@ class SocioModel {
                 u.fecha_registro AS fechaRegistro,
                 DATEDIFF(CURDATE(), u.fecha_registro) AS antiguedadDias,
                 r.nombre AS rol,
+                l.staff_user_id AS linkedStaffId,
+                staff.nombre AS linkedStaffNombre,
+                staff.apellido AS linkedStaffApellido,
+                staffRole.nombre AS linkedStaffRole,
                 m.id AS membresiaId,
                 m.fecha_inicio AS fechaInicio,
                 m.fecha_fin AS fechaFin,
@@ -37,6 +41,9 @@ class SocioModel {
                 (SELECT COUNT(*) FROM ofertas_socios oo WHERE (oo.usuario_id = u.id OR oo.usuario_id IS NULL) AND oo.estado = 'activo') AS ofertasDisponibles
             FROM usuarios u
             INNER JOIN roles r ON r.id = u.rol_id
+            LEFT JOIN staff_member_links l ON l.member_user_id=u.id
+            LEFT JOIN usuarios staff ON staff.id=l.staff_user_id
+            LEFT JOIN roles staffRole ON staffRole.id=staff.rol_id
             LEFT JOIN membresias m ON m.id = (
                 SELECT mm.id
                 FROM membresias mm
@@ -52,7 +59,7 @@ class SocioModel {
                 ORDER BY pp.fecha_pago DESC, pp.id DESC
                 LIMIT 1
             )
-            WHERE r.nombre = 'cliente'
+            WHERE r.nombre = 'cliente' OR l.member_user_id=u.id
             ORDER BY u.id DESC`,
         );
 
@@ -275,6 +282,15 @@ class SocioModel {
         return rows[0] || null;
     }
 
+    static async setActive(id, activo) {
+        const [result] = await db.execute(
+            `UPDATE usuarios u JOIN roles r ON r.id=u.rol_id
+             SET u.activo=? WHERE u.id=? AND r.nombre='cliente'`,
+            [activo ? 1 : 0, id],
+        );
+        return result.affectedRows > 0;
+    }
+
     static async create({ dni, nombre, apellido, email, telefono, planId, fechaInicio, metodoPago, device }) {
         const connection = await db.getConnection();
 
@@ -298,7 +314,7 @@ class SocioModel {
                 throw new Error("El plan seleccionado no existe");
             }
 
-            const passwordHash = await bcrypt.hash(dni, 10);
+            const passwordHash = await bcrypt.hash(dni, 12);
             const plan = planRows[0];
             const endDate = addDaysExcludingSundays(fechaInicio, plan.duracion_dias);
 

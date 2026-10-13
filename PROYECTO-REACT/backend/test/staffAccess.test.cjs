@@ -81,8 +81,20 @@ test('role permissions are persisted atomically',async()=>{
  try{const res=await route('post','/roles',{etiqueta:'Recepción',descripcion:'Equipo de recepción',permissions:['socios','check-in']});assert.equal(res.statusCode,201);const insert=calls.find(c=>c.sql?.startsWith('INSERT INTO role_access'));assert.deepEqual(JSON.parse(insert.args[3]),['socios','check-in']);assert.ok(calls.includes('commit'));}finally{db.getConnection=original;}
 });
 test('frontend and server catalogs match and custom navigation omits hidden windows',async()=>{
- const {STAFF_WINDOWS,canAccess,homeFor,staffSections}=await import('../../frontend/src/utils/access.js');
+ const {STAFF_WINDOWS,canAccess,homeFor,staffSections,moduleLabel}=await import('../../frontend/src/utils/access.js');
+ const {MENU_SECTIONS,menuSections}=await import('../../frontend/src/utils/navigation.js');
  assert.deepEqual(STAFF_WINDOWS,access.MODULES);
+ for(const module of STAFF_WINDOWS){
+  const section=MENU_SECTIONS.admin.find(section=>section.items.some(item=>item.to===`/app/${module.key}`));
+  assert.ok(section,`Permission ${module.key} must exist in the real sidebar`);
+  assert.equal(section.category,module.group);
+  assert.equal(section.items.find(item=>item.to===`/app/${module.key}`).label,module.label);
+ }
+ for(const user of [{rol:'admin',memberLink:{id:1}},{rol:'recepcion',permissions:STAFF_WINDOWS.map(m=>m.key)},{rol:'cliente'}]){
+  const items=menuSections(user).flatMap(section=>section.items);
+  assert.equal(items.length,new Set(items.map(item=>item.to)).size);
+  for(const item of items)assert.equal(item.label,moduleLabel(item.to.split('/').pop(),user));
+ }
  const user={rol:'recepcion',permissions:['socios']};
  assert.equal(canAccess(user,'usuarios'),false);assert.equal(canAccess(user,'perfil'),true);assert.equal(homeFor(user),'/app/socios');
  assert.deepEqual(staffSections(user).flatMap(s=>s.items).map(i=>i.to),['/app/socios','/app/perfil']);

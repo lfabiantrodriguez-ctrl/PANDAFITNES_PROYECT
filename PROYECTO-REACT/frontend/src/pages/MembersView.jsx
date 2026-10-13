@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import DeviceEnrollment from '../components/DeviceEnrollment'
 import ViewTitle from '../components/ViewTitle'
+import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
 import MemberProfileModal from '../components/MemberProfileModal'
 import OfferModal from '../components/OfferModal'
@@ -10,7 +11,7 @@ import { PlanService } from '../services/PlanService'
 import { DniService } from '../services/DniService'
 import { MembershipService } from '../services/MembershipService'
 
-export default function MembersView({ token }) {
+export default function MembersView({ token, user }) {
   const today = useMemo(() => getTodayPeru(), [])
   const [members, setMembers] = useState([])
   const [plans, setPlans] = useState([])
@@ -18,6 +19,7 @@ export default function MembersView({ token }) {
   const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
+  const [changingAccount, setChangingAccount] = useState(null)
   const [formStatus, setFormStatus] = useState({ loading: false, dniLoading: false, error: '' })
   const [searchTerm, setSearchTerm] = useState('')
 
@@ -213,6 +215,33 @@ export default function MembersView({ token }) {
     }
   }
 
+  async function changeAccount(socio) {
+    if (changingAccount !== null) return
+    setChangingAccount(socio.id)
+    setMessage('')
+    try {
+      const activo = Number(socio.activo) !== 1
+      const result = await SocioService.setActive(token, socio.id, activo)
+      setMembers(current => current.map(member => member.id === socio.id ? { ...member, activo: activo ? 1 : 0 } : member))
+      setMessage(result.message)
+    } catch (error) {
+      setMessage(error.message)
+    } finally { setChangingAccount(null) }
+  }
+
+  function accountButton(socio) {
+    if(socio.rol && socio.rol!=='cliente')return <span className="small text-secondary" title="El acceso del trabajador se gestiona desde Usuarios y roles">Cuenta del personal</span>
+    const active = Number(socio.activo) === 1
+    return <button type="button"
+      className={`btn btn-sm fw-bold ${active ? 'btn-outline-danger' : 'btn-outline-success'}`}
+      disabled={changingAccount !== null} onClick={() => changeAccount(socio)}
+      aria-label={`${active ? 'Desactivar' : 'Activar'} cuenta de ${socio.nombre} ${socio.apellido}`}
+      title={active ? 'Bloquear el ingreso a su cuenta' : 'Permitir el ingreso a su cuenta'}>
+      <i className={`bi ${active ? 'bi-person-lock' : 'bi-person-check'} me-1`} />
+      {changingAccount === socio.id ? 'Guardando...' : active ? 'Desactivar' : 'Activar'}
+    </button>
+  }
+
   function openRenewModal(socio) {
     setRenewErrors({})
     setRenewForm({
@@ -309,7 +338,7 @@ export default function MembersView({ token }) {
     <>
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3">
         <ViewTitle
-          title="Gestión de Socios & Membresías"
+          title={moduleLabel('socios')}
           text="Control integral de socios, vigencias de planes, renovaciones, fidelización y expedientes 360°."
         />
 
@@ -478,6 +507,7 @@ export default function MembersView({ token }) {
                           <div className="overflow-hidden" style={{ maxWidth: 'calc(100% - 44px)' }}>
                             <div className="fw-bold text-dark text-truncate">{socio.nombre} {socio.apellido}</div>
                             <div className="text-muted small text-truncate">{socio.email}</div>
+                            {socio.linkedStaffId&&<span className="badge text-bg-light border mt-1"><i className="bi bi-link-45deg me-1"/>{socio.linkedStaffRole==='admin'?'Administrador y socio':'Personal y socio'}</span>}
                           </div>
                         </div>
                       </td>
@@ -527,6 +557,9 @@ export default function MembersView({ token }) {
 
                       {/* Estado / Segmento */}
                       <td className="px-3 text-center">
+                        <div className="mb-1"><span className={`badge ${Number(socio.activo) === 1 ? 'bg-success' : 'bg-danger'}`}>
+                          {Number(socio.activo) === 1 ? 'Cuenta activa' : 'Cuenta desactivada'}
+                        </span></div>
                         <span
                           className="badge rounded-pill fw-bold px-2 py-1"
                           style={{ ...getBadgeStyle(socio.segmentoKey), fontSize: '0.72rem' }}
@@ -538,7 +571,8 @@ export default function MembersView({ token }) {
                       {/* Acciones */}
                       <td className="px-3 text-end">
                         <div className="d-flex justify-content-end gap-1 flex-wrap">
-                          <button type="button" className="btn btn-sm btn-outline-dark fw-bold" onClick={() => {
+                          {accountButton(socio)}
+                          <button type="button" className="btn btn-sm btn-outline-dark fw-bold" disabled={socio.rol!=='cliente'&&user?.rol!=='admin'} onClick={() => {
                             resetForm(); setEditingId(socio.id);
                             setForm({dni:socio.dni,nombre:socio.nombre,apellido:socio.apellido,email:socio.email || '',telefono:socio.telefono || '',deviceTicket:''});
                             setShowForm(true);
@@ -632,9 +666,13 @@ export default function MembersView({ token }) {
                           <span className="mobile-card-code me-2">#PF-{String(socio.id).padStart(4, '0')}</span>
                           <span>DNI: {socio.dni || 'Sin DNI'}</span>
                         </p>
+                        {socio.linkedStaffId&&<span className="badge text-bg-light border mt-1"><i className="bi bi-link-45deg me-1"/>{socio.linkedStaffRole==='admin'?'Administrador y socio':'Personal y socio'}</span>}
                       </div>
                     </div>
                     <div>
+                      <div className="mb-1"><span className={`badge ${Number(socio.activo) === 1 ? 'bg-success' : 'bg-danger'}`}>
+                        {Number(socio.activo) === 1 ? 'Cuenta activa' : 'Cuenta desactivada'}
+                      </span></div>
                       <span
                         className="badge rounded-pill fw-bold px-2 py-1"
                         style={{ ...getBadgeStyle(socio.segmentoKey), fontSize: '0.68rem' }}
@@ -689,6 +727,12 @@ export default function MembersView({ token }) {
 
                   {/* Acciones para el pulgar */}
                   <div className="mobile-card-actions">
+                    {accountButton(socio)}
+                    <button type="button" className="btn btn-sm btn-outline-dark fw-bold" disabled={socio.rol!=='cliente'&&user?.rol!=='admin'} onClick={() => {
+                      resetForm(); setEditingId(socio.id);
+                      setForm({dni:socio.dni,nombre:socio.nombre,apellido:socio.apellido,email:socio.email || '',telefono:socio.telefono || '',deviceTicket:''});
+                      setShowForm(true);
+                    }}><i className="bi bi-pencil-square me-1" />Editar</button>
                     <button
                       className="btn btn-sm btn-outline-dark fw-bold px-2 py-2 flex-grow-1 d-flex align-items-center justify-content-center gap-1"
                       style={{ borderRadius: '10px', fontSize: '0.8rem' }}
@@ -738,9 +782,9 @@ export default function MembersView({ token }) {
       {/* MODAL: ALTA DE NUEVO SOCIO */}
       <ModalDialog
         isOpen={showForm}
-        onClose={() => setShowForm(false)}
+        onClose={() => { if (!formStatus.loading) { setShowForm(false); resetForm() } }}
         title={editingId ? "Editar socio" : "Registrar Nuevo Socio"}
-        subtitle={editingId ? "Actualiza sus datos o vincula otro dispositivo." : "Ingresa los datos personales y selecciona su membresía."}
+        subtitle={editingId ? "Actualiza sus datos o vincula otro dispositivo." : "Crea su cuenta de socio con DNI y contraseña, y selecciona su membresía."}
         badge={editingId ? "Datos del socio" : "Alta de Socio"}
         size="lg"
       >
@@ -981,7 +1025,7 @@ export default function MembersView({ token }) {
             <button
               type="button"
               className="btn btn-outline-dark px-4 py-2 fw-semibold"
-              onClick={() => setShowForm(false)}
+              onClick={() => { setShowForm(false); resetForm() }}
               disabled={formStatus.loading}
             >
               Cancelar

@@ -1,16 +1,16 @@
 const db = require('../config/database');
 const MODULES = [
-    {key:'inicio',label:'Inicio',icon:'bi-grid',group:'Operación'},
-    {key:'check-in',label:'Control de acceso',icon:'bi-fingerprint',group:'Operación'},
-    {key:'socios',label:'Socios y membresías',icon:'bi-people',group:'Operación'},
-    {key:'invitados',label:'Clientes diarios',icon:'bi-ticket-perforated',group:'Operación'},
-    {key:'aforo',label:'Aforo',icon:'bi-bar-chart',group:'Operación'},
-    {key:'recompensas',label:'Recompensas y promociones',icon:'bi-gift',group:'Beneficios'},
-    {key:'mi-pandita',label:'Mi pandita',icon:'bi-stars',group:'Experiencia'},
-    {key:'asistencias',label:'Calendario de asistencias',icon:'bi-calendar-check',group:'Experiencia'},
-    {key:'mi-membresia',label:'Mi membresía',icon:'bi-person-vcard',group:'Experiencia'},
-    {key:'configuracion',label:'Configuración de empresa',icon:'bi-gear',group:'Administración'},
-    {key:'usuarios',label:'Usuarios y roles',icon:'bi-person-lock',group:'Administración'},
+    {key:'inicio',label:'Inicio',icon:'bi-grid',group:'ADMINISTRACIÓN & RECEPCIÓN'},
+    {key:'check-in',label:'Control de acceso (check-in)',icon:'bi-fingerprint',group:'ADMINISTRACIÓN & RECEPCIÓN'},
+    {key:'socios',label:'Gestión de socios & membresías',icon:'bi-people',group:'ADMINISTRACIÓN & RECEPCIÓN'},
+    {key:'invitados',label:'Clientes diarios',icon:'bi-ticket-perforated',group:'ADMINISTRACIÓN & RECEPCIÓN'},
+    {key:'aforo',label:'Control de aforo',icon:'bi-bar-chart',group:'ADMINISTRACIÓN & RECEPCIÓN'},
+    {key:'recompensas',label:'Recompensas y promociones',icon:'bi-gift',group:'GESTIÓN COMERCIAL & BENEFICIOS'},
+    {key:'mi-pandita',label:'Mi pandita (Socio)',icon:'bi-stars',group:'EXPERIENCIA DEL SOCIO (VISTA)'},
+    {key:'asistencias',label:'Asistencias (Socio)',icon:'bi-calendar-check',group:'EXPERIENCIA DEL SOCIO (VISTA)'},
+    {key:'mi-membresia',label:'Mi membresía',icon:'bi-person-vcard',group:'EXPERIENCIA DEL SOCIO (VISTA)'},
+    {key:'configuracion',label:'Configuración Empresa',icon:'bi-gear',group:'CONFIGURACIÓN DEL SISTEMA'},
+    {key:'usuarios',label:'Usuarios y roles',icon:'bi-person-lock',group:'CONFIGURACIÓN DEL SISTEMA'},
 ];
 const KEYS = MODULES.map(m=>m.key);
 const CLIENT = ['inicio','aforo','recompensas','mi-pandita','asistencias','mi-membresia'];
@@ -24,6 +24,7 @@ async function init() {
             FOREIGN KEY (rol_id) REFERENCES roles(id) ON DELETE CASCADE
         )`);
 
+        await require('./staffMemberLink').init();
         const defaultRoles = [
             {
                 nombre: 'recepcion',
@@ -68,11 +69,14 @@ function parse(value) {
 function permissions(role, value) { return role==='admin'?[...KEYS]:role==='cliente'?[...CLIENT]:parse(value); }
 async function identity(id) {
     await init();
-    const [rows]=await db.execute(`SELECT u.id,r.nombre AS rol,a.etiqueta,a.permisos FROM usuarios u
-        JOIN roles r ON r.id=u.rol_id LEFT JOIN role_access a ON a.rol_id=r.id WHERE u.id=? AND u.activo=1`,[id]);
+    const [rows]=await db.execute(`SELECT u.id,r.nombre AS rol,a.etiqueta,a.permisos,
+        m.id AS memberId,m.dni AS memberDni,m.nombre AS memberNombre,m.apellido AS memberApellido,m.activo AS memberActivo
+        FROM usuarios u JOIN roles r ON r.id=u.rol_id LEFT JOIN role_access a ON a.rol_id=r.id
+        LEFT JOIN staff_member_links l ON l.staff_user_id=u.id LEFT JOIN usuarios m ON m.id=l.member_user_id
+        WHERE u.id=? AND u.activo=1`,[id]);
     if(!rows[0])return null;
     const row=rows[0];
-    return {id:row.id,rol:row.rol,roleLabel:row.etiqueta || (row.rol==='admin'?'Administrador':row.rol==='cliente'?'Cliente':row.rol),permissions:permissions(row.rol,row.permisos)};
+    return {id:row.id,rol:row.rol,roleLabel:row.etiqueta || (row.rol==='admin'?'Administrador':row.rol==='cliente'?'Cliente':row.rol),permissions:permissions(row.rol,row.permisos),memberLink:require('./staffMemberLink').fromRow(row)};
 }
 async function decorate(user) { const access=await identity(user.id);if(!access)throw new Error('Usuario no disponible');return {...user,...access}; }
 function requestModules(req) {
@@ -104,6 +108,7 @@ function requestModules(req) {
 }
 function canRequest(auth,req) {
     if(auth.rol==='admin'||auth.rol==='cliente')return true;
+    if(auth.memberLink && require('./staffMemberLink').personalRequest(req))return true;
     const required=requestModules(req);
     return Array.isArray(required) && (!required.length || required.some(key=>auth.permissions?.includes(key)));
 }

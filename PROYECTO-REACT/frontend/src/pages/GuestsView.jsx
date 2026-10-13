@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import ViewTitle from '../components/ViewTitle'
+import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
 import { GuestService } from '../services/GuestService'
 import { getTodayPeru } from '../utils/formatters'
@@ -222,7 +223,7 @@ export default function GuestsView({ token }) {
     <>
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3">
         <ViewTitle
-          title="Clientes Diarios"
+          title={moduleLabel('invitados')}
           text="Control de pases diarios, ingresos por horas y cobranzas en recepción."
         />
 

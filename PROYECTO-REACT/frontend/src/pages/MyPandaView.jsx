@@ -586,9 +586,9 @@ export default function MyPandaView({ token, user }) {
           </button>
 
           {/* Botón Nuevo: Canjear Puntos */}
-          {canAccess(user,'recompensas') && (<button
+          {canAccess(user,user?.rol==='cliente'?'recompensas':'mis-recompensas') && (<button
             type="button"
-            onClick={() => navigate('/app/recompensas')}
+            onClick={() => navigate(user?.rol==='cliente'?'/app/recompensas':'/app/mis-recompensas')}
             style={{
               flex: 1.1,
               background: 'rgba(196, 240, 57, 0.18)',
@@ -640,14 +640,14 @@ export default function MyPandaView({ token, user }) {
       {/* MODAL 1: PROGRESO DE NIVEL & XP                         */}
       {/* ======================================================== */}
       {showProgressModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowProgressModal(false)}>
+        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
           <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="bi bi-trophy-fill text-warning" style={{ fontSize: '1.2rem' }}></i>
                 <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Progreso de Nivel</h5>
               </div>
-              <button className="btn-close-custom" onClick={() => setShowProgressModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowProgressModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
@@ -706,14 +706,14 @@ export default function MyPandaView({ token, user }) {
       {/* MODAL 2: ETAPAS DE EVOLUCIÓN (BLENDER)                  */}
       {/* ======================================================== */}
       {showEvolutionModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowEvolutionModal(false)}>
+        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
           <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="bi bi-award-fill text-lime" style={{ fontSize: '1.2rem' }}></i>
                 <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Etapas de Evolución</h5>
               </div>
-              <button className="btn-close-custom" onClick={() => setShowEvolutionModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowEvolutionModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
@@ -791,14 +791,14 @@ export default function MyPandaView({ token, user }) {
       {/* MODAL 3: RACHA & HÁBITOS                                */}
       {/* ======================================================== */}
       {showStreakModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowStreakModal(false)}>
+        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
           <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="bi bi-fire text-danger" style={{ fontSize: '1.2rem' }}></i>
                 <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Racha de Entrenamientos</h5>
               </div>
-              <button className="btn-close-custom" onClick={() => setShowStreakModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowStreakModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
@@ -840,14 +840,14 @@ export default function MyPandaView({ token, user }) {
       {/* MODAL 4: BAMBÚS & CANJES                                */}
       {/* ======================================================== */}
       {showBambusModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowBambusModal(false)}>
+        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
           <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="bi bi-gem text-lime" style={{ fontSize: '1.2rem' }}></i>
                 <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Bambús Acumulados</h5>
               </div>
-              <button className="btn-close-custom" onClick={() => setShowBambusModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowBambusModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
@@ -861,11 +861,11 @@ export default function MyPandaView({ token, user }) {
               </p>
 
               <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                {canAccess(user,'recompensas') && (<button
+                {canAccess(user,user?.rol==='cliente'?'recompensas':'mis-recompensas') && (<button
                   type="button"
                   onClick={() => {
                     setShowBambusModal(false)
-                    navigate('/app/recompensas')
+                    navigate(user?.rol==='cliente'?'/app/recompensas':'/app/mis-recompensas')
                   }}
                   style={{
                     background: '#c4f039',
@@ -902,14 +902,14 @@ export default function MyPandaView({ token, user }) {
       {/* MODAL 5: GUÍA & REGLAS DEL JUEGO                        */}
       {/* ======================================================== */}
       {showGuideModal && (
-        <div className="modal-backdrop-custom" onClick={() => setShowGuideModal(false)}>
+        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
           <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header-custom">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                 <i className="bi bi-question-circle-fill text-warning" style={{ fontSize: '1.2rem' }}></i>
                 <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>¿Cómo Funciona Mi Pandita?</h5>
               </div>
-              <button className="btn-close-custom" onClick={() => setShowGuideModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowGuideModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>

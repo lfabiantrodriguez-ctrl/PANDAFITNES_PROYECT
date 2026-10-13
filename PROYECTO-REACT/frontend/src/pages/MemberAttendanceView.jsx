@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { AttendanceService } from '../services/AttendanceService'
 import { MembershipService } from '../services/MembershipService'
 import ModalDialog from '../components/ModalDialog'
+import {moduleLabel} from '../utils/access'
 import '../styles/MemberAttendance.css'
 import usePandaAccount from '../hooks/usePandaAccount'
 import {peruDate} from '../utils/pandaProgress'
@@ -308,7 +309,7 @@ export default function MemberAttendanceView({ token, user }) {
     }
   }, [year, month, daysInMonth, firstDayWeekIndex, todayNumber, currentDate, realNow, userGoals.diasObjetivo, attendancesInViewMonth, xpBonuses, generalRewards, account?.racha, membership?.fechaInicio, membership?.fechaFin])
 
-  if(!account) return <div className="attendance-view-container"><h1>Tu constancia, día a día</h1><p role="status">{error || 'Cargando tus registros…'}</p>{error&&<button className="btn btn-dark" onClick={refresh}>Volver a consultar</button>}</div>
+  if(!account) return <div className="attendance-view-container"><h1>{moduleLabel('asistencias',user)}</h1><p role="status">{error || 'Cargando tus registros…'}</p>{error&&<button className="btn btn-dark" onClick={refresh}>Volver a consultar</button>}</div>
   const weekStart=new Date(realNow);weekStart.setDate(realNow.getDate()-((realNow.getDay()+6)%7))
   const weekKey=peruDate(weekStart)
   const weekCount=account.diasAsistidos.filter(d=>d>=weekKey && d<=account.today).length
@@ -319,7 +320,7 @@ export default function MemberAttendanceView({ token, user }) {
           ---------------------------------------------------------------------- */}
       <header className="attendance-top-bar">
         <div className="attendance-title-area">
-          <h1>Tu constancia, día a día</h1>
+          <h1>{moduleLabel('asistencias',user)}</h1>
           <p>
             {MONTH_NAMES[month]} {year} · Hoy es {realNow.toLocaleDateString('es-PE',{weekday:'long',day:'numeric'})}. Las inasistencias solo se computan una vez finalizado el día.
           </p>

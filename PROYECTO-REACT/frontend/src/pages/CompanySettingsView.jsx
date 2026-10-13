@@ -1,5 +1,6 @@
 import { useEffect, useState, useRef } from 'react'
 import ViewTitle from '../components/ViewTitle'
+import {moduleLabel} from '../utils/access'
 import { ConfigService } from '../services/ConfigService'
 
 export default function CompanySettingsView({ token }) {
@@ -198,7 +199,7 @@ export default function CompanySettingsView({ token }) {
   if (loading) {
     return (
       <div className="dashboard-page">
-        <ViewTitle title="Configuración de la Empresa" subtitle="Cargando parámetros del gimnasio..." />
+        <ViewTitle title={moduleLabel('configuracion')} subtitle="Cargando parámetros del gimnasio..." />
         <div className="dashboard-panel" style={{ textAlign: 'center', padding: '40px' }}>
           <span className="spinner-border" style={{ borderColor: '#c4f039', borderTopColor: '#111d15' }}></span>
           <p style={{ marginTop: '12px', color: '#64748b' }}>Cargando datos de configuración...</p>
@@ -210,7 +211,7 @@ export default function CompanySettingsView({ token }) {
   return (
     <div className="dashboard-page">
       <ViewTitle
-        title="Configuración de la Empresa"
+        title={moduleLabel('configuracion')}
         subtitle="Administra la identidad corporativa de tu club: logotipo oficial, nombre comercial, horarios de atención y avisos de emergencia."
       />
 

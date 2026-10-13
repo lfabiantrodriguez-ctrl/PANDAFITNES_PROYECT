@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import { DeviceService } from '../services/DeviceService'
 import ViewTitle from '../components/ViewTitle'
+import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
 import { CheckInService } from '../services/CheckInService'
 import { formatDate, formatTimePeru, getMinutesElapsed } from '../utils/formatters'
@@ -218,7 +219,7 @@ export default function CheckInView({ token }) {
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
           <ViewTitle
-            title="Control de Acceso y Asistencias"
+            title={moduleLabel('check-in')}
             subtitle=""
           />
         </div>

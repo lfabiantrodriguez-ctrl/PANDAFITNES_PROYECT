@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import ModalDialog from '../components/ModalDialog'
+import {moduleLabel} from '../utils/access'
+import {validateProfile} from '../utils/profileValidation'
 import { ProfileService } from '../services/ProfileService'
 import { MembershipService } from '../services/MembershipService'
 import { saveStoredSession } from '../utils/session'
@@ -18,6 +20,7 @@ export default function ProfileView({ user, token, setUser }) {
   const [loadingMembership, setLoadingMembership] = useState(false)
 
   const fileInputRef = useRef(null)
+  const profileRootRef = useRef(null)
 
   const defaultPreferences = {
     avisosMembresia: true,
@@ -63,25 +66,41 @@ export default function ProfileView({ user, token, setUser }) {
   const hasUpper = /[A-Z]/.test(pwd.newPassword)
   const hasLower = /[a-z]/.test(pwd.newPassword)
   const hasNumber = /[0-9]/.test(pwd.newPassword)
-  const allPwdRulesMet = hasMinLength && hasUpper && hasLower && hasNumber
+  const allPwdRulesMet = hasMinLength && hasUpper && hasLower && hasNumber && new TextEncoder().encode(pwd.newPassword).length <= 72
   const passwordsMatch = pwd.newPassword === pwd.confirmPassword && pwd.confirmPassword.length > 0
 
   function updateField(field, value) {
-    setForm((prev) => ({ ...prev, [field]: value }))
-    if (errors[field]) {
-      setErrors((prev) => ({ ...prev, [field]: '' }))
+    setForm(prev=>({...prev,[field]:value}))
+    setErrors(prev=>prev[field]?{...prev,[field]:validateProfile({...form,[field]:value}).errors[field]||''}:prev)
+  }
+  function fieldProps(field) {
+    return {
+      id:`profile-${field}`,name:field,
+      'aria-invalid':Boolean(errors[field]),
+      'aria-describedby':errors[field]?`profile-${field}-error`:undefined,
+      maxLength:({nombre:100,apellido:100,email:150,direccion:255,contacto_emergencia:100})[field],
+      ...(field==='fecha_nacimiento'?{required:true,min:'1900-01-01'}:{}),
+      onBlur:()=>setErrors(prev=>({...prev,[field]:validateProfile(form).errors[field]||''})),
     }
   }
-
+  function inlineError(field) {
+    return errors[field]?<div id={`profile-${field}-error`} className="invalid-feedback d-block" role="alert"><i className="bi bi-exclamation-circle me-1"/>{errors[field]}</div>:null
+  }
+  function focusError() {
+    requestAnimationFrame(()=>{
+      const input=profileRootRef.current?.querySelector('[aria-invalid="true"]')
+      input?.focus({preventScroll:true});input?.scrollIntoView({block:'center',behavior:'smooth'})
+    })
+  }
   // Filtrar nombres para solo permitir letras y espacios
   function handleNombreChange(e) {
-    const clean = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')
+    const clean = e.target.value
     updateField('nombre', clean)
   }
 
   // Filtrar apellidos para solo permitir letras y espacios
   function handleApellidoChange(e) {
-    const clean = e.target.value.replace(/[^a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]/g, '')
+    const clean = e.target.value
     updateField('apellido', clean)
   }
 
@@ -108,21 +127,23 @@ export default function ProfileView({ user, token, setUser }) {
     const file = e.target.files?.[0]
     if (!file) return
 
-    if (!file.type.startsWith('image/')) {
-      setMessage('El archivo seleccionado debe ser una imagen válida')
-      setMessageType('error')
+    if (!['image/png','image/jpeg','image/webp','image/gif','image/avif'].includes(file.type)) {
+      setErrors(prev=>({...prev,avatar_url:'Selecciona una imagen PNG, JPG, WEBP, GIF o AVIF.'}))
+      e.target.value=''
       return
     }
 
     if (file.size > 5 * 1024 * 1024) {
-      setMessage('La imagen seleccionada no debe superar 5MB de tamaño')
-      setMessageType('error')
+      setErrors(prev=>({...prev,avatar_url:'La imagen no debe superar 5 MB.'}))
+      e.target.value=''
       return
     }
 
     const reader = new FileReader()
+    reader.onerror = () => setErrors(prev=>({...prev,avatar_url:'No se pudo leer la imagen. Selecciona otro archivo.'}))
     reader.onload = (event) => {
       updateField('avatar_url', event.target?.result)
+      setErrors(prev=>({...prev,avatar_url:''}))
       setMessage('Foto seleccionada. Recuerda hacer clic en "Guardar cambios" para conservarla.')
       setMessageType('success')
     }
@@ -156,88 +177,33 @@ export default function ProfileView({ user, token, setUser }) {
   }
 
   async function saveProfile(e) {
-    if (e && e.preventDefault) e.preventDefault()
-    setProcessing(true)
-    setMessage('')
-    setMessageType('')
-    const newErrors = {}
-
-    // Validación Nombre
-    if (!form.nombre.trim()) {
-      newErrors.nombre = 'El nombre es obligatorio'
-    } else if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/.test(form.nombre.trim())) {
-      newErrors.nombre = 'El nombre solo debe contener letras y espacios'
-    }
-
-    // Validación Apellidos
-    if (!form.apellido.trim()) {
-      newErrors.apellido = 'Los apellidos son obligatorios'
-    } else if (!/^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/.test(form.apellido.trim())) {
-      newErrors.apellido = 'Los apellidos solo deben contener letras y espacios'
-    }
-
-    // Validación DNI (exactamente 8 dígitos numéricos)
-    if (form.dni && !/^\d{8}$/.test(form.dni.trim())) {
-      newErrors.dni = 'El DNI debe tener exactamente 8 dígitos numéricos'
-    }
-
-    // Validación Correo
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
-    if (!form.email.trim()) {
-      newErrors.email = 'El correo electrónico es obligatorio'
-    } else if (!emailRegex.test(form.email.trim())) {
-      newErrors.email = 'Ingresa un correo electrónico válido (ej. usuario@gmail.com)'
-    }
-
-    // Validación Teléfono (Perú: exactamente 9 dígitos si se ingresa)
-    if (form.telefono && !/^\d{9}$/.test(form.telefono.trim())) {
-      newErrors.telefono = 'El teléfono debe tener exactamente 9 dígitos numéricos (Perú)'
-    }
-
-    // Validación Teléfono de Emergencia (9 dígitos si se ingresa)
-    if (form.telefono_emergencia && !/^\d{9}$/.test(form.telefono_emergencia.trim())) {
-      newErrors.telefono_emergencia = 'El teléfono de emergencia debe contener 9 dígitos numéricos'
-    }
-
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
-      setMessage('Por favor corrige los campos marcados en rojo')
-      setMessageType('error')
-      setProcessing(false)
-      return
-    }
-
-    setErrors({})
-
+    e?.preventDefault?.()
+    if(processing)return false
+    setMessage('');setMessageType('')
+    const {data,errors:newErrors}=validateProfile(form)
+    if(Object.keys(newErrors).length){setErrors(newErrors);focusError();return false}
+    setErrors({});setProcessing(true)
     try {
-      const res = await ProfileService.updateProfile(token, form)
-      const updatedUser = res.user
-      saveStoredSession(token, updatedUser)
-      if (setUser) setUser(updatedUser)
+      const res=await ProfileService.updateProfile(token,data)
+      const updatedUser=res.user
+      saveStoredSession(token,updatedUser)
+      if(setUser)setUser(updatedUser)
       window.dispatchEvent(new CustomEvent('panda-profile-updated',{detail:updatedUser}))
-      setMessage('✓ Tus cambios han sido guardados exitosamente.')
-      setMessageType('success')
-    } catch (err) {
-      const errMsg = err.message || 'Error al guardar el perfil'
-      const lower = errMsg.toLowerCase()
-      if (lower.includes('dni')) {
-        setErrors((prev) => ({ ...prev, dni: errMsg }))
-      } else if (lower.includes('correo') || lower.includes('email')) {
-        setErrors((prev) => ({ ...prev, email: errMsg }))
-      } else if (lower.includes('teléfono') || lower.includes('telefono')) {
-        setErrors((prev) => ({ ...prev, telefono: errMsg }))
-      } else if (lower.includes('nombre')) {
-        setErrors((prev) => ({ ...prev, nombre: errMsg }))
-      } else if (lower.includes('apellido')) {
-        setErrors((prev) => ({ ...prev, apellido: errMsg }))
+      setForm(prev=>({...prev,...data}))
+      setMessage('Tus cambios han sido guardados.');setMessageType('success')
+      return true
+    } catch(err) {
+      let fieldErrors=err.errors||{}
+      if(!Object.keys(fieldErrors).length){
+        const message=err.message||''
+        const field=/dni/i.test(message)?'dni':/correo|email/i.test(message)?'email':/fecha|nacimiento/i.test(message)?'fecha_nacimiento':/emergencia/i.test(message)?'telefono_emergencia':/teléfono|telefono/i.test(message)?'telefono':/apellidos/i.test(message)?'apellido':/nombre/i.test(message)?'nombre':null
+        if(field)fieldErrors={[field]:message}
       }
-      setMessage(errMsg)
-      setMessageType('error')
-    } finally {
-      setProcessing(false)
-    }
+      if(Object.keys(fieldErrors).length){setErrors(fieldErrors);focusError()}
+      else {setMessage(err.message||'No se pudo guardar el perfil.');setMessageType('error')}
+      return false
+    } finally {setProcessing(false)}
   }
-
   async function handleChangePassword(e) {
     e.preventDefault()
     setProcessing(true)
@@ -293,12 +259,12 @@ export default function ProfileView({ user, token, setUser }) {
   const socioCode = `NP-${String(user?.id || 1).padStart(4, '0')}`
 
   return (
-    <div className="container-fluid px-0 pb-5" style={{ maxWidth: '1240px' }}>
+    <div ref={profileRootRef} className="container-fluid px-0 pb-5" style={{ maxWidth: '1240px' }}>
       {/* CABECERA SUPERIOR FIGMA STYLE */}
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 pt-1">
         <div>
           <h2 className="fw-bold text-dark mb-1" style={{ fontSize: '1.9rem', letterSpacing: '-0.5px' }}>
-            Tu perfil, a tu manera
+            {moduleLabel('perfil',user)}
           </h2>
           <p className="text-muted mb-0" style={{ fontSize: '0.96rem' }}>
             Mantén tus datos al día para acompañarte mejor.
@@ -415,6 +381,7 @@ export default function ProfileView({ user, token, setUser }) {
                         type="button"
                         className="btn btn-sm btn-outline-dark fw-semibold d-inline-flex align-items-center gap-2 px-3 py-1"
                         style={{ borderRadius: '8px' }}
+                        id="profile-avatar_url" aria-invalid={Boolean(errors.avatar_url)} aria-describedby={errors.avatar_url?'profile-avatar_url-error':undefined} 
                         onClick={() => fileInputRef.current?.click()}
                       >
                         <i className="bi bi-camera"></i> Cambiar foto
@@ -435,10 +402,11 @@ export default function ProfileView({ user, token, setUser }) {
                       <input
                         ref={fileInputRef}
                         type="file"
-                        accept="image/*"
+                        accept="image/png,image/jpeg,image/webp,image/gif,image/avif"
                         className="d-none"
                         onChange={handleAvatarFile}
                       />
+                      {inlineError('avatar_url')}
                     </div>
                   </div>
                 </div>
@@ -447,9 +415,9 @@ export default function ProfileView({ user, token, setUser }) {
                 <div className="row g-3">
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold text-dark small mb-1">
-                      Nombre * - Validación administrativa
+                      Nombre *
                     </label>
-                    <input
+                    <input {...fieldProps('nombre')}
                       type="text"
                       className={`form-control ${errors.nombre ? 'is-invalid' : ''}`}
                       style={{
@@ -465,7 +433,7 @@ export default function ProfileView({ user, token, setUser }) {
                     {errors.nombre ? (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{errors.nombre}</span>
+                        <span id="profile-nombre-error" role="alert">{errors.nombre}</span>
                       </div>
                     ) : (
                       <small className="text-muted" style={{ fontSize: '0.74rem' }}>
@@ -476,9 +444,9 @@ export default function ProfileView({ user, token, setUser }) {
 
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold text-dark small mb-1">
-                      Apellidos * - Validación administrativa
+                      Apellidos *
                     </label>
-                    <input
+                    <input {...fieldProps('apellido')}
                       type="text"
                       className={`form-control ${errors.apellido ? 'is-invalid' : ''}`}
                       style={{
@@ -494,7 +462,7 @@ export default function ProfileView({ user, token, setUser }) {
                     {errors.apellido ? (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{errors.apellido}</span>
+                        <span id="profile-apellido-error" role="alert">{errors.apellido}</span>
                       </div>
                     ) : (
                       <small className="text-muted" style={{ fontSize: '0.74rem' }}>
@@ -505,7 +473,7 @@ export default function ProfileView({ user, token, setUser }) {
 
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold text-dark small mb-1">
-                      DNI * - Validación administrativa
+                      DNI *
                     </label>
                     <div className="input-group">
                       <span
@@ -517,7 +485,7 @@ export default function ProfileView({ user, token, setUser }) {
                       >
                         <i className="bi bi-card-text"></i>
                       </span>
-                      <input
+                      <input {...fieldProps('dni')}
                         type="text"
                         inputMode="numeric"
                         maxLength={8}
@@ -536,7 +504,7 @@ export default function ProfileView({ user, token, setUser }) {
                     {errors.dni ? (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{errors.dni}</span>
+                        <span id="profile-dni-error" role="alert">{errors.dni}</span>
                       </div>
                     ) : (
                       <small className="text-muted" style={{ fontSize: '0.74rem' }}>
@@ -547,16 +515,17 @@ export default function ProfileView({ user, token, setUser }) {
 
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold text-dark small mb-1">
-                      Fecha de nacimiento · Validación
+                      Fecha de nacimiento *
                     </label>
-                    <input
+                    <input {...fieldProps('fecha_nacimiento')}
                       type="date"
-                      className="form-control"
-                      style={{ borderRadius: '10px', borderColor: '#cbd5e1' }}
+                      className={`form-control ${errors.fecha_nacimiento ? 'is-invalid' : ''}`}
+                      style={{ borderRadius: '10px', borderColor: errors.fecha_nacimiento ? '#ef4444' : '#cbd5e1' }}
                       value={form.fecha_nacimiento}
                       max={getTodayPeru()}
                       onChange={(e) => updateField('fecha_nacimiento', e.target.value)}
                     />
+                    {inlineError('fecha_nacimiento')}
                     <small className="text-muted" style={{ fontSize: '0.74rem' }}>
                       Fecha oficial de nacimiento
                     </small>
@@ -575,7 +544,7 @@ export default function ProfileView({ user, token, setUser }) {
                   <div>
                     <strong className="d-block text-dark small mb-1">Cambios de identidad</strong>
                     <p className="mb-0 text-muted" style={{ fontSize: '0.82rem', lineHeight: 1.45 }}>
-                      Si modificas tu nombre, apellidos o fecha de nacimiento, recepción validará el cambio antes de aplicarlo. El resto de tus datos se actualiza al guardar.
+                      Los campos marcados con * son obligatorios. Tus cambios se guardan cuando todos los datos son válidos.
                     </p>
                   </div>
                 </div>
@@ -601,7 +570,7 @@ export default function ProfileView({ user, token, setUser }) {
                     <label className="form-label fw-semibold text-dark small mb-1">
                       Correo electrónico *
                     </label>
-                    <input
+                    <input {...fieldProps('email')}
                       type="email"
                       className={`form-control ${errors.email ? 'is-invalid' : ''}`}
                       style={{
@@ -617,11 +586,11 @@ export default function ProfileView({ user, token, setUser }) {
                     {errors.email ? (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{errors.email}</span>
+                        <span id="profile-email-error" role="alert">{errors.email}</span>
                       </div>
                     ) : (
                       <small className="text-muted d-block mt-1" style={{ fontSize: '0.74rem' }}>
-                        Un nuevo correo requiere confirmación por correo.
+                        Usaremos este correo para recuperar tu contraseña.
                       </small>
                     )}
                   </div>
@@ -640,7 +609,7 @@ export default function ProfileView({ user, token, setUser }) {
                       >
                         +51
                       </span>
-                      <input
+                      <input {...fieldProps('telefono')}
                         type="tel"
                         inputMode="numeric"
                         maxLength={9}
@@ -659,7 +628,7 @@ export default function ProfileView({ user, token, setUser }) {
                     {errors.telefono ? (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{errors.telefono}</span>
+                        <span id="profile-telefono-error" role="alert">{errors.telefono}</span>
                       </div>
                     ) : (
                       <small className="text-muted d-block mt-1" style={{ fontSize: '0.74rem' }}>
@@ -672,35 +641,37 @@ export default function ProfileView({ user, token, setUser }) {
                     <label className="form-label fw-semibold text-dark small mb-1">
                       Dirección (opcional)
                     </label>
-                    <input
+                    <input {...fieldProps('direccion')}
                       type="text"
-                      className="form-control"
-                      style={{ borderRadius: '10px', borderColor: '#cbd5e1' }}
+                      className={`form-control ${errors.direccion ? 'is-invalid' : ''}`}
+                      style={{ borderRadius: '10px', borderColor: errors.direccion ? '#ef4444' : '#cbd5e1' }}
                       value={form.direccion}
                       onChange={(e) => updateField('direccion', e.target.value)}
                       placeholder="Ej. Av. Salaverry 1234, Lima"
                     />
+                    {inlineError('direccion')}
                   </div>
 
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold text-dark small mb-1">
                       Contacto de emergencia (opcional)
                     </label>
-                    <input
+                    <input {...fieldProps('contacto_emergencia')}
                       type="text"
-                      className="form-control"
-                      style={{ borderRadius: '10px', borderColor: '#cbd5e1' }}
+                      className={`form-control ${errors.contacto_emergencia ? 'is-invalid' : ''}`}
+                      style={{ borderRadius: '10px', borderColor: errors.contacto_emergencia ? '#ef4444' : '#cbd5e1' }}
                       value={form.contacto_emergencia}
                       onChange={(e) => updateField('contacto_emergencia', e.target.value)}
                       placeholder="Ej. Ana Torres - Hermana"
                     />
+                    {inlineError('contacto_emergencia')}
                   </div>
 
                   <div className="col-12 col-md-6">
                     <label className="form-label fw-semibold text-dark small mb-1">
                       Teléfono de emergencia (opcional)
                     </label>
-                    <input
+                    <input {...fieldProps('telefono_emergencia')}
                       type="tel"
                       inputMode="numeric"
                       maxLength={9}
@@ -717,7 +688,7 @@ export default function ProfileView({ user, token, setUser }) {
                     {errors.telefono_emergencia ? (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
-                        <span>{errors.telefono_emergencia}</span>
+                        <span id="profile-telefono_emergencia-error" role="alert">{errors.telefono_emergencia}</span>
                       </div>
                     ) : (
                       <small className="text-muted" style={{ fontSize: '0.74rem' }}>
@@ -757,7 +728,7 @@ export default function ProfileView({ user, token, setUser }) {
                       fontSize: '0.75rem',
                     }}
                   >
-                    ● Correo verificado
+                    Correo registrado
                   </span>
                 </div>
 
@@ -824,6 +795,7 @@ export default function ProfileView({ user, token, setUser }) {
                 <h5 className="fw-bold text-dark mb-3" style={{ fontSize: '1.2rem' }}>
                   Tus preferencias
                 </h5>
+                {inlineError('preferencias')}
 
                 {/* Objetivo semanal */}
                 <div className="mb-4 pb-3 border-bottom">

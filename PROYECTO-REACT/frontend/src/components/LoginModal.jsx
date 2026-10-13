@@ -2,6 +2,7 @@ import {homeFor} from '../utils/access'
 import { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthService } from '../services/AuthService'
+import {createBackdropGesture} from '../utils/modalBackdrop'
 
 export const ROLE_HOME = {
   admin: '/app/check-in',
@@ -10,6 +11,8 @@ export const ROLE_HOME = {
 
 export default function LoginModal({ isOpen, onClose, onLogin, initialDni = '' }) {
   const navigate = useNavigate()
+  const [backdrop] = useState(createBackdropGesture)
+  useEffect(() => { backdrop.reset() }, [isOpen, backdrop])
   
   // Modos del modal: 'login' | 'forgot_step1' | 'forgot_step2'
   const [viewMode, setViewMode] = useState('login')
@@ -27,7 +30,6 @@ export default function LoginModal({ isOpen, onClose, onLogin, initialDni = '' }
   const [confirmPassword, setConfirmPassword] = useState('')
   const [showNewPassword, setShowNewPassword] = useState(false)
   const [maskedEmail, setMaskedEmail] = useState('')
-  const [devCodeHelper, setDevCodeHelper] = useState('')
 
   // Estado de feedback y errores por casillero
   const [status, setStatus] = useState({ loading: false, error: '', success: '' })
@@ -149,7 +151,6 @@ export default function LoginModal({ isOpen, onClose, onLogin, initialDni = '' }
     try {
       const res = await AuthService.forgotPassword(recoveryIdentifier)
       setMaskedEmail(res.emailMasked || recoveryIdentifier)
-      if (res.devCode) setDevCodeHelper(res.devCode)
       setStatus({ loading: false, error: '', success: `Código enviado a ${res.emailMasked || 'tu correo'}` })
       setViewMode('forgot_step2')
     } catch (err) {
@@ -209,7 +210,13 @@ export default function LoginModal({ isOpen, onClose, onLogin, initialDni = '' }
   }
 
   return (
-    <div className="plm-overlay" onClick={onClose} role="dialog" aria-modal="true" aria-labelledby="plm-login-title">
+    <div className="plm-overlay"
+      onPointerDownCapture={backdrop.pointerDown}
+      onPointerMoveCapture={backdrop.pointerMove}
+      onPointerUpCapture={backdrop.pointerUp}
+      onPointerCancel={backdrop.reset}
+      onClick={event=>{if(backdrop.shouldDismiss(event))onClose()}}
+      role="dialog" aria-modal="true" aria-labelledby="plm-login-title">
       <div className="plm-card" onClick={(e) => e.stopPropagation()}>
         {/* Botón cerrar */}
         <button className="plm-close-btn" onClick={onClose} type="button" aria-label="Cerrar modal">
@@ -518,20 +525,6 @@ export default function LoginModal({ isOpen, onClose, onLogin, initialDni = '' }
             ======================================================= */}
         {viewMode === 'forgot_step2' && (
           <form onSubmit={handleResetPassword} className="plm-form-body">
-            {devCodeHelper && (
-              <div style={{
-                background: '#f4f6f3',
-                border: '1px dashed #235833',
-                borderRadius: '10px',
-                padding: '8px 12px',
-                fontSize: '0.82rem',
-                color: '#111d15',
-                textAlign: 'center',
-              }}>
-                Código generado: <strong>{devCodeHelper}</strong>
-              </div>
-            )}
-
             {/* Código de 6 dígitos */}
             <div className="plm-field-group">
               <label htmlFor="recovery-code" className="plm-field-label">

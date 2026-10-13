@@ -1,4 +1,4 @@
-import {canAccess} from '../utils/access'
+import {canAccess,moduleLabel} from '../utils/access'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ViewTitle from '../components/ViewTitle'
@@ -1460,7 +1460,7 @@ export default function DashboardReservationsView({ token, user }) {
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' }}>
             <div>
               <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 900, color: '#111d15', letterSpacing: '-0.03em' }}>
-                El club, de un vistazo
+                {moduleLabel('inicio',user)}
               </h1>
               <p style={{ margin: '6px 0 0', color: '#5f7165', fontSize: '0.96rem' }}>
                 Tu operación de hoy: socios, accesos en sala y crecimiento en un solo lugar.
@@ -1489,7 +1489,7 @@ export default function DashboardReservationsView({ token, user }) {
         </>
       ) : (
         <ViewTitle
-          title={`¡Bienvenido, ${user?.nombre || 'Socio'}!`}
+          title={moduleLabel('inicio',user)}
           text="Tu resumen diario de entrenamientos, bambús acumulados y aforo en sala."
         />
       )}

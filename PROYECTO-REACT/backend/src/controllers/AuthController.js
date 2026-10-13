@@ -12,11 +12,10 @@ class AuthController {
             const { dni, password } = req.body;
 
             if (!dni || !password) {
-                return res.status(400).json({ message: "DNI/Correo y contraseña son requeridos" });
+                return res.status(400).json({ message: "DNI y contraseña son requeridos" });
             }
 
-            // Permite iniciar sesión tanto con DNI como con Correo Electrónico
-            const userRow = await UserModel.findActiveByDniOrEmail(String(dni).trim());
+            const userRow = await UserModel.findActiveByDni(String(dni).trim());
 
             if (!userRow) {
                 return res.status(401).json({ message: "Credenciales inválidas" });
@@ -107,8 +106,12 @@ class AuthController {
                 return res.status(404).json({ message: "No encontramos un usuario activo con esos datos" });
             }
 
+            const mailConfigured = (process.env.GOOGLE_USER && process.env.GOOGLE_APP_PASSWORD)
+                || (process.env.SMTP_HOST && process.env.SMTP_USER && process.env.SMTP_PASS);
+            if (!mailConfigured) return res.status(503).json({ message: 'El envío de correos no está configurado. Contacta con administración.' });
+
             // Generar código de 6 dígitos
-            const code = Math.floor(100000 + Math.random() * 900000).toString();
+            const code = require('node:crypto').randomInt(100000, 1000000).toString();
             const expires = new Date(Date.now() + 15 * 60 * 1000); // 15 minutos
 
             await UserModel.saveResetCode(userRow.id, code, expires);
@@ -143,20 +146,19 @@ class AuthController {
                 </div>
             `;
 
-            await sendEmail({
+            const delivered = await sendEmail({
                 to: userRow.email,
                 subject: `Código de Recuperación: ${code} - Panda Fitness`,
                 html: emailHtml,
             });
-
-            console.log(`[RECUPERACIÓN] Código generado para ${userRow.email}: ${code}`);
+            if (!delivered) {
+                await UserModel.clearResetCode(userRow.id);
+                return res.status(503).json({ message: 'No se pudo enviar el código por correo. Inténtalo nuevamente más tarde.' });
+            }
 
             return res.json({
                 message: `Código enviado a ${maskedEmail}`,
                 emailMasked: maskedEmail,
-                userId: userRow.id,
-                // Dev mode code helper para pruebas locales rápidas sin conexión SMTP
-                devCode: code,
             });
         } catch (error) {
             console.error("Error en forgotPassword:", error);
@@ -173,8 +175,9 @@ class AuthController {
                 return res.status(400).json({ message: "Todos los campos son requeridos" });
             }
 
-            if (String(newPassword).length < 6) {
-                return res.status(400).json({ message: "La nueva contraseña debe tener al menos 6 caracteres" });
+            if (typeof newPassword !== 'string' || newPassword.length < 8 || Buffer.byteLength(newPassword, 'utf8') > 72
+                || !/(?=.*[a-z])(?=.*[A-Z])(?=.*\d)/.test(newPassword)) {
+                return res.status(400).json({ message: 'La nueva contraseña debe tener al menos 8 caracteres, mayúscula, minúscula y número, y no superar 72 bytes.' });
             }
 
             const userRow = await UserModel.findActiveByDniOrEmail(String(identifier).trim());
@@ -186,7 +189,8 @@ class AuthController {
                 return res.status(400).json({ message: "El código de recuperación ingresado es incorrecto" });
             }
 
-            if (userRow.reset_expires && new Date(userRow.reset_expires) < new Date()) {
+            const expires = new Date(userRow.reset_expires).getTime();
+            if (!userRow.reset_expires || !Number.isFinite(expires) || expires <= Date.now()) {
                 return res.status(400).json({ message: "El código ha expirado. Por favor, solicita uno nuevo" });
             }
 
@@ -237,121 +241,40 @@ class AuthController {
 
     static async updateMe(req, res) {
         try {
-            const userId = req.auth.id;
-            const {
-                nombre,
-                apellido,
-                dni,
-                email,
-                telefono,
-                fecha_nacimiento,
-                direccion,
-                contacto_emergencia,
-                telefono_emergencia,
-                avatar_url,
-                preferencias,
-            } = req.body;
-
-            if (!nombre || !apellido || !email) {
-                return res.status(400).json({ message: "Nombre, apellidos y correo electrónico son obligatorios" });
+            const userId=req.auth.id;
+            const {data,errors}=require('../utils/profileValidation').validateProfile(req.body);
+            if(Object.keys(errors).length)return res.status(400).json({message:'Revisa los campos indicados.',errors});
+            const userRow=await UserModel.findActiveById(userId);
+            if(!userRow)return res.status(404).json({message:'Usuario no encontrado'});
+            const [dniDup]=await db.execute('SELECT id FROM usuarios WHERE dni = ? AND id != ? LIMIT 1',[data.dni,userId]);
+            const [emailDup]=await db.execute('SELECT id FROM usuarios WHERE LOWER(TRIM(email)) = ? AND id != ? LIMIT 1',[data.email,userId]);
+            if(dniDup.length)errors.dni='El DNI ya está registrado por otro usuario.';
+            if(emailDup.length)errors.email='El correo ya está registrado por otro usuario.';
+            if(Object.keys(errors).length)return res.status(409).json({message:'Revisa los campos indicados.',errors});
+            const updated=await UserModel.updateProfile(userId,data);
+            if(!updated)return res.status(404).json({message:'No se pudo actualizar el perfil'});
+            const updatedUser=await UserModel.findActiveById(userId);
+            return res.json({message:'Perfil actualizado correctamente',user:await decorateUser(updatedUser)});
+        } catch(error) {
+            if(error.code==='ER_DUP_ENTRY') {
+                const field=/dni/i.test(error.sqlMessage||error.message)?'dni':'email';
+                return res.status(409).json({message:'Revisa los campos indicados.',errors:{[field]:field==='dni'?'El DNI ya está registrado por otro usuario.':'El correo ya está registrado por otro usuario.'}});
             }
-
-            // Validar que nombre contenga solo letras y espacios (sin números)
-            const nameRegex = /^[a-zA-ZáéíóúÁÉÍÓÚñÑüÜ\s]+$/;
-            if (!nameRegex.test(String(nombre).trim())) {
-                return res.status(400).json({ message: "El nombre solo puede contener letras y espacios" });
-            }
-
-            // Validar que apellidos contengan solo letras y espacios (sin números)
-            if (!nameRegex.test(String(apellido).trim())) {
-                return res.status(400).json({ message: "Los apellidos solo pueden contener letras y espacios" });
-            }
-
-            // Validar DNI: exactamente 8 dígitos numéricos
-            let cleanDni = dni ? String(dni).trim() : null;
-            if (cleanDni) {
-                if (!/^\d{8}$/.test(cleanDni)) {
-                    return res.status(400).json({ message: "El DNI debe contener exactamente 8 dígitos numéricos" });
-                }
-                const [dniDup] = await db.execute(
-                    "SELECT id FROM usuarios WHERE dni = ? AND id != ? AND activo = 1 LIMIT 1",
-                    [cleanDni, userId],
-                );
-                if (dniDup && dniDup.length > 0) {
-                    return res.status(400).json({ message: "El DNI ya se encuentra registrado por otro usuario" });
-                }
-            }
-
-            // Validar Correo Electrónico
-            const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-            const cleanEmail = String(email).trim().toLowerCase();
-            if (!emailRegex.test(cleanEmail)) {
-                return res.status(400).json({ message: "Ingrese un correo electrónico válido" });
-            }
-            const [emailDup] = await db.execute(
-                "SELECT id FROM usuarios WHERE LOWER(TRIM(email)) = ? AND id != ? AND activo = 1 LIMIT 1",
-                [cleanEmail, userId],
-            );
-            if (emailDup && emailDup.length > 0) {
-                return res.status(400).json({ message: "El correo electrónico ya se encuentra registrado por otro usuario" });
-            }
-
-            // Validar Teléfono (Perú: exactamente 9 dígitos numéricos si se envía)
-            let cleanPhone = telefono ? String(telefono).trim() : null;
-            if (cleanPhone) {
-                if (!/^\d{9}$/.test(cleanPhone)) {
-                    return res.status(400).json({ message: "El teléfono debe contener exactamente 9 dígitos numéricos (Perú)" });
-                }
-            }
-
-            // Validar Teléfono de Emergencia (exactamente 9 dígitos numéricos si se envía)
-            let cleanEmergPhone = telefono_emergencia ? String(telefono_emergencia).trim() : null;
-            if (cleanEmergPhone) {
-                if (!/^\d{9}$/.test(cleanEmergPhone)) {
-                    return res.status(400).json({ message: "El teléfono de emergencia debe contener exactamente 9 dígitos numéricos" });
-                }
-            }
-
-            const userRow = await UserModel.findActiveById(userId);
-            if (!userRow) return res.status(404).json({ message: "Usuario no encontrado" });
-
-            const updated = await UserModel.updateProfile(userId, {
-                nombre: String(nombre).trim(),
-                apellido: String(apellido).trim(),
-                dni: cleanDni || userRow.dni,
-                email: cleanEmail,
-                telefono: cleanPhone,
-                fecha_nacimiento: fecha_nacimiento ? String(fecha_nacimiento).trim() : null,
-                direccion: direccion ? String(direccion).trim() : null,
-                contacto_emergencia: contacto_emergencia ? String(contacto_emergencia).trim() : null,
-                telefono_emergencia: cleanEmergPhone,
-                avatar_url: avatar_url || null,
-                preferencias: preferencias || null,
-            });
-
-            if (!updated) {
-                return res.status(404).json({ message: "No se pudo actualizar el perfil" });
-            }
-
-            const updatedUser = await UserModel.findActiveById(userId);
-
-            return res.json({ message: "Perfil actualizado correctamente", user: await decorateUser(updatedUser) });
-        } catch (error) {
-            console.error("Error actualizando perfil:", error);
-            return res.status(500).json({ message: "Error interno del servidor" });
+            console.error('Error actualizando perfil:',error.message);
+            return res.status(500).json({message:'No se pudo guardar el perfil. Inténtalo nuevamente.'});
         }
     }
-
     static async changePassword(req, res) {
         try {
             const userId = req.auth.id;
             const { currentPassword, newPassword } = req.body;
 
-            if (!currentPassword || !newPassword) {
+            if (typeof currentPassword!=='string' || typeof newPassword!=='string' || !currentPassword || !newPassword) {
                 return res.status(400).json({ message: "Contraseñas requeridas" });
             }
 
             const pwdStr = String(newPassword);
+            if(Buffer.byteLength(pwdStr,'utf8')>72)return res.status(400).json({message:'La nueva contraseña no puede superar 72 bytes.'});
 
             // Validación estricta para nueva contraseña:
             // - Mínimo 8 caracteres

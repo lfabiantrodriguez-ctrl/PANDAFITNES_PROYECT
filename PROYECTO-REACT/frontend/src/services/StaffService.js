@@ -4,4 +4,7 @@ async function request(token,path='',method='GET',body) {
   if(!response.ok)throw new Error(response.status===404?'El servidor abierto todavía no tiene el módulo de Usuarios y roles. Inicia el backend actualizado.':data.message||'No se pudo completar la operación.');
   return data;
 }
-export const StaffService={load:token=>request(token),saveUser:(token,id,body)=>request(token,id?`/${id}`:'',id?'PUT':'POST',body),saveRole:(token,id,body)=>request(token,id?`/roles/${id}`:'/roles',id?'PUT':'POST',body)};
+export const StaffService={load:token=>request(token),saveUser:(token,id,body)=>request(token,id?`/${id}`:'',id?'PUT':'POST',body),saveRole:(token,id,body)=>request(token,id?`/roles/${id}`:'/roles',id?'PUT':'POST',body),
+  memberCandidates:(token,id)=>request(token,`/${id}/socio`),
+  linkMember:(token,id,memberId)=>request(token,`/${id}/socio`,'PUT',{memberId}),
+};

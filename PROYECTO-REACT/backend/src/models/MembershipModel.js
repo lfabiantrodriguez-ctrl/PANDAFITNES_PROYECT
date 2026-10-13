@@ -90,7 +90,7 @@ class MembershipModel {
                 LIMIT 1
             )
             LEFT JOIN planes_membresia p ON p.id = m.plan_id
-            WHERE r.nombre = 'cliente'
+            WHERE (r.nombre = 'cliente' OR EXISTS (SELECT 1 FROM staff_member_links l WHERE l.member_user_id=u.id AND l.staff_user_id=u.id))
         `;
 
         const params = [];

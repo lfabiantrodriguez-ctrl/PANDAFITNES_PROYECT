@@ -42,7 +42,7 @@ class AttendanceController {
 
     static async getUserAttendanceSummary(req, res) {
         try {
-            const attendanceCount = await AttendanceModel.getAttendanceCountByUser(req.auth.id);
+            const attendanceCount = await AttendanceModel.getAttendanceCountByUser(req.memberId);
             return res.json({ attendanceCount });
         } catch (error) {
             console.error("Error consultando asistencia del usuario:", error);
@@ -52,7 +52,7 @@ class AttendanceController {
 
     static async getMyAttendanceHistory(req, res) {
         try {
-            const data = await require('../services/pandaAccount')(req.auth.id);
+            const data = await require('../services/pandaAccount')(req.memberId);
             return res.json({...data, xpTotal:data.xp, bambusTotal:data.bambusGanados});
         } catch (error) {
             console.error("Error obteniendo historial de asistencias:", error);
@@ -62,7 +62,7 @@ class AttendanceController {
 
     static async updateMyGoals(req, res) {
         try {
-            const userId = req.auth.id;
+            const userId = req.memberId;
             const { diasObjetivo, horarioPreferido } = req.body;
             if (!Array.isArray(diasObjetivo) || !diasObjetivo.length || diasObjetivo.some(n=>!Number.isInteger(n) || n<1 || n>7))
                 return res.status(400).json({message:'Selecciona al menos un día válido de entrenamiento.'});
@@ -85,7 +85,7 @@ class AttendanceController {
 
     static async getPandaStatus(req, res) {
         try {
-            return res.json(await require('../services/pandaAccount')(req.auth.id));
+            return res.json(await require('../services/pandaAccount')(req.memberId));
         } catch (error) {
             console.error("Error obteniendo estado de Mi Pandita:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
@@ -94,7 +94,7 @@ class AttendanceController {
 
     static async redeemReward(req, res) {
         try {
-            const result = await AttendanceModel.redeemReward(req.auth.id, {recompensaId:req.body.recompensaId});
+            const result = await AttendanceModel.redeemReward(req.memberId, {recompensaId:req.body.recompensaId});
             return res.json({...result, message:'Canje registrado. Presenta tu código en recepción.'});
         } catch (error) {
             console.error("Error canjeando recompensa:", error);

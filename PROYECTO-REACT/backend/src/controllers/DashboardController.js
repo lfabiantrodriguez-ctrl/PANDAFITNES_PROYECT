@@ -28,7 +28,9 @@ class DashboardController {
                 SELECT COUNT(*) AS total
                 FROM usuarios u
                 JOIN roles r ON r.id = u.rol_id
-                WHERE r.nombre = 'cliente' AND u.activo = 1
+                WHERE (r.nombre = 'cliente' OR EXISTS (
+                    SELECT 1 FROM staff_member_links l WHERE l.member_user_id=u.id AND l.staff_user_id=u.id
+                )) AND u.activo = 1
             `);
             const totalSocios = Number(sociosRows[0]?.total || 0);
 

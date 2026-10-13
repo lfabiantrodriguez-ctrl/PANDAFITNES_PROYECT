@@ -2,7 +2,10 @@ import { useEffect, useState } from 'react'
 import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import UserAvatar from '../components/UserAvatar'
 import UsersRolesView from '../pages/UsersRolesView'
-import {canAccess,homeFor,staffSections} from '../utils/access'
+import MemberContext from '../components/MemberContext'
+import {canAccess,homeFor} from '../utils/access'
+import {menuSections} from '../utils/navigation'
+export {MENU_SECTIONS,MENU_ITEMS} from '../utils/navigation'
 import CapacityView from '../pages/CapacityView'
 import DashboardReservationsView from '../pages/DashboardReservationsView'
 import CheckInView from '../pages/CheckInView'
@@ -150,74 +153,10 @@ function MenuIcon({ name }) {
   }
 }
 
-export const MENU_SECTIONS = {
-  admin: [
-    {
-      category: 'ADMINISTRACIÓN & RECEPCIÓN',
-      items: [
-        { to: '/app/inicio', label: 'Inicio', icon: 'grid' },
-        { to: '/app/check-in', label: 'Control de acceso (check-in)', icon: 'checkin' },
-        { to: '/app/socios', label: 'Gestión de socios & membresías', icon: 'socios' },
-        { to: '/app/invitados', label: 'Clientes diarios', icon: 'guests' },
-      ],
-    },
-    {
-      category: 'GESTIÓN COMERCIAL & BENEFICIOS',
-      items: [
-        { to: '/app/recompensas', label: 'Recompensas y promociones', icon: 'rewards' },
-      ],
-    },
-    {
-      category: 'EXPERIENCIA DEL SOCIO (VISTA)',
-      items: [
-        { to: '/app/mi-pandita', label: 'Mi pandita (Socio)', icon: 'panda' },
-        { to: '/app/asistencias', label: 'Asistencias (Socio)', icon: 'calendar' },
-      ],
-    },
-    {
-      category: 'CONFIGURACIÓN DEL SISTEMA',
-      items: [
-        { to: '/app/configuracion', label: 'Configuración Empresa', icon: 'settings' },
-        { to: '/app/usuarios', label: 'Usuarios y roles', icon: 'bi-person-lock' },
-        { to: '/app/perfil', label: 'Mi perfil', icon: 'profile' },
-      ],
-    },
-  ],
-  cliente: [
-    {
-      category: 'MI ENTRENAMIENTO',
-      items: [
-        { to: '/app/inicio', label: 'Dashboard personal', icon: 'grid' },
-        { to: '/app/mi-pandita', label: 'Mi pandita', icon: 'panda' },
-        { to: '/app/asistencias', label: 'Mis asistencias', icon: 'calendar' },
-        { to: '/app/aforo', label: 'Control de aforo', icon: 'aforo' },
-      ],
-    },
-    {
-      category: 'BENEFICIOS & MEMBRESÍA',
-      items: [
-        { to: '/app/recompensas', label: 'Recompensas y promociones', icon: 'rewards' },
-        { to: '/app/mi-membresia', label: 'Mi membresía', icon: 'membership' },
-      ],
-    },
-    {
-      category: 'CONFIGURACIÓN DE CUENTA',
-      items: [
-        { to: '/app/perfil', label: 'Mi perfil', icon: 'profile' },
-      ],
-    },
-  ],
-}
-
-export const MENU_ITEMS = {
-  admin: MENU_SECTIONS.admin.flatMap((s) => s.items),
-  cliente: MENU_SECTIONS.cliente.flatMap((s) => s.items),
-}
-
 export default function AppLayout({ token, user, onLogout, setUser }) {
   const navigate = useNavigate()
   const location = useLocation()
-  const sections = MENU_SECTIONS[user?.rol] || staffSections(user)
+  const sections = menuSections(user)
   const items = sections.flatMap(section=>section.items)
   const [companyInfo, setCompanyInfo] = useState({
     nombre: 'Panda Fitness',
@@ -564,12 +503,13 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
           <Route path="aforo" element={<RoleGate user={user} roles={['cliente']}><CapacityView /></RoleGate>} />
           <Route path="check-in" element={<RoleGate user={user} roles={['admin']}><CheckInView token={token} /></RoleGate>} />
           <Route path="invitados" element={<RoleGate user={user} roles={['admin']}><GuestsView token={token} /></RoleGate>} />
-          <Route path="socios" element={<RoleGate user={user} roles={['admin']}><MembersView token={token} /></RoleGate>} />
+          <Route path="socios" element={<RoleGate user={user} roles={['admin']}><MembersView token={token} user={user} /></RoleGate>} />
           <Route path="membresias" element={<Navigate to="/app/socios" replace />} />
-          <Route path="asistencias" element={<RoleGate user={user} roles={['admin', 'cliente']}><MemberAttendanceView token={token} user={user} /></RoleGate>} />
-          <Route path="mi-pandita" element={<RoleGate user={user} roles={['admin', 'cliente']}><MyPandaView token={token} user={user} /></RoleGate>} />
+          <Route path="asistencias" element={<PersonalGate user={user}><MemberAttendanceView token={token} user={user} /></PersonalGate>} />
+          <Route path="mi-pandita" element={<PersonalGate user={user}><MyPandaView token={token} user={user} /></PersonalGate>} />
           <Route path="recompensas" element={<RoleGate user={user} roles={['admin', 'cliente']}><RewardsView token={token} user={user} /></RoleGate>} />
-          <Route path="mi-membresia" element={<RoleGate user={user} roles={['admin', 'cliente']}><MemberMembershipView token={token} user={user} /></RoleGate>} />
+          <Route path="mi-membresia" element={<PersonalGate user={user}><MemberMembershipView token={token} user={user} /></PersonalGate>} />
+          <Route path="mis-recompensas" element={<PersonalGate user={user}><RewardsView token={token} user={user} personal /></PersonalGate>} />
           <Route path="configuracion" element={<RoleGate user={user} roles={['admin']}><CompanySettingsView token={token} /></RoleGate>} />
           <Route path="usuarios" element={<RoleGate user={user} roles={['admin']}><UsersRolesView token={token} user={user} /></RoleGate>} />
           <Route path="perfil" element={<ProfileView user={user} token={token} setUser={setUser} />} />
@@ -579,6 +519,10 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
       <MobileBottomNav user={user} />
     </div>
   )
+}
+
+function PersonalGate({user,children}) {
+  return <RoleGate user={user}><MemberContext key={user.memberLink?.id||'unlinked'} user={user}>{children}</MemberContext></RoleGate>
 }
 
 function RoleRedirect({ user }) {

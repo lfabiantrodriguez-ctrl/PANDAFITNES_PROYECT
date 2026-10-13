@@ -6,7 +6,12 @@ export class ProfileService {
       body: JSON.stringify(data),
     })
     const json = await res.json()
-    if (!res.ok) throw new Error(json.message || 'No se pudo actualizar el perfil')
+    if (!res.ok) {
+      const error = new Error(json.message || 'No se pudo actualizar el perfil')
+      error.errors = json.errors || {}
+      error.status = res.status
+      throw error
+    }
     return json
   }
 

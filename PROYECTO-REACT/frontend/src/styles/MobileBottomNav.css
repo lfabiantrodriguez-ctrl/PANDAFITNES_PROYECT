@@ -63,3 +63,11 @@
     padding-bottom: 84px !important;
   }
 }
+
+@media(max-width:768px){
+  .mobile-bottom-nav{height:84px}
+  .mbn-item{min-width:0;text-align:center;font-size:.6rem;line-height:1.2;padding:5px 3px}
+  .mbn-item>span{white-space:normal;overflow-wrap:anywhere;max-width:100%}
+  .mbn-item>svg,.mbn-item>i{flex-shrink:0}
+  .app-main{padding-bottom:104px!important}
+}

@@ -1,6 +1,7 @@
 import { useEffect, useState, useMemo, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import ViewTitle from '../components/ViewTitle'
+import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
 import { RewardService } from '../services/RewardService'
 import { AttendanceService } from '../services/AttendanceService'
@@ -107,9 +108,10 @@ function getPartnerImage(partner) {
   return 'https://images.unsplash.com/photo-1517838277536-f5f99be501cd?auto=format&fit=crop&w=800&q=80'
 }
 
-export default function RewardsView({ token, user }) {
+export default function RewardsView({ token, user, personal = false }) {
   const navigate = useNavigate()
-  const isAdmin = Boolean(user && user.rol !== 'cliente')
+  const isAdmin = Boolean(user && user.rol !== 'cliente' && !personal)
+  const hasMemberAccount = user?.rol === 'cliente' || Boolean(user?.memberLink?.activo)
   const [activeTab, setActiveTab] = useState('catalogo')
   const [loading, setLoading] = useState(true)
 
@@ -204,14 +206,14 @@ export default function RewardsView({ token, user }) {
     window.addEventListener('focus', update)
     window.addEventListener('panda-progress-updated', update)
     return () => { clearInterval(timer); window.removeEventListener('focus', update); window.removeEventListener('panda-progress-updated', update) }
-  }, [token, isAdmin])
+  }, [token, isAdmin, user?.memberLink?.id, user?.memberLink?.activo])
 
   async function loadAllData(background = false) {
     if (!background) setLoading(true)
     try {
       const [panda, catalog, partners, mine, all] = await Promise.all([
-        AttendanceService.getPandaStatus(token), RewardService.getRewards(token), RewardService.getPartnerships(token),
-        RewardService.getMyRedemptions(token), isAdmin ? RewardService.getAllRedemptions(token) : Promise.resolve(null),
+        hasMemberAccount ? AttendanceService.getPandaStatus(token) : Promise.resolve({bambusDisponibles:null,canRedeem:false}), RewardService.getRewards(token), RewardService.getPartnerships(token),
+        hasMemberAccount ? RewardService.getMyRedemptions(token) : Promise.resolve({redemptions:[]}), isAdmin ? RewardService.getAllRedemptions(token) : Promise.resolve(null),
       ])
       setBambooBalance(panda.bambusDisponibles)
       setCanRedeem(panda.canRedeem)
@@ -646,7 +648,7 @@ export default function RewardsView({ token, user }) {
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
           <ViewTitle
-            title="Recompensas, Promociones y Convenios"
+            title={moduleLabel(personal?'mis-recompensas':'recompensas',user)}
             subtitle="Canjea tus bambús ganados con tu Pandita y aprovecha beneficios exclusivos con marcas aliadas."
           />
         </div>

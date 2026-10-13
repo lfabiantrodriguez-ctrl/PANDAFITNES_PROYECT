@@ -5,7 +5,7 @@ const { sendEmail } = require("../utils/email");
 class MembershipController {
     static async getMyMembership(req, res) {
         try {
-            const userId = req.auth.id;
+            const userId = req.memberId;
             const membership = await MembershipModel.getClientMembership(userId);
 
             if (!membership) {
@@ -21,7 +21,7 @@ class MembershipController {
 
     static async getMyPayments(req, res) {
         try {
-            const userId = req.auth.id;
+            const userId = req.memberId;
             const payments = await MembershipModel.getPaymentHistory(userId);
 
             return res.json({ payments });

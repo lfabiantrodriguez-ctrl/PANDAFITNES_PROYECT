@@ -1,10 +1,13 @@
 import { useEffect, useState } from 'react'
 import ViewTitle from '../components/ViewTitle'
+import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
 import { MembershipService } from '../services/MembershipService'
 
 export default function MemberMembershipView({ token, user }) {
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState('')
+  const holder = user?.memberLink || user
   const [membership, setMembership] = useState(null)
   const [showRenewModal, setShowRenewModal] = useState(false)
   const [renewFeedback, setRenewFeedback] = useState('')
@@ -22,40 +25,13 @@ export default function MemberMembershipView({ token, user }) {
   }, [user?.telefono])
 
   async function loadMembership() {
-    setLoading(true)
+    setLoading(true);setError('');
     try {
-      const data = await MembershipService.getClientMembership(token)
-      if (data && data.membership) {
-        setMembership(data.membership)
-      } else {
-        // Fallback enriquecido tipo demo
-        setMembership({
-          id: 1,
-          planNombre: 'Plan Impulso Trimestral',
-          precio: 240,
-          estado: 'activo',
-          fechaInicio: '2026-07-01',
-          fechaFin: '2026-09-30',
-          diasRestantes: 8,
-          sede: 'Sede Centro',
-        })
-      }
-    } catch {
-      setMembership({
-        id: 1,
-        planNombre: 'Plan Impulso Trimestral',
-        precio: 240,
-        estado: 'activo',
-        fechaInicio: '2026-07-01',
-        fechaFin: '2026-09-30',
-        diasRestantes: 8,
-        sede: 'Sede Centro',
-      })
-    } finally {
-      setLoading(false)
-    }
+      const data=await MembershipService.getClientMembership(token);
+      setMembership(data.membership||null);
+    } catch(error) { setMembership(null);setError(error.message||'No se pudo consultar tu membresía.'); }
+    finally { setLoading(false); }
   }
-
   function handleRenewRequest(e) {
     e.preventDefault()
     if (!renewPhone.trim()) {
@@ -74,12 +50,15 @@ export default function MemberMembershipView({ token, user }) {
     }, 2500)
   }
 
+  if(loading)return <div className="card p-4 rounded-4" role="status">Consultando tu membresía…</div>;
+  if(error)return <div className="alert alert-danger" role="alert">{error}<button className="btn btn-sm btn-outline-dark ms-3" onClick={loadMembership}>Volver a consultar</button></div>;
+  if(!membership)return <section className="card p-4 p-md-5 rounded-4"><i className="bi bi-person-vcard fs-1 text-success mb-3"/><h2 className="fs-4 fw-bold">{moduleLabel('mi-membresia',user)}</h2><p className="text-secondary mb-0">Todavía no tienes una membresía. Administración puede asignarte un plan desde {moduleLabel('socios')}.</p></section>;
   return (
     <div className="dashboard-page" style={{ maxWidth: '1240px', margin: '0 auto', paddingBottom: '60px' }}>
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
           <ViewTitle
-            title="Mi Membresía Panda Fitness"
+            title={moduleLabel('mi-membresia',user)}
             subtitle="Consulta la vigencia de tu plan, beneficios incluidos y estado de tus accesos."
           />
         </div>
@@ -131,7 +110,7 @@ export default function MemberMembershipView({ token, user }) {
                   userSelect: 'none',
                 }}
               >
-                🐼
+                <i className="bi bi-shield-check" aria-hidden="true"/>
               </div>
 
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '24px' }}>
@@ -194,7 +173,7 @@ export default function MemberMembershipView({ token, user }) {
 
                 <div>
                   <span style={{ fontSize: '0.74rem', color: '#8fa295', display: 'block', marginBottom: '4px' }}>DÍAS RESTANTES</span>
-                  <strong style={{ fontSize: '1rem', color: '#ffffff' }}>{membership.diasRestantes || '8'} días</strong>
+                  <strong style={{ fontSize: '1rem', color: '#ffffff' }}>{Math.max(0, Number(membership.diasRestantes) || 0)} días</strong>
                 </div>
 
                 <div>
@@ -204,7 +183,7 @@ export default function MemberMembershipView({ token, user }) {
               </div>
 
               <div style={{ fontSize: '0.82rem', color: '#8fa295' }}>
-                Titular: <strong style={{ color: '#ffffff' }}>{user?.nombre} {user?.apellido}</strong> · DNI: <strong style={{ color: '#ffffff' }}>{user?.dni}</strong>
+                Titular: <strong style={{ color: '#ffffff' }}>{holder?.nombre} {holder?.apellido}</strong> · DNI: <strong style={{ color: '#ffffff' }}>{holder?.dni}</strong>
               </div>
             </div>
 

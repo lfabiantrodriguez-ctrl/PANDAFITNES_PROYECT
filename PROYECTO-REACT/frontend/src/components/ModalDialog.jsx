@@ -13,18 +13,13 @@ export default function ModalDialog({
   useEffect(() => {
     if (!isOpen) return
 
-    function handleKeyDown(e) {
-      if (e.key === 'Escape') onClose()
-    }
-
-    document.addEventListener('keydown', handleKeyDown)
+    const previousOverflow = document.body.style.overflow
     document.body.style.overflow = 'hidden'
 
     return () => {
-      document.removeEventListener('keydown', handleKeyDown)
-      document.body.style.overflow = 'unset'
+      document.body.style.overflow = previousOverflow
     }
-  }, [isOpen, onClose])
+  }, [isOpen])
 
   if (!isOpen) return null
 
@@ -43,7 +38,6 @@ export default function ModalDialog({
         zIndex: 1060,
         animation: 'fadeIn 0.2s ease',
       }}
-      onClick={onClose}
     >
       <div
         className={`modal-dialog modal-dialog-centered ${sizeClass}`}

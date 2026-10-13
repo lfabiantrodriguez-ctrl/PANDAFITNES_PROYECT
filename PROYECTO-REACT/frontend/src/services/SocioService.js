@@ -1,4 +1,14 @@
 export class SocioService {
+  static async setActive(token, id, activo) {
+    const response = await fetch(`/api/admin/socios/${id}/estado`, {
+      method: 'PATCH',
+      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ activo }),
+    })
+    const data = await response.json()
+    if (!response.ok) throw new Error(data.message || 'No se pudo cambiar el estado de la cuenta')
+    return data
+  }
   static async updateSocio(token, id, form) {
     const response = await fetch(`/api/admin/socios/${id}`, { method: 'PUT',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' }, body: JSON.stringify(form) });

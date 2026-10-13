@@ -1,6 +1,7 @@
 const express = require("express");
 const RewardController = require("../controllers/RewardController");
 const { authenticateToken, requireRole } = require("../middleware/authMiddleware");
+const { requireMember } = require('../services/staffMemberLink');
 
 const router = express.Router();
 
@@ -16,7 +17,7 @@ router.post("/convenios", authenticateToken, requireRole("admin"), RewardControl
 router.delete("/convenios/:id", authenticateToken, requireRole("admin"), RewardController.deletePartnership);
 
 // Rutas de canjes
-router.get("/mis-canjes", authenticateToken, RewardController.getMyRedemptions);
+router.get("/mis-canjes", authenticateToken, requireMember, RewardController.getMyRedemptions);
 router.get("/admin/canjes-todos", authenticateToken, requireRole("admin"), RewardController.getAllRedemptions);
 router.put("/admin/canjes/:id/entregar", authenticateToken, requireRole("admin"), RewardController.deliverRedemption);
 
