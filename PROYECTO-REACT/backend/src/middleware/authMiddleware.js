@@ -27,12 +27,13 @@ function verifyToken(req, res, next) {
     return authenticateToken(req, res, next);
 }
 
-function requireRole(roleOrRoles) {
+function requireRole(roleOrRoles, options = {}) {
     const roles = Array.isArray(roleOrRoles) ? roleOrRoles : [roleOrRoles];
+    const strict = Boolean(options && options.strict);
 
     return (req, res, next) => {
         const customStaff=req.auth && !['admin','cliente'].includes(req.auth.rol);
-        const permittedStaff=roles.includes('admin') && customStaff && require('../services/roleAccess').canRequest(req.auth,req);
+        const permittedStaff=!strict && roles.includes('admin') && customStaff && require('../services/roleAccess').canRequest(req.auth,req);
         if (!roles.includes(req.auth?.rol) && !permittedStaff) {
             return res.status(403).json({ message: "No tiene permisos para esta accion" });
         }

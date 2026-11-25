@@ -1,8 +1,9 @@
-export default function ViewTitle({ title, text }) {
+export default function ViewTitle({ text, subtitle }) {
+  const description = text || subtitle
+  if (!description) return null
   return (
     <div className="view-title-block">
-      <h1>{title}</h1>
-      <p>{text}</p>
+      <p>{description}</p>
     </div>
   )
 }

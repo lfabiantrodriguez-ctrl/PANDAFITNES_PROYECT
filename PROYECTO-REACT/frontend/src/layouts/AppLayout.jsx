@@ -1,16 +1,13 @@
 import { useEffect, useState } from 'react'
-import { NavLink, Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useNavigate } from 'react-router-dom'
 import UserAvatar from '../components/UserAvatar'
 import UsersRolesView from '../pages/UsersRolesView'
 import MemberContext from '../components/MemberContext'
-import {canAccess,homeFor} from '../utils/access'
+import {canAccess,homeFor,moduleLabel} from '../utils/access'
 import {menuSections} from '../utils/navigation'
 export {MENU_SECTIONS,MENU_ITEMS} from '../utils/navigation'
-import CapacityView from '../pages/CapacityView'
 import DashboardReservationsView from '../pages/DashboardReservationsView'
-import CheckInView from '../pages/CheckInView'
 import MembersView from '../pages/MembersView'
-import MembershipsView from '../pages/MembershipsView'
 import GuestsView from '../pages/GuestsView'
 import ProfileView from '../pages/ProfileView'
 import CompanySettingsView from '../pages/CompanySettingsView'
@@ -168,6 +165,9 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
   })
 
   const currentItem = items.find(item => location.pathname.startsWith(item.to)) || items[0]
+  const headerModuleTitle = location.pathname.startsWith('/app/perfil')
+    ? moduleLabel('perfil', user)
+    : (currentItem?.label || 'Inicio')
 
   useEffect(() => {
     async function loadCompanyData() {
@@ -279,31 +279,11 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
                   )
                 })()}
               </span>
-              <span style={{ fontSize: '0.68rem', color: '#8fa295', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase' }}>
-                {companyInfo.descripcion ? (companyInfo.descripcion.length > 25 ? companyInfo.descripcion.slice(0, 25) + '...' : companyInfo.descripcion) : 'CLUB DEPORTIVO'}
+              <span style={{ fontSize: '0.68rem', color: '#8fa295', letterSpacing: '0.08em', fontWeight: 700, textTransform: 'uppercase', lineHeight: 1.25, whiteSpace: 'normal' }}>
+                {companyInfo.descripcion || 'CLUB DEPORTIVO'}
               </span>
             </div>
           </button>
-
-          {/* Sede badge */}
-          <div
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              padding: '4px 10px',
-              background: 'rgba(196, 240, 57, 0.08)',
-              border: '1px solid rgba(196, 240, 57, 0.22)',
-              borderRadius: '6px',
-              color: '#c4f039',
-              fontSize: '0.68rem',
-              fontWeight: 800,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              marginBottom: '22px',
-            }}
-          >
-            {user.rol === 'admin' ? 'ADMINISTRACIÓN / SEDE CENTRO' : user.rol === 'cliente' ? 'ÁREA CLIENTE / SEDE CENTRO' : `EQUIPO / ${user.roleLabel || user.rol}`}
-          </div>
 
           {/* Navigation links */}
           <nav className="sidebar-nav-sections" aria-label="Navegacion principal">
@@ -313,90 +293,24 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
                   <span>{section.category}</span>
                 </div>
                 <div className="nav-list">
-                  {section.items.map((item) => (
-                    <NavLink
-                      key={item.to}
-                      to={item.to}
-                      className={({ isActive }) => `nav-link${isActive ? ' active-page' : ''}`}
-                    >
-                      <MenuIcon name={item.icon} />
-                      <span>{item.label}</span>
-                    </NavLink>
-                  ))}
+                  {section.items.map((item) => {
+                    const isActive = location.pathname === item.to
+                    return (
+                      <button
+                        key={item.to}
+                        type="button"
+                        onClick={() => navigate(item.to)}
+                        className={`nav-link${isActive ? ' active-page' : ''}`}
+                      >
+                        <MenuIcon name={item.icon} />
+                        <span>{item.label}</span>
+                      </button>
+                    )
+                  })}
                 </div>
               </div>
             ))}
           </nav>
-        </div>
-
-        {/* Sidebar bottom */}
-        <div>
-          <div className="sidebar-footer" style={{ borderTop: '1px solid rgba(255, 255, 255, 0.08)', paddingTop: '14px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px', minWidth: 0, flex: 1 }}>
-                <div
-                  style={{
-                    width: '38px',
-                    height: '38px',
-                    borderRadius: '50%',
-                    background: '#235833',
-                    border: '1.5px solid #c4f039',
-                    color: '#c4f039',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontWeight: 800,
-                    fontSize: '0.84rem',
-                    flexShrink: 0,
-                  }}
-                >
-                  {<UserAvatar user={user} />}
-                </div>
-                <div style={{ minWidth: 0, flex: 1 }}>
-                  <p style={{ margin: 0, color: '#f4f6f4', fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {user.nombre}
-                  </p>
-                  <span style={{ color: '#8fa295', fontSize: '0.74rem' }}>
-                    {user.roleLabel || (user.rol === 'admin' ? 'Administrador' : user.rol === 'cliente' ? 'Socio' : user.rol)}
-                  </span>
-                </div>
-              </div>
-
-              {/* Botón de Cerrar Sesión como Ícono */}
-              <button
-                type="button"
-                onClick={handleLogout}
-                title="Cerrar sesión"
-                style={{
-                  background: 'rgba(239, 68, 68, 0.12)',
-                  border: '1px solid rgba(239, 68, 68, 0.28)',
-                  color: '#f87171',
-                  width: '36px',
-                  height: '36px',
-                  borderRadius: '10px',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: '1.15rem',
-                  cursor: 'pointer',
-                  flexShrink: 0,
-                  transition: 'all 0.2s',
-                }}
-                onMouseEnter={(e) => {
-                  e.currentTarget.style.background = '#ef4444'
-                  e.currentTarget.style.color = '#ffffff'
-                  e.currentTarget.style.borderColor = '#ef4444'
-                }}
-                onMouseLeave={(e) => {
-                  e.currentTarget.style.background = 'rgba(239, 68, 68, 0.12)'
-                  e.currentTarget.style.color = '#f87171'
-                  e.currentTarget.style.borderColor = 'rgba(239, 68, 68, 0.28)'
-                }}
-              >
-                <i className="bi bi-box-arrow-right"></i>
-              </button>
-            </div>
-          </div>
         </div>
       </aside>
 
@@ -411,24 +325,13 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
 
       <main className="app-main">
         {/* Top bar with Breadcrumbs, Date, Notifications and Avatar (Desktop only) */}
-        <div
-          className="desktop-top-bar"
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            paddingBottom: '1.25rem',
-            marginBottom: '1.75rem',
-            borderBottom: '1px solid #e3e8e2',
-            fontSize: '0.88rem',
-            flexWrap: 'wrap',
-            gap: '12px',
-          }}
-        >
-          <div style={{ color: '#5f7165', fontWeight: 600 }}>
-            {user.rol !== 'cliente' ? 'Administración' : 'Mi Portal'}{' '}
-            <span style={{ color: '#8fa295', margin: '0 4px' }}>/</span>{' '}
-            <span style={{ color: '#111d15', fontWeight: 700 }}>{currentItem?.label || 'Inicio'}</span>
+        <header className="desktop-top-bar">
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px', color: '#5f7165', fontWeight: 600 }}>
+            <span>{user.rol !== 'cliente' ? 'Administración' : 'Mi Portal'}</span>
+            <span style={{ color: '#8fa295' }}>/</span>
+            <h1 style={{ margin: 0, color: '#111d15', fontWeight: 800, fontSize: '1.12rem', letterSpacing: '-0.01em' }}>
+              {headerModuleTitle}
+            </h1>
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
@@ -471,37 +374,90 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
               ></span>
             </div>
 
-            {/* User Avatar Circle */}
+            {/* User Avatar, Name, Role & Logout */}
             <div
+              onClick={() => navigate('/app/perfil')}
+              title={`Perfil: ${user.nombre}`}
               style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                cursor: 'pointer',
+                padding: '4px 8px 4px 4px',
+                borderRadius: '999px',
+                transition: 'background 0.2s',
+              }}
+            >
+              <div
+                style={{
+                  width: '36px',
+                  height: '36px',
+                  borderRadius: '50%',
+                  background: '#111d15',
+                  color: '#c4f039',
+                  border: '1.5px solid #c4f039',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontWeight: 800,
+                  fontSize: '0.78rem',
+                  flexShrink: 0,
+                }}
+              >
+                {<UserAvatar user={user} />}
+              </div>
+              <div style={{ display: 'flex', flexDirection: 'column', lineHeight: 1.2 }}>
+                <span style={{ color: '#111d15', fontWeight: 700, fontSize: '0.84rem' }}>
+                  {user.nombre}
+                </span>
+                <span style={{ color: '#5f7165', fontSize: '0.72rem', fontWeight: 600 }}>
+                  {user.roleLabel || (user.rol === 'admin' ? 'Administrador' : user.rol === 'cliente' ? 'Socio' : user.rol)}
+                </span>
+              </div>
+            </div>
+
+            <button
+              type="button"
+              onClick={handleLogout}
+              title="Cerrar sesión"
+              style={{
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+                color: '#dc2626',
                 width: '36px',
                 height: '36px',
-                borderRadius: '50%',
-                background: '#111d15',
-                color: '#c4f039',
-                border: '1.5px solid #c4f039',
+                borderRadius: '10px',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontWeight: 800,
-                fontSize: '0.78rem',
+                fontSize: '1.1rem',
                 cursor: 'pointer',
+                flexShrink: 0,
+                transition: 'all 0.2s',
               }}
-              onClick={() => navigate('/app/perfil')}
-              title={`Perfil: ${user.nombre}`}
+              onMouseEnter={(e) => {
+                e.currentTarget.style.background = '#ef4444'
+                e.currentTarget.style.color = '#ffffff'
+                e.currentTarget.style.borderColor = '#ef4444'
+              }}
+              onMouseLeave={(e) => {
+                e.currentTarget.style.background = '#fef2f2'
+                e.currentTarget.style.color = '#dc2626'
+                e.currentTarget.style.borderColor = '#fecaca'
+              }}
             >
-              {<UserAvatar user={user} />}
-            </div>
+              <i className="bi bi-box-arrow-right"></i>
+            </button>
           </div>
-        </div>
+        </header>
 
         <Routes>
           <Route path="/" element={<RoleRedirect user={user} />} />
           <Route path="inicio" element={<RoleGate user={user} roles={['admin', 'cliente']}><DashboardReservationsView token={token} user={user} /></RoleGate>} />
           <Route path="dashboard-reservas" element={<Navigate to="/app/inicio" replace />} />
           <Route path="reservas" element={<Navigate to="/app/inicio" replace />} />
-          <Route path="aforo" element={<RoleGate user={user} roles={['cliente']}><CapacityView /></RoleGate>} />
-          <Route path="check-in" element={<RoleGate user={user} roles={['admin']}><CheckInView token={token} /></RoleGate>} />
+          <Route path="aforo" element={<Navigate to="/app/inicio" replace />} />
+          <Route path="check-in" element={<Navigate to="/app/inicio?tab=clientes" replace />} />
           <Route path="invitados" element={<RoleGate user={user} roles={['admin']}><GuestsView token={token} /></RoleGate>} />
           <Route path="socios" element={<RoleGate user={user} roles={['admin']}><MembersView token={token} user={user} /></RoleGate>} />
           <Route path="membresias" element={<Navigate to="/app/socios" replace />} />
@@ -509,7 +465,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
           <Route path="mi-pandita" element={<PersonalGate user={user}><MyPandaView token={token} user={user} /></PersonalGate>} />
           <Route path="recompensas" element={<RoleGate user={user} roles={['admin', 'cliente']}><RewardsView token={token} user={user} /></RoleGate>} />
           <Route path="mi-membresia" element={<PersonalGate user={user}><MemberMembershipView token={token} user={user} /></PersonalGate>} />
-          <Route path="mis-recompensas" element={<PersonalGate user={user}><RewardsView token={token} user={user} personal /></PersonalGate>} />
+          <Route path="mis-recompensas" element={canAccess(user, 'recompensas') ? <Navigate to="/app/recompensas" replace /> : <PersonalGate user={user}><RewardsView token={token} user={user} personal /></PersonalGate>} />
           <Route path="configuracion" element={<RoleGate user={user} roles={['admin']}><CompanySettingsView token={token} /></RoleGate>} />
           <Route path="usuarios" element={<RoleGate user={user} roles={['admin']}><UsersRolesView token={token} user={user} /></RoleGate>} />
           <Route path="perfil" element={<ProfileView user={user} token={token} setUser={setUser} />} />

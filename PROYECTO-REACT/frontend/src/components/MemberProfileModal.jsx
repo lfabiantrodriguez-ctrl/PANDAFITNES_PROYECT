@@ -123,7 +123,7 @@ export default function MemberProfileModal({
               </div>
             </div>
 
-            <div className="text-end">
+            <div className="text-start text-md-end">
               <span className="text-muted small d-block">Antigüedad en el club</span>
               <strong className="text-dark small">
                 {estadisticas?.antiguedadDias > 0 ? `${estadisticas.antiguedadDias} días registrado` : 'Nuevo ingreso'}
@@ -132,51 +132,53 @@ export default function MemberProfileModal({
           </div>
 
           {/* 4 CARDS DE ESTADÍSTICAS RÁPIDAS */}
-          <div className="row g-2">
+          <div className="row g-3">
             <div className="col-6 col-md-3">
-              <div className="p-2 border rounded-3 bg-white text-center">
-                <span className="text-muted small d-block">Plan Actual</span>
+              <div className="p-3 border rounded-3 bg-white text-center h-100 d-flex flex-column justify-content-center">
+                <span className="text-muted small d-block mb-1">Plan Actual</span>
                 <strong className="text-dark fs-6 text-truncate d-block">
                   {estadisticas?.planActual || 'Sin plan'}
                 </strong>
-                <span
-                  className="badge mt-1"
-                  style={{
-                    fontSize: '0.68rem',
-                    background: estadisticas?.estadoMembresia === 'activo' ? '#ecfccb' : '#fee2e2',
-                    color: estadisticas?.estadoMembresia === 'activo' ? '#15803d' : '#b91c1c',
-                  }}
-                >
-                  {estadisticas?.estadoMembresia === 'activo' ? `${estadisticas.diasRestantes} días restantes` : 'Vencido'}
-                </span>
+                <div>
+                  <span
+                    className="badge mt-1"
+                    style={{
+                      fontSize: '0.7rem',
+                      background: estadisticas?.estadoMembresia === 'activo' ? '#ecfccb' : '#fee2e2',
+                      color: estadisticas?.estadoMembresia === 'activo' ? '#15803d' : '#b91c1c',
+                    }}
+                  >
+                    {estadisticas?.estadoMembresia === 'activo' ? `${estadisticas.diasRestantes} días restantes` : 'Vencido'}
+                  </span>
+                </div>
               </div>
             </div>
 
             <div className="col-6 col-md-3">
-              <div className="p-2 border rounded-3 bg-white text-center">
-                <span className="text-muted small d-block">Matrículas Totales</span>
+              <div className="p-3 border rounded-3 bg-white text-center h-100 d-flex flex-column justify-content-center">
+                <span className="text-muted small d-block mb-1">Matrículas Totales</span>
                 <strong className="text-dark fs-5">{estadisticas?.totalMatriculas}</strong>
-                <span className="text-muted d-block" style={{ fontSize: '0.68rem' }}>
+                <span className="text-muted d-block mt-1" style={{ fontSize: '0.7rem' }}>
                   {estadisticas?.totalMatriculas >= 2 ? 'Cliente recurrente' : 'Primer plan'}
                 </span>
               </div>
             </div>
 
             <div className="col-6 col-md-3">
-              <div className="p-2 border rounded-3 bg-white text-center">
-                <span className="text-muted small d-block">Inversión Acumulada</span>
-                <strong className="text-dark fs-5">
+              <div className="p-3 border rounded-3 bg-white text-center h-100 d-flex flex-column justify-content-center">
+                <span className="text-muted small d-block mb-1">Inversión Acumulada</span>
+                <strong className="text-dark fs-5 text-nowrap">
                   S/. {Number(estadisticas?.totalInvertido || 0).toFixed(2)}
                 </strong>
-                <span className="text-muted d-block" style={{ fontSize: '0.68rem' }}>Histórico en pagos</span>
+                <span className="text-muted d-block mt-1" style={{ fontSize: '0.7rem' }}>Histórico en pagos</span>
               </div>
             </div>
 
             <div className="col-6 col-md-3">
-              <div className="p-2 border rounded-3 bg-white text-center">
-                <span className="text-muted small d-block">Asistencias a Sala</span>
+              <div className="p-3 border rounded-3 bg-white text-center h-100 d-flex flex-column justify-content-center">
+                <span className="text-muted small d-block mb-1">Asistencias a Sala</span>
                 <strong className="text-dark fs-5">{estadisticas?.totalAsistencias}</strong>
-                <span className="text-success d-block" style={{ fontSize: '0.68rem', fontWeight: 700 }}>
+                <span className="text-success d-block mt-1" style={{ fontSize: '0.7rem', fontWeight: 700 }}>
                   +{estadisticas?.xpTotal || 0} XP acumulados
                 </span>
               </div>
@@ -214,16 +216,16 @@ export default function MemberProfileModal({
           {/* CONTENIDO TAB 1: MATRÍCULAS / MEMBRESÍAS */}
           {activeTab === 'matriculas' && (
             <div className="border rounded-3 overflow-hidden bg-white" style={{ width: '100%' }}>
-              <div style={{ maxHeight: '240px', overflowY: 'auto', overflowX: 'hidden', width: '100%' }}>
-                <table className="table table-sm table-hover align-middle m-0" style={{ fontSize: '0.82rem', width: '100%', tableLayout: 'fixed' }}>
+              <div style={{ maxHeight: '260px', overflowY: 'auto', overflowX: 'auto', width: '100%' }}>
+                <table className="table table-sm table-hover align-middle m-0" style={{ fontSize: '0.84rem', width: '100%', minWidth: '580px' }}>
                   <thead className="table-light">
                     <tr>
-                      <th className="py-2 px-2 text-start" style={{ width: '24%' }}>Plan</th>
-                      <th className="py-2 px-2 text-center" style={{ width: '17%' }}>F. Inicio</th>
-                      <th className="py-2 px-2 text-center" style={{ width: '17%' }}>F. Fin</th>
-                      <th className="py-2 px-2 text-end" style={{ width: '15%' }}>Monto</th>
-                      <th className="py-2 px-2 text-center" style={{ width: '13%' }}>Método</th>
-                      <th className="py-2 px-2 text-center" style={{ width: '14%' }}>Estado</th>
+                      <th className="py-2 px-3 text-start">Plan</th>
+                      <th className="py-2 px-3 text-center text-nowrap">F. Inicio</th>
+                      <th className="py-2 px-3 text-center text-nowrap">F. Fin</th>
+                      <th className="py-2 px-3 text-end text-nowrap">Monto</th>
+                      <th className="py-2 px-3 text-center">Método</th>
+                      <th className="py-2 px-3 text-center">Estado</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -236,19 +238,19 @@ export default function MemberProfileModal({
                     ) : (
                       membresias.map((m) => (
                         <tr key={m.id}>
-                          <td className="px-2 py-2 fw-bold text-dark text-truncate" title={m.planNombre}>{m.planNombre}</td>
-                          <td className="px-2 py-2 text-center text-muted" style={{ fontSize: '0.78rem' }}>{formatDate(m.fechaInicio)}</td>
-                          <td className="px-2 py-2 text-center" style={{ fontSize: '0.78rem' }}>{formatDate(m.fechaFin)}</td>
-                          <td className="px-2 py-2 text-end fw-semibold">S/. {Number(m.montoPagado || m.planPrecio).toFixed(2)}</td>
-                          <td className="px-2 py-2 text-center text-capitalize text-muted" style={{ fontSize: '0.76rem' }}>{m.metodoPago || 'Efectivo'}</td>
-                          <td className="px-2 py-2 text-center">
+                          <td className="px-3 py-2 fw-bold text-dark" title={m.planNombre}>{m.planNombre}</td>
+                          <td className="px-3 py-2 text-center text-muted text-nowrap" style={{ fontSize: '0.8rem' }}>{formatDate(m.fechaInicio)}</td>
+                          <td className="px-3 py-2 text-center text-nowrap" style={{ fontSize: '0.8rem' }}>{formatDate(m.fechaFin)}</td>
+                          <td className="px-3 py-2 text-end fw-semibold text-nowrap">S/. {Number(m.montoPagado || m.planPrecio).toFixed(2)}</td>
+                          <td className="px-3 py-2 text-center text-capitalize text-muted text-nowrap" style={{ fontSize: '0.8rem' }}>{m.metodoPago || 'Efectivo'}</td>
+                          <td className="px-3 py-2 text-center text-nowrap">
                             <span
                               className={`badge ${
                                 m.estado === 'activo'
                                   ? 'bg-success text-white'
                                   : 'bg-light text-secondary border'
                               } text-uppercase`}
-                              style={{ fontSize: '0.66rem', padding: '3px 6px', letterSpacing: '0.02em' }}
+                              style={{ fontSize: '0.68rem', padding: '4px 8px', letterSpacing: '0.02em' }}
                             >
                               {m.estado === 'activo' ? 'Vigente' : 'Expirado'}
                             </span>
@@ -265,15 +267,15 @@ export default function MemberProfileModal({
           {/* CONTENIDO TAB 2: ASISTENCIAS REALES */}
           {activeTab === 'asistencias' && (
             <div className="border rounded-3 overflow-hidden bg-white" style={{ width: '100%' }}>
-              <div style={{ maxHeight: '240px', overflowY: 'auto', overflowX: 'hidden', width: '100%' }}>
-                <table className="table table-sm table-hover align-middle m-0" style={{ fontSize: '0.82rem', width: '100%', tableLayout: 'fixed' }}>
+              <div style={{ maxHeight: '260px', overflowY: 'auto', overflowX: 'auto', width: '100%' }}>
+                <table className="table table-sm table-hover align-middle m-0" style={{ fontSize: '0.84rem', width: '100%', minWidth: '540px' }}>
                   <thead className="table-light">
                     <tr>
-                      <th className="py-2 px-2" style={{ width: '22%' }}>Fecha</th>
-                      <th className="py-2 px-2 text-center" style={{ width: '18%' }}>Entrada</th>
-                      <th className="py-2 px-2 text-center" style={{ width: '18%' }}>Salida</th>
-                      <th className="py-2 px-2 text-center" style={{ width: '24%' }}>Método</th>
-                      <th className="py-2 px-2 text-center" style={{ width: '18%' }}>Estado</th>
+                      <th className="py-2 px-3">Fecha</th>
+                      <th className="py-2 px-3 text-center">Entrada</th>
+                      <th className="py-2 px-3 text-center">Salida</th>
+                      <th className="py-2 px-3 text-center">Método</th>
+                      <th className="py-2 px-3 text-center">Estado</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -286,19 +288,19 @@ export default function MemberProfileModal({
                     ) : (
                       asistencias.map((a) => (
                         <tr key={a.id}>
-                          <td className="px-2 py-2 fw-semibold text-truncate">{formatDate(a.horaEntrada)}</td>
-                          <td className="px-2 py-2 text-center">{formatTimePeru(a.horaEntrada)} hrs</td>
-                          <td className="px-2 py-2 text-center text-muted">{a.horaSalida ? `${formatTimePeru(a.horaSalida)} hrs` : 'En curso'}</td>
-                          <td className="px-2 py-2 text-center">
-                            <span style={{ color: a.metodoRegistro === 'huella' ? '#15803d' : '#475569', fontWeight: 600, fontSize: '0.78rem' }}>
+                          <td className="px-3 py-2 fw-semibold text-nowrap">{formatDate(a.horaEntrada)}</td>
+                          <td className="px-3 py-2 text-center text-nowrap">{formatTimePeru(a.horaEntrada)} hrs</td>
+                          <td className="px-3 py-2 text-center text-muted text-nowrap">{a.horaSalida ? `${formatTimePeru(a.horaSalida)} hrs` : 'En curso'}</td>
+                          <td className="px-3 py-2 text-center text-nowrap">
+                            <span style={{ color: a.metodoRegistro === 'huella' ? '#15803d' : '#475569', fontWeight: 600, fontSize: '0.8rem' }}>
                               <i className={`bi ${a.metodoRegistro === 'huella' ? 'bi-fingerprint text-success' : 'bi-pen'} me-1`}></i>
                               {a.metodoRegistro === 'huella' ? 'Huella' : 'Manual'}
                             </span>
                           </td>
-                          <td className="px-2 py-2 text-center">
+                          <td className="px-3 py-2 text-center text-nowrap">
                             <span
                               className={`badge ${a.estado === 'activo' ? 'bg-success text-white' : 'bg-light text-dark border'}`}
-                              style={{ fontSize: '0.66rem', padding: '3px 6px' }}
+                              style={{ fontSize: '0.68rem', padding: '4px 8px' }}
                             >
                               {a.estado === 'activo' ? 'En sala' : 'Completada'}
                             </span>

@@ -15,18 +15,22 @@ app.use(express.urlencoded({ limit: "15mb", extended: true }));
 // Mount central router
 app.use("/api", apiRoutes);
 
-const { finalizeEndedGuests } = require("./services/cronService");
+const { finalizeEndedGuests, finalizeOverdueAttendances } = require("./services/cronService");
 
-// Finalizar invitados activos automáticamente cuando su tiempo de permanencia se cumple (cada 30 segundos)
+// Finalizar invitados vencidos y cerrar asistencias abiertas >4h sin marcar salida (cada 30 segundos)
 setInterval(() => {
     finalizeEndedGuests().catch((err) => {
         console.error("Error en verificador de finalización automática de invitados:", err);
+    });
+    finalizeOverdueAttendances().catch((err) => {
+        console.error("Error en cierre automático de asistencias (>4h):", err);
     });
 }, 30000);
 
 const { runSchemaMigrations } = require("./services/schemaMigration");
 
 runSchemaMigrations().then(async () => {
+    await finalizeOverdueAttendances();
     await require('./services/roleAccess').init();
     app.listen(PORT, HOST, () => {
         console.log(`Servidor corriendo en puerto ${PORT}`);

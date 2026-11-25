@@ -259,15 +259,12 @@ export default function ProfileView({ user, token, setUser }) {
   const socioCode = `NP-${String(user?.id || 1).padStart(4, '0')}`
 
   return (
-    <div ref={profileRootRef} className="container-fluid px-0 pb-5" style={{ maxWidth: '1240px' }}>
+    <div ref={profileRootRef} className="container-fluid px-0 pb-5" style={{ width: '100%', maxWidth: '100%' }}>
       {/* CABECERA SUPERIOR FIGMA STYLE */}
       <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4 pt-1">
         <div>
-          <h2 className="fw-bold text-dark mb-1" style={{ fontSize: '1.9rem', letterSpacing: '-0.5px' }}>
-            {moduleLabel('perfil',user)}
-          </h2>
           <p className="text-muted mb-0" style={{ fontSize: '0.96rem' }}>
-            Mantén tus datos al día para acompañarte mejor.
+            Datos de tu cuenta.
           </p>
         </div>
 
@@ -430,15 +427,11 @@ export default function ProfileView({ user, token, setUser }) {
                       placeholder="Tu nombre"
                       required
                     />
-                    {errors.nombre ? (
+                    {errors.nombre && (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
                         <span id="profile-nombre-error" role="alert">{errors.nombre}</span>
                       </div>
-                    ) : (
-                      <small className="text-muted" style={{ fontSize: '0.74rem' }}>
-                        Solo letras y espacios
-                      </small>
                     )}
                   </div>
 
@@ -459,15 +452,11 @@ export default function ProfileView({ user, token, setUser }) {
                       placeholder="Tus apellidos"
                       required
                     />
-                    {errors.apellido ? (
+                    {errors.apellido && (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
                         <span id="profile-apellido-error" role="alert">{errors.apellido}</span>
                       </div>
-                    ) : (
-                      <small className="text-muted" style={{ fontSize: '0.74rem' }}>
-                        Solo letras y espacios
-                      </small>
                     )}
                   </div>
 
@@ -501,15 +490,11 @@ export default function ProfileView({ user, token, setUser }) {
                         required
                       />
                     </div>
-                    {errors.dni ? (
+                    {errors.dni && (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
                         <span id="profile-dni-error" role="alert">{errors.dni}</span>
                       </div>
-                    ) : (
-                      <small className="text-muted" style={{ fontSize: '0.74rem' }}>
-                        Exactamente 8 números (sin letras)
-                      </small>
                     )}
                   </div>
 
@@ -520,32 +505,16 @@ export default function ProfileView({ user, token, setUser }) {
                     <input {...fieldProps('fecha_nacimiento')}
                       type="date"
                       className={`form-control ${errors.fecha_nacimiento ? 'is-invalid' : ''}`}
-                      style={{ borderRadius: '10px', borderColor: errors.fecha_nacimiento ? '#ef4444' : '#cbd5e1' }}
+                      style={{
+                        borderRadius: '10px',
+                        borderColor: errors.fecha_nacimiento ? '#ef4444' : '#cbd5e1',
+                        backgroundColor: errors.fecha_nacimiento ? '#fef2f2' : '#ffffff',
+                      }}
                       value={form.fecha_nacimiento}
                       max={getTodayPeru()}
                       onChange={(e) => updateField('fecha_nacimiento', e.target.value)}
                     />
                     {inlineError('fecha_nacimiento')}
-                    <small className="text-muted" style={{ fontSize: '0.74rem' }}>
-                      Fecha oficial de nacimiento
-                    </small>
-                  </div>
-                </div>
-
-                {/* NOTA DE IDENTIDAD FIGMA */}
-                <div
-                  className="p-3 rounded-3 d-flex gap-3 align-items-start mt-4"
-                  style={{
-                    background: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                  }}
-                >
-                  <i className="bi bi-info-circle text-primary fs-5 mt-1"></i>
-                  <div>
-                    <strong className="d-block text-dark small mb-1">Cambios de identidad</strong>
-                    <p className="mb-0 text-muted" style={{ fontSize: '0.82rem', lineHeight: 1.45 }}>
-                      Los campos marcados con * son obligatorios. Tus cambios se guardan cuando todos los datos son válidos.
-                    </p>
                   </div>
                 </div>
               </div>
@@ -583,15 +552,11 @@ export default function ProfileView({ user, token, setUser }) {
                       placeholder="nombre@ejemplo.com"
                       required
                     />
-                    {errors.email ? (
+                    {errors.email && (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
                         <span id="profile-email-error" role="alert">{errors.email}</span>
                       </div>
-                    ) : (
-                      <small className="text-muted d-block mt-1" style={{ fontSize: '0.74rem' }}>
-                        Usaremos este correo para recuperar tu contraseña.
-                      </small>
                     )}
                   </div>
 
@@ -625,15 +590,11 @@ export default function ProfileView({ user, token, setUser }) {
                         required
                       />
                     </div>
-                    {errors.telefono ? (
+                    {errors.telefono && (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
                         <span id="profile-telefono-error" role="alert">{errors.telefono}</span>
                       </div>
-                    ) : (
-                      <small className="text-muted d-block mt-1" style={{ fontSize: '0.74rem' }}>
-                        9 dígitos numéricos (Perú)
-                      </small>
                     )}
                   </div>
 
@@ -685,15 +646,11 @@ export default function ProfileView({ user, token, setUser }) {
                       onChange={handleEmergencyPhoneChange}
                       placeholder="9XXXXXXXX"
                     />
-                    {errors.telefono_emergencia ? (
+                    {errors.telefono_emergencia && (
                       <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                         <i className="bi bi-exclamation-circle-fill"></i>
                         <span id="profile-telefono_emergencia-error" role="alert">{errors.telefono_emergencia}</span>
                       </div>
-                    ) : (
-                      <small className="text-muted" style={{ fontSize: '0.74rem' }}>
-                        9 dígitos numéricos si se registra
-                      </small>
                     )}
                   </div>
                 </div>
@@ -774,10 +731,6 @@ export default function ProfileView({ user, token, setUser }) {
                   >
                     <i className="bi bi-key-fill"></i> Cambiar contraseña
                   </button>
-
-                  <small className="text-muted d-block mt-2" style={{ fontSize: '0.76rem', lineHeight: 1.4 }}>
-                    Tu número de socio no se puede editar. El club nunca te pedirá tu contraseña.
-                  </small>
                 </div>
               </div>
             </div>
@@ -925,7 +878,7 @@ export default function ProfileView({ user, token, setUser }) {
         badge="Seguridad"
         size="md"
       >
-        <form onSubmit={handleChangePassword}>
+        <form onSubmit={handleChangePassword} noValidate>
           <div className="d-flex flex-column gap-3">
             {/* Clave actual */}
             <div>
@@ -1076,15 +1029,6 @@ export default function ProfileView({ user, token, setUser }) {
           </div>
 
           <div className="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
-            <button
-              type="button"
-              className="btn btn-outline-dark px-4 py-2 fw-semibold"
-              style={{ borderRadius: '10px' }}
-              onClick={() => setShowPwdModal(false)}
-              disabled={processing}
-            >
-              Cancelar
-            </button>
             <button
               type="submit"
               className="btn fw-bold px-4 py-2 shadow-sm"

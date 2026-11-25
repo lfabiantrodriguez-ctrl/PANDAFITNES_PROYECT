@@ -69,7 +69,7 @@ export class AttendanceService {
     if (!response.ok) {
       throw new Error(data.message || 'No se pudo cargar el estado de Mi Pandita')
     }
-    if (!Array.isArray(data.asistencias) || !Array.isArray(data.diasAsistidos) || data.baseXp !== 25 || !Number.isFinite(data.bambusDisponibles)) {
+    if (!Array.isArray(data.asistencias) || !Array.isArray(data.diasAsistidos) || !Number.isFinite(Number(data.baseXp)) || Number(data.baseXp) < 1 || !Number.isFinite(data.bambusDisponibles)) {
       // Older servers expose genuine records even though their Panda totals are demo values.
       // Ignore those totals entirely and derive the display from authenticated records.
       const [history, response] = await Promise.all([
@@ -99,6 +99,22 @@ export class AttendanceService {
     const data = await response.json()
     if (!response.ok) {
       throw new Error(data.message || 'No se pudo canjear la recompensa')
+    }
+    return data
+  }
+
+  static async updateAttendanceRules(token, payload) {
+    const response = await fetch('/api/asistencias/reglas-puntos', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(payload),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudieron guardar las reglas de puntos')
     }
     return data
   }

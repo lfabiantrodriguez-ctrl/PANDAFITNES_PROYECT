@@ -87,7 +87,7 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
       badge={isIndividual ? 'Beneficio Individual' : 'Campaña General'}
       size="md"
     >
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} noValidate>
         {fieldErrors.general && <div className="alert alert-danger py-2 px-3 small mb-3">{fieldErrors.general}</div>}
         {successMsg && <div className="alert alert-success py-2 px-3 small mb-3">{successMsg}</div>}
 
@@ -199,14 +199,6 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
         </div>
 
         <div className="d-flex justify-content-end gap-2 pt-3 border-top">
-          <button
-            type="button"
-            className="btn btn-outline-dark px-3 py-2 fw-semibold"
-            onClick={onClose}
-            disabled={loading}
-          >
-            Cancelar
-          </button>
           <button
             type="submit"
             className="btn px-4 py-2 fw-bold"

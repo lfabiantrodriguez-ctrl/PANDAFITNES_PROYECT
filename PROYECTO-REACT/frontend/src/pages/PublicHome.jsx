@@ -1,1 +1,1 @@
-export { default } from './PandaCinemaPage'
+export { default } from './SimpleHomePage'

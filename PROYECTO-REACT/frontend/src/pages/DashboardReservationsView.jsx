@@ -1,7 +1,8 @@
 import {canAccess,moduleLabel} from '../utils/access'
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useSearchParams } from 'react-router-dom'
 import ViewTitle from '../components/ViewTitle'
+import CheckInView from './CheckInView'
 import { CapacityService } from '../services/CapacityService'
 import { SocioService } from '../services/SocioService'
 import { AttendanceService } from '../services/AttendanceService'
@@ -17,8 +18,8 @@ import {
 
 const sections = [
   { key: 'principal', label: 'Vista General' },
-  { key: 'aforo', label: 'Control de Aforo' },
-  { key: 'clientes', label: 'Búsqueda Socios' },
+  { key: 'aforo', label: 'Aforo e Historial' },
+  { key: 'clientes', label: 'Control de Acceso' },
 ]
 
 function getDurationInMinutes(entryStr, exitStr) {
@@ -32,11 +33,14 @@ function getDurationInMinutes(entryStr, exitStr) {
 
 export default function DashboardReservationsView({ token, user }) {
   const navigate = useNavigate()
+  const [searchParams] = useSearchParams()
   const isAdmin = Boolean(user && user.rol !== 'cliente')
   const today = useMemo(() => getTodayPeru(), [])
 
   // State shared / Admin
-  const [activeSection, setActiveSection] = useState('principal')
+  const [activeSection, setActiveSection] = useState(
+    searchParams.get('tab') === 'clientes' ? 'clientes' : 'principal'
+  )
   const [capacity, setCapacity] = useState({ actual: 0, maximo: 0, actualizadoEn: null })
   const [clients, setClients] = useState([])
   const [activeClients, setActiveClients] = useState([])
@@ -48,10 +52,23 @@ export default function DashboardReservationsView({ token, user }) {
     ingresosMes: 0,
     mesActual: '',
     weeklyData: [],
+    revenueChartData: [],
+    totalAsistenciasPeriodo: 0,
+    totalIngresosPeriodo: 0,
+    filterRange: null,
     averageDaily: '0.0',
     recentActivity: [],
     renewals: [],
   })
+  const [chartFilterMode, setChartFilterMode] = useState('7d')
+  const [chartMonth, setChartMonth] = useState(() => new Date().toISOString().slice(0, 7))
+  const [chartRange, setChartRange] = useState(() => {
+    const today = new Date().toISOString().slice(0, 10)
+    return { startDate: today, endDate: today }
+  })
+  const [chartFilterError, setChartFilterError] = useState('')
+  const [chartLoading, setChartLoading] = useState(false)
+  const [hoveredRevenueIdx, setHoveredRevenueIdx] = useState(null)
 
   // State for Socio
   const [socioAsistencias, setSocioAsistencias] = useState([])
@@ -94,10 +111,23 @@ export default function DashboardReservationsView({ token, user }) {
       if (config.horario_domingo_abierto !== '1') {
         return { open: false, text: 'Cerrado hoy domingo (Descanso)', emergency: false }
       }
-      const open = currentTime >= (config.horario_domingo_inicio || '08:00') && currentTime <= (config.horario_domingo_fin || '13:00')
+      const inFirst = currentTime >= (config.horario_domingo_inicio || '08:00') && currentTime <= (config.horario_domingo_fin || '13:00')
+      const inSecond =
+        config.horario_domingo_modalidad === 'partido' &&
+        currentTime >= (config.horario_domingo_tarde_inicio || '16:00') &&
+        currentTime <= (config.horario_domingo_tarde_fin || '20:00')
+      const open = inFirst || inSecond
       return { open, text: open ? 'Abierto ahora (Domingo)' : `Cerrado ahora (${config.horario_domingo_inicio} - ${config.horario_domingo_fin})`, emergency: false }
     } else if (day === 6) {
-      const open = currentTime >= (config.horario_sabado_inicio || '07:00') && currentTime <= (config.horario_sabado_fin || '12:00')
+      if (config.horario_sabado_estado === '0') {
+        return { open: false, text: 'Cerrado hoy sábado', emergency: false }
+      }
+      const inFirst = currentTime >= (config.horario_sabado_inicio || '07:00') && currentTime <= (config.horario_sabado_fin || '12:00')
+      const inSecond =
+        config.horario_sabado_modalidad === 'partido' &&
+        currentTime >= (config.horario_sabado_tarde_inicio || '16:00') &&
+        currentTime <= (config.horario_sabado_tarde_fin || '20:00')
+      const open = inFirst || inSecond
       return { open, text: open ? 'Abierto ahora (Sábado)' : `Cerrado ahora (Sábados: ${config.horario_sabado_inicio} - ${config.horario_sabado_fin})`, emergency: false }
     } else {
       if (config.horario_semana_modalidad === 'continuo') {
@@ -177,6 +207,53 @@ export default function DashboardReservationsView({ token, user }) {
       setLoading(false)
     }
   }, [token, isAdmin])
+
+  async function fetchFilteredMetrics(params = {}) {
+    if (!token) return
+    setChartLoading(true)
+    setChartFilterError('')
+    try {
+      const metricsData = await DashboardService.getMetrics(token, params)
+      if (metricsData) setMetrics(metricsData)
+    } catch (err) {
+      setChartFilterError(err?.message || 'No se pudieron filtrar las métricas.')
+    } finally {
+      setChartLoading(false)
+    }
+  }
+
+  function handleSelectFilterMode(mode) {
+    setChartFilterMode(mode)
+    setChartFilterError('')
+    if (mode === '7d') {
+      fetchFilteredMetrics({})
+    } else if (mode === 'month' && chartMonth) {
+      fetchFilteredMetrics({ month: chartMonth })
+    }
+  }
+
+  function handleMonthChange(nextMonth) {
+    setChartMonth(nextMonth)
+    setChartFilterError('')
+    if (nextMonth) {
+      setChartFilterMode('month')
+      fetchFilteredMetrics({ month: nextMonth })
+    }
+  }
+
+  function handleApplyRangeFilter(e) {
+    e.preventDefault()
+    if (!chartRange.startDate || !chartRange.endDate) {
+      setChartFilterError('Selecciona ambas fechas (Desde y Hasta).')
+      return
+    }
+    if (chartRange.startDate > chartRange.endDate) {
+      setChartFilterError('La fecha "Desde" no puede ser mayor que "Hasta".')
+      return
+    }
+    setChartFilterError('')
+    fetchFilteredMetrics({ startDate: chartRange.startDate, endDate: chartRange.endDate })
+  }
 
   useEffect(() => {
     loadDashboardData()
@@ -322,26 +399,7 @@ export default function DashboardReservationsView({ token, user }) {
             </p>
           </article>
 
-          {/* Card 3: Personas activas */}
-          <article className="dashboard-info-card" style={{ padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem' }}>Personas entrenando</span>
-              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
-                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <circle cx="12" cy="12" r="10"></circle>
-                  <polyline points="12 6 12 12 16 14"></polyline>
-                </svg>
-              </div>
-            </div>
-            <strong className="dashboard-info-value" style={{ fontSize: '2.4rem', margin: '0 0 6px', color: '#111d15' }}>
-              {totalPersonasEnSala}
-            </strong>
-            <p className="dashboard-info-text" style={{ fontSize: '0.82rem', color: '#5f7165' }}>
-              Con check-in activo en recepción
-            </p>
-          </article>
-
-          {/* Card 4: Ingresos del mes */}
+          {/* Card 3: Ingresos del mes */}
           <article className="dashboard-info-card" style={{ padding: '22px' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
               <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem' }}>Ingresos del mes</span>
@@ -361,20 +419,169 @@ export default function DashboardReservationsView({ token, user }) {
           </article>
         </div>
 
-        {/* Fila intermedia: Gráfico de Tendencia + Actividad Reciente */}
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 280px), 1fr))', gap: '20px', width: '100%', maxWidth: '100%', boxSizing: 'border-box' }}>
-          {/* Tarjeta Izquierda: Tendencia de asistencia */}
-          <section className="dashboard-panel" style={{ padding: '24px' }}>
+        {/* Barra de filtros para gráficos (Últimos 7 días / Mes / Rango Desde-Hasta) */}
+        <section className="dashboard-panel" style={{ padding: '16px 20px' }}>
+          <form
+            noValidate
+            onSubmit={handleApplyRangeFilter}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              flexWrap: 'wrap',
+              gap: '12px',
+            }}
+          >
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+              <button
+                type="button"
+                onClick={() => handleSelectFilterMode('7d')}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '10px',
+                  border: chartFilterMode === '7d' ? '1px solid #166534' : '1px solid #d7e2da',
+                  background: chartFilterMode === '7d' ? '#166534' : '#ffffff',
+                  color: chartFilterMode === '7d' ? '#ffffff' : '#111d15',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Últimos 7 días
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectFilterMode('month')}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '10px',
+                  border: chartFilterMode === 'month' ? '1px solid #166534' : '1px solid #d7e2da',
+                  background: chartFilterMode === 'month' ? '#166534' : '#ffffff',
+                  color: chartFilterMode === 'month' ? '#ffffff' : '#111d15',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Por Mes
+              </button>
+              <button
+                type="button"
+                onClick={() => handleSelectFilterMode('range')}
+                style={{
+                  padding: '7px 14px',
+                  borderRadius: '10px',
+                  border: chartFilterMode === 'range' ? '1px solid #166534' : '1px solid #d7e2da',
+                  background: chartFilterMode === 'range' ? '#166534' : '#ffffff',
+                  color: chartFilterMode === 'range' ? '#ffffff' : '#111d15',
+                  fontSize: '0.82rem',
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Desde / Hasta
+              </button>
+            </div>
+
+            {chartFilterMode === 'month' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <label htmlFor="dashboard-month-filter" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#5f7165', margin: 0 }}>
+                  Mes:
+                </label>
+                <input
+                  id="dashboard-month-filter"
+                  type="month"
+                  value={chartMonth}
+                  onChange={(e) => handleMonthChange(e.target.value)}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '10px',
+                    border: '1px solid #d7e2da',
+                    fontSize: '0.82rem',
+                    color: '#111d15',
+                  }}
+                />
+              </div>
+            )}
+
+            {chartFilterMode === 'range' && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+                <label htmlFor="dashboard-start-date" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#5f7165', margin: 0 }}>
+                  Desde:
+                </label>
+                <input
+                  id="dashboard-start-date"
+                  type="date"
+                  value={chartRange.startDate}
+                  onChange={(e) => {
+                    setChartRange((prev) => ({ ...prev, startDate: e.target.value }))
+                    if (chartFilterError) setChartFilterError('')
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '10px',
+                    border: chartFilterError ? '1px solid #ef4444' : '1px solid #d7e2da',
+                    background: chartFilterError ? '#fef2f2' : '#ffffff',
+                    fontSize: '0.82rem',
+                    color: '#111d15',
+                  }}
+                />
+                <label htmlFor="dashboard-end-date" style={{ fontSize: '0.8rem', fontWeight: 700, color: '#5f7165', margin: 0 }}>
+                  Hasta:
+                </label>
+                <input
+                  id="dashboard-end-date"
+                  type="date"
+                  value={chartRange.endDate}
+                  onChange={(e) => {
+                    setChartRange((prev) => ({ ...prev, endDate: e.target.value }))
+                    if (chartFilterError) setChartFilterError('')
+                  }}
+                  style={{
+                    padding: '6px 10px',
+                    borderRadius: '10px',
+                    border: chartFilterError ? '1px solid #ef4444' : '1px solid #d7e2da',
+                    background: chartFilterError ? '#fef2f2' : '#ffffff',
+                    fontSize: '0.82rem',
+                    color: '#111d15',
+                  }}
+                />
+                <button
+                  type="submit"
+                  disabled={chartLoading}
+                  className="action-btn"
+                  style={{ padding: '7px 14px', fontSize: '0.82rem', minHeight: '34px' }}
+                >
+                  {chartLoading ? 'Cargando...' : 'Aplicar'}
+                </button>
+              </div>
+            )}
+          </form>
+          {chartFilterError && (
+            <p style={{ margin: '8px 0 0', color: '#dc2626', fontSize: '0.8rem', fontWeight: 600 }}>
+              {chartFilterError}
+            </p>
+          )}
+        </section>
+
+        {/* Fila de 2 Gráficos: Asistencias e Ingresos */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 400px), 1fr))', gap: '20px', width: '100%', maxWidth: '100%', boxSizing: 'border-box', alignItems: 'stretch' }}>
+          {/* Gráfico 1: Asistencias */}
+          <section className="dashboard-panel" style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '22px' }}>
               <div>
-                <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111d15' }}>
-                  Tendencia de asistencia diaria
+                <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#111d15' }}>
+                  Asistencias
                 </h3>
-                <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
-                  Entradas confirmadas a sala por recepción
+                <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.84rem' }}>
+                  {chartFilterMode === '7d'
+                    ? 'Últimos 7 días'
+                    : chartFilterMode === 'month'
+                    ? `Mes ${chartMonth}`
+                    : `${chartRange.startDate} al ${chartRange.endDate}`}
                 </p>
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
                 <span
                   style={{
                     padding: '4px 10px',
@@ -382,53 +589,328 @@ export default function DashboardReservationsView({ token, user }) {
                     background: '#ecfccb',
                     color: '#1b4d24',
                     fontWeight: 700,
-                    fontSize: '0.78rem',
+                    fontSize: '0.76rem',
                   }}
                 >
-                  Promedio: {promedioEntradas} entradas
+                  Total: {metrics.totalAsistenciasPeriodo ?? weeklyData.reduce((s, d) => s + Number(d.count || 0), 0)} · Prom: {promedioEntradas}
                 </span>
               </div>
             </div>
 
-            {/* Gráfico de barras vertical estilo deportivo con datos reales */}
-            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '170px', padding: '10px 10px 0', borderBottom: '1px solid #e3e8e2', gap: '12px' }}>
-              {weeklyData.map((item, idx) => (
-                <div key={idx} style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, height: '100%', justifyContent: 'flex-end' }}>
-                  <span style={{ fontSize: '0.76rem', fontWeight: 700, color: item.isToday ? '#111d15' : '#5f7165', marginBottom: '6px' }}>
-                    {item.count}
-                  </span>
+            <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', height: '170px', padding: '10px 6px 0', borderBottom: '1px solid #e3e8e2', gap: weeklyData.length > 10 ? '4px' : '10px', overflowX: 'auto' }}>
+              {weeklyData.map((item, idx) => {
+                const isCompact = weeklyData.length > 12
+                return (
                   <div
-                    style={{
-                      width: '100%',
-                      maxWidth: '42px',
-                      height: `${item.height}%`,
-                      background: item.isToday ? '#c4f039' : '#235833',
-                      borderRadius: '6px 6px 0 0',
-                      transition: 'all 0.3s ease',
-                      boxShadow: item.isToday ? '0 4px 14px rgba(196, 240, 57, 0.45)' : 'none',
-                    }}
-                  />
-                  <span style={{ fontSize: '0.75rem', fontWeight: item.isToday ? 800 : 600, color: item.isToday ? '#111d15' : '#8fa295', marginTop: '8px' }}>
-                    {item.day}
-                  </span>
-                </div>
-              ))}
+                    key={idx}
+                    title={`${item.isoDate || item.day}: ${item.count} asistencias`}
+                    style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', flex: 1, minWidth: isCompact ? '14px' : '28px', height: '100%', justifyContent: 'flex-end' }}
+                  >
+                    <span style={{ fontSize: isCompact ? '0.62rem' : '0.75rem', fontWeight: 700, color: item.isToday ? '#111d15' : '#5f7165', marginBottom: '4px' }}>
+                      {isCompact && item.count === 0 ? '' : item.count}
+                    </span>
+                    <div
+                      style={{
+                        width: '100%',
+                        maxWidth: isCompact ? '18px' : '40px',
+                        height: `${item.height}%`,
+                        background: item.isToday ? '#c4f039' : '#235833',
+                        borderRadius: '6px 6px 0 0',
+                        transition: 'all 0.3s ease',
+                        boxShadow: item.isToday ? '0 4px 14px rgba(196, 240, 57, 0.45)' : 'none',
+                      }}
+                    />
+                    <span style={{ fontSize: isCompact ? '0.62rem' : '0.74rem', fontWeight: item.isToday ? 800 : 600, color: item.isToday ? '#111d15' : '#8fa295', marginTop: '6px', whiteSpace: 'nowrap' }}>
+                      {item.day}
+                    </span>
+                  </div>
+                )
+              })}
             </div>
-
-            <p style={{ margin: '14px 0 0', fontSize: '0.82rem', color: '#5f7165' }}>
-              Acceso libre y directo para socios con membresía activa. Sin esperas ni cupos por reserva.
-            </p>
           </section>
 
-          {/* Tarjeta Derecha: Actividad reciente */}
-          <section className="dashboard-panel" style={{ padding: '24px' }}>
+          {/* Gráfico 2: Ingresos (Estilo SaaS / Area Chart Pro) */}
+          <section className="dashboard-panel" style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+            {(() => {
+              const revenueData = metrics.revenueChartData && metrics.revenueChartData.length > 0
+                ? metrics.revenueChartData
+                : [{ day: 'Hoy', amount: 0, height: 15, isToday: true }]
+              const rawTotal = Number(
+                metrics.totalIngresosPeriodo ?? revenueData.reduce((s, d) => s + Number(d.amount || 0), 0)
+              )
+              const totalIngresosPeriodo = rawTotal.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              const avgIngresosPeriodo = (rawTotal / Math.max(revenueData.length, 1)).toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              const rawMax = Math.max(...revenueData.map((d) => Number(d.amount || 0)), 0)
+              const peakIngresos = rawMax.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+              const isCompact = revenueData.length > 12
+
+              const svgW = 720
+              const svgH = 200
+              const padLeft = 44
+              const padRight = 14
+              const padTop = 22
+              const padBottom = 32
+              const plotW = svgW - padLeft - padRight
+              const plotH = svgH - padTop - padBottom
+              const baseY = padTop + plotH
+
+              // Escala Y limpia (si todo es 0, muestra escala S/ 0 - S/ 100)
+              const niceScaleMax = rawMax > 0 ? Math.ceil((rawMax * 1.15) / 10) * 10 : 100
+              const yTicks = [0, 0.3333, 0.6666, 1]
+
+              const count = revenueData.length
+              const points = revenueData.map((item, idx) => {
+                const val = Number(item.amount || 0)
+                const x = count === 1 ? padLeft + plotW / 2 : padLeft + (idx / (count - 1)) * plotW
+                const y = baseY - (val / niceScaleMax) * plotH
+                return { x, y, val, item }
+              })
+
+              // Curva suave cúbica clamped (sin overshoots por debajo de baseY)
+              function buildSmoothPath(pts) {
+                if (pts.length === 0) return ''
+                if (pts.length === 1) return `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`
+                let d = `M ${pts[0].x.toFixed(1)} ${pts[0].y.toFixed(1)}`
+                for (let i = 0; i < pts.length - 1; i++) {
+                  const p0 = pts[i === 0 ? i : i - 1]
+                  const p1 = pts[i]
+                  const p2 = pts[i + 1]
+                  const p3 = pts[i + 2 < pts.length ? i + 2 : i + 1]
+                  const tension = 0.2
+                  const cp1x = p1.x + (p2.x - p0.x) * tension
+                  const cp1y = Math.min(baseY, Math.max(padTop, p1.y + (p2.y - p0.y) * tension))
+                  const cp2x = p2.x - (p3.x - p1.x) * tension
+                  const cp2y = Math.min(baseY, Math.max(padTop, p2.y - (p3.y - p1.y) * tension))
+                  d += ` C ${cp1x.toFixed(1)} ${cp1y.toFixed(1)}, ${cp2x.toFixed(1)} ${cp2y.toFixed(1)}, ${p2.x.toFixed(1)} ${p2.y.toFixed(1)}`
+                }
+                return d
+              }
+
+              const linePath = buildSmoothPath(points)
+              const areaPath = points.length > 1
+                ? `${linePath} L ${points[points.length - 1].x.toFixed(1)} ${baseY} L ${points[0].x.toFixed(1)} ${baseY} Z`
+                : ''
+              const activePoint = hoveredRevenueIdx !== null && points[hoveredRevenueIdx] ? points[hoveredRevenueIdx] : null
+
+              return (
+                <>
+                  <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', flexWrap: 'wrap', gap: '12px', marginBottom: '16px' }}>
+                    <div>
+                      <h3 style={{ margin: 0, fontSize: '1.15rem', fontWeight: 800, color: '#111d15' }}>
+                        Ingresos (S/)
+                      </h3>
+                      <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.84rem' }}>
+                        {chartFilterMode === '7d'
+                          ? 'Últimos 7 días'
+                          : chartFilterMode === 'month'
+                          ? `Mes ${chartMonth}`
+                          : `${chartRange.startDate} al ${chartRange.endDate}`}
+                      </p>
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '6px', flexWrap: 'wrap' }}>
+                      <span style={{ padding: '4px 10px', borderRadius: '999px', background: '#ecfccb', color: '#1b4d24', fontWeight: 700, fontSize: '0.75rem' }}>
+                        Total: S/ {totalIngresosPeriodo}
+                      </span>
+                      <span style={{ padding: '4px 10px', borderRadius: '999px', background: '#f1f5f9', color: '#334155', fontWeight: 700, fontSize: '0.75rem' }}>
+                        Prom: S/ {avgIngresosPeriodo}
+                      </span>
+                      <span style={{ padding: '4px 10px', borderRadius: '999px', background: '#f0fdf4', color: '#166534', border: '1px solid #bbf7d0', fontWeight: 700, fontSize: '0.75rem' }}>
+                        Pico: S/ {peakIngresos}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div
+                    style={{ position: 'relative', width: '100%', overflowX: isCompact ? 'auto' : 'visible' }}
+                    onMouseLeave={() => setHoveredRevenueIdx(null)}
+                  >
+                    <svg
+                      viewBox={`0 0 ${svgW} ${svgH}`}
+                      style={{ width: '100%', minWidth: isCompact ? '540px' : '100%', height: 'auto', display: 'block', overflow: 'visible' }}
+                      role="img"
+                      aria-label="Gráfico profesional de ingresos"
+                    >
+                      <defs>
+                        <linearGradient id="revenueAreaGradPro" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="0%" stopColor="#84cc16" stopOpacity="0.38" />
+                          <stop offset="60%" stopColor="#22c55e" stopOpacity="0.12" />
+                          <stop offset="100%" stopColor="#22c55e" stopOpacity="0.01" />
+                        </linearGradient>
+                        <filter id="revenueLineShadow" x="-10%" y="-20%" width="120%" height="150%">
+                          <feDropShadow dx="0" dy="3" stdDeviation="3" floodColor="#166534" floodOpacity="0.22" />
+                        </filter>
+                      </defs>
+
+                      {/* Eje Y + líneas guía horizontales */}
+                      {yTicks.map((ratio, rIdx) => {
+                        const gy = baseY - plotH * ratio
+                        const tickVal = Math.round(niceScaleMax * ratio)
+                        return (
+                          <g key={rIdx}>
+                            <line
+                              x1={padLeft}
+                              y1={gy}
+                              x2={svgW - padRight}
+                              y2={gy}
+                              stroke={ratio === 0 ? '#cbd5e1' : '#e8efe9'}
+                              strokeDasharray={ratio === 0 ? undefined : '4 4'}
+                              strokeWidth="1"
+                            />
+                            <text
+                              x={padLeft - 8}
+                              y={gy + 3.5}
+                              textAnchor="end"
+                              fontSize="10.5"
+                              fontWeight="600"
+                              fill="#64748b"
+                            >
+                              {`S/ ${tickVal}`}
+                            </text>
+                          </g>
+                        )
+                      })}
+
+                      {/* Área sombreada */}
+                      {points.length > 1 && (
+                        <path d={areaPath} fill="url(#revenueAreaGradPro)" />
+                      )}
+
+                      {/* Línea suave con sombra */}
+                      {points.length > 1 && (
+                        <path
+                          d={linePath}
+                          fill="none"
+                          stroke="#166534"
+                          strokeWidth="3"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          filter="url(#revenueLineShadow)"
+                        />
+                      )}
+
+                      {/* Crosshair vertical en hover */}
+                      {activePoint && (
+                        <line
+                          x1={activePoint.x}
+                          y1={padTop}
+                          x2={activePoint.x}
+                          y2={baseY}
+                          stroke="#84cc16"
+                          strokeWidth="1.5"
+                          strokeDasharray="3 3"
+                        />
+                      )}
+
+                      {/* Puntos, zonas de hover y etiquetas X */}
+                      {points.map((p, idx) => {
+                        const isHovered = hoveredRevenueIdx === idx
+                        const showXLabel = !isCompact || idx === 0 || idx === points.length - 1 || idx % 3 === 0 || p.item.isToday
+                        const hitWidth = count > 1 ? plotW / count : 44
+
+                        return (
+                          <g key={idx}>
+                            {isHovered && (
+                              <circle
+                                cx={p.x}
+                                cy={p.y}
+                                r="10"
+                                fill="#84cc16"
+                                fillOpacity="0.24"
+                              />
+                            )}
+                            <circle
+                              cx={p.x}
+                              cy={p.y}
+                              r={isHovered ? 6 : p.item.isToday ? 5 : isCompact ? 3 : 4}
+                              fill={isHovered || p.item.isToday ? '#84cc16' : '#ffffff'}
+                              stroke="#166534"
+                              strokeWidth="2.5"
+                              style={{ transition: 'all 0.15s ease' }}
+                            />
+                            {showXLabel && (
+                              <text
+                                x={p.x}
+                                y={svgH - 8}
+                                textAnchor="middle"
+                                fontSize={isCompact ? '9.5' : '11'}
+                                fontWeight={isHovered || p.item.isToday ? '800' : '600'}
+                                fill={isHovered || p.item.isToday ? '#111d15' : '#64748b'}
+                              >
+                                {p.item.day}
+                              </text>
+                            )}
+                            {/* Área invisible para hover fluido */}
+                            <rect
+                              x={p.x - hitWidth / 2}
+                              y={padTop}
+                              width={hitWidth}
+                              height={plotH + 14}
+                              fill="transparent"
+                              style={{ cursor: 'pointer' }}
+                              onMouseEnter={() => setHoveredRevenueIdx(idx)}
+                            />
+                          </g>
+                        )
+                      })}
+
+                      {/* Tooltip flotante oscuro estilo SaaS */}
+                      {activePoint && (() => {
+                        const tipW = 128
+                        const tipH = 44
+                        const tipX = Math.min(Math.max(activePoint.x - tipW / 2, padLeft), svgW - padRight - tipW)
+                        const tipY = Math.max(activePoint.y - tipH - 14, 2)
+                        return (
+                          <g pointerEvents="none">
+                            <rect
+                              x={tipX}
+                              y={tipY}
+                              width={tipW}
+                              height={tipH}
+                              rx="8"
+                              fill="#0f1f14"
+                              stroke="#235833"
+                              strokeWidth="1"
+                            />
+                            <text
+                              x={tipX + tipW / 2}
+                              y={tipY + 16}
+                              textAnchor="middle"
+                              fontSize="10"
+                              fontWeight="600"
+                              fill="#a7f3d0"
+                            >
+                              {activePoint.item.isoDate || activePoint.item.day}
+                            </text>
+                            <text
+                              x={tipX + tipW / 2}
+                              y={tipY + 33}
+                              textAnchor="middle"
+                              fontSize="12.5"
+                              fontWeight="800"
+                              fill="#ffffff"
+                            >
+                              {`S/ ${activePoint.val.toLocaleString('es-PE', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}
+                            </text>
+                          </g>
+                        )
+                      })()}
+                    </svg>
+                  </div>
+                </>
+              )
+            })()}
+          </section>
+        </div>
+
+        {/* Fila Inferior: Actividad reciente (izquierda) y Membresías por renovar (derecha) */}
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(100%, 420px), 1fr))', gap: '20px', width: '100%', maxWidth: '100%', boxSizing: 'border-box', alignItems: 'stretch' }}>
+
+          {/* Tarjeta Izquierda: Actividad reciente */}
+          <section className="dashboard-panel" style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
             <div style={{ marginBottom: '18px' }}>
               <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111d15' }}>
                 Actividad reciente en recepción
               </h3>
-              <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
-                Últimos accesos biométricos y membresías
-              </p>
             </div>
 
             <div style={{ display: 'grid', gap: '14px' }}>
@@ -464,17 +946,13 @@ export default function DashboardReservationsView({ token, user }) {
               )}
             </div>
           </section>
-        </div>
 
-        {/* Fila Inferior: Membresías que requieren atención */}
-        <section className="dashboard-panel" style={{ padding: '24px' }}>
+          {/* Tarjeta Derecha: Membresías por renovar */}
+          <section className="dashboard-panel" style={{ padding: '24px', height: '100%', display: 'flex', flexDirection: 'column' }}>
           <div style={{ marginBottom: '18px' }}>
             <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111d15' }}>
               Membresías por renovar
             </h3>
-            <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
-              Socios con vencimiento próximo o con membresía activa en el club.
-            </p>
           </div>
 
           <div className="table-frame d-none d-md-block">
@@ -589,34 +1067,8 @@ export default function DashboardReservationsView({ token, user }) {
               </div>
             )}
           </div>
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '18px', flexWrap: 'wrap', gap: '12px' }}>
-            <span style={{ fontSize: '0.86rem', color: '#5f7165' }}>
-              Gestione accesos biométricos y control de entradas desde recepción.
-            </span>
-            {canAccess(user,'check-in') && (<button
-              type="button"
-              className="action-btn"
-              onClick={() => navigate('/app/check-in')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '8px 18px',
-                fontSize: '0.85rem',
-                minHeight: '38px',
-              }}
-            >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M3 7V5a2 2 0 0 1 2-2h2"></path>
-                <path d="M17 3h2a2 2 0 0 1 2 2v2"></path>
-                <path d="M21 17v2a2 2 0 0 1-2 2h-2"></path>
-                <path d="M7 21H5a2 2 0 0 1-2-2v-2"></path>
-              </svg>
-              Ir a Check-in Recepción
-            </button>)}
-          </div>
         </section>
+        </div>
       </div>
     )
   }
@@ -627,19 +1079,18 @@ export default function DashboardReservationsView({ token, user }) {
         {/* Real-time capacity */}
         <section className="dashboard-panel">
           <h2 className="dashboard-panel-title">Aforo en tiempo real</h2>
-          <p className="dashboard-panel-subtitle">Control actual de afluencia de personas en el local.</p>
 
           <div className="dashboard-cards-row" style={{ marginTop: '12px' }}>
             <article className="dashboard-info-card">
               <span className="dashboard-info-label">Ocupación Total</span>
               <strong className="dashboard-info-value">{capacity.actual} / {capacity.maximo}</strong>
-              <p className="dashboard-info-text">Personas activas en sala en este instante.</p>
+              <p className="dashboard-info-text">En sala ahora</p>
             </article>
 
             <article className="dashboard-info-card">
               <span className="dashboard-info-label">Porcentaje de Uso</span>
               <strong className="dashboard-info-value">{occupancyPercent}%</strong>
-              <p className="dashboard-info-text">Porcentaje de aforo máximo alcanzado.</p>
+              <p className="dashboard-info-text">Del aforo máximo</p>
             </article>
           </div>
         </section>
@@ -647,9 +1098,19 @@ export default function DashboardReservationsView({ token, user }) {
         {/* Historical capacity */}
         <section className="dashboard-panel">
           <h2 className="dashboard-panel-title">Historial de Aforo</h2>
-          <p className="dashboard-panel-subtitle">Consulta cuánta ocupación hubo en un rango de fechas.</p>
 
-          <form onSubmit={handleCapacityRangeQuery} className="dashboard-range-picker" style={{ display: 'grid', gap: '16px', margin: '16px 0' }}>
+          <form
+            onSubmit={handleCapacityRangeQuery}
+            noValidate
+            className="dashboard-range-picker"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'minmax(170px, 1fr) minmax(170px, 1fr) auto',
+              alignItems: 'end',
+              gap: '14px',
+              margin: '16px 0',
+            }}
+          >
             <div className="dashboard-range-item">
               <span className="element-label">Desde</span>
               <input
@@ -678,7 +1139,18 @@ export default function DashboardReservationsView({ token, user }) {
                 required
               />
             </div>
-            <button className="action-btn btn-dark" type="submit" disabled={capacityRangeLoading} style={{ alignSelf: 'flex-end', height: '40px' }}>
+            <button
+              className="action-btn btn-dark"
+              type="submit"
+              disabled={capacityRangeLoading}
+              style={{
+                width: 'auto',
+                minHeight: '44px',
+                height: '44px',
+                padding: '0 22px',
+                whiteSpace: 'nowrap',
+              }}
+            >
               {capacityRangeLoading ? 'Consultando...' : 'Consultar rango'}
             </button>
           </form>
@@ -744,11 +1216,18 @@ export default function DashboardReservationsView({ token, user }) {
 
         <section className="dashboard-panel">
           <h2 className="dashboard-panel-title">Historial de Asistencias por Socio</h2>
-          <p className="dashboard-panel-subtitle">Busca las asistencias registradas de un socio por DNI o nombre.</p>
 
-          <form onSubmit={handleSearchAttendance} className="dashboard-range-picker" style={{ margin: '16px 0', gap: '16px' }}>
-            <div className="dashboard-range-item" style={{ flex: 1 }}>
-              <span className="element-label">DNI o Nombre del socio</span>
+          <form onSubmit={handleSearchAttendance} noValidate style={{ margin: '16px 0' }}>
+            <span className="element-label" style={{ display: 'block', marginBottom: '8px' }}>DNI o Nombre del socio</span>
+            <div
+              className="dashboard-range-picker"
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'minmax(0, 1fr) auto',
+                alignItems: 'center',
+                gap: '12px',
+              }}
+            >
               <input
                 className={`input-field ${attendanceSearchError ? 'is-invalid' : ''}`}
                 type="text"
@@ -761,16 +1240,27 @@ export default function DashboardReservationsView({ token, user }) {
                 style={attendanceSearchError ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
                 required
               />
-              {attendanceSearchError && (
-                <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.82rem', color: '#dc2626' }}>
-                  <i className="bi bi-exclamation-circle-fill"></i>
-                  <span>{attendanceSearchError}</span>
-                </div>
-              )}
+              <button
+                className="action-btn btn-dark"
+                type="submit"
+                disabled={attendanceSearchLoading}
+                style={{
+                  width: 'auto',
+                  minHeight: '44px',
+                  height: '44px',
+                  padding: '0 26px',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {attendanceSearchLoading ? 'Buscando...' : 'Buscar'}
+              </button>
             </div>
-            <button className="action-btn btn-dark" type="submit" disabled={attendanceSearchLoading} style={{ alignSelf: 'flex-start', height: '40px' }}>
-              {attendanceSearchLoading ? 'Buscando...' : 'Buscar'}
-            </button>
+            {attendanceSearchError && (
+              <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.82rem', color: '#dc2626' }}>
+                <i className="bi bi-exclamation-circle-fill"></i>
+                <span>{attendanceSearchError}</span>
+              </div>
+            )}
           </form>
 
           {attendanceSearchResult && (
@@ -869,78 +1359,8 @@ export default function DashboardReservationsView({ token, user }) {
 
   function renderClientesAdmin() {
     return (
-      <div style={{ marginTop: '16px' }}>
-        <div className="dashboard-panel dashboard-panel-top">
-          <div style={{ marginBottom: '16px' }}>
-            <h3 style={{ margin: 0, fontSize: '1.2rem', fontWeight: 800, color: '#111d15' }}>
-              Socios con Sesión Activa en Sala
-            </h3>
-            <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
-              Lista de personas que ingresaron por recepción y aún no marcan salida.
-            </p>
-          </div>
-
-          <div className="table-frame d-none d-md-block">
-            <table className="corporate-table">
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>DNI</th>
-                  <th>Hora Ingreso</th>
-                  <th>Hora Salida</th>
-                </tr>
-              </thead>
-              <tbody>
-                {loading ? (
-                  <tr>
-                    <td colSpan="4">Cargando clientes activos...</td>
-                  </tr>
-                ) : activeClients.length ? (
-                  activeClients.map((client) => (
-                    <tr key={client.id}>
-                      <td style={{ fontWeight: 700 }}>{client.nombre} {client.apellido}</td>
-                      <td>{client.dni}</td>
-                      <td>{formatDateTime(client.horaEntrada)}</td>
-                      <td>{client.horaSalida ? formatDateTime(client.horaSalida) : <span style={{ color: '#16a34a', fontWeight: 700 }}>● En sala</span>}</td>
-                    </tr>
-                  ))
-                ) : (
-                  <tr>
-                    <td colSpan="4" style={{ textAlign: 'center', padding: '16px', color: '#5f7165' }}>
-                      No hay clientes dentro del gimnasio en este momento.
-                    </td>
-                  </tr>
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* VISTA MÓVIL: CLIENTES ACTIVOS EN TARJETAS DE UN SOLO VISTAZO */}
-          <div className="d-block d-md-none mobile-card-list">
-            {loading ? (
-              <div style={{ textAlign: 'center', padding: '16px', color: '#5f7165' }}>Cargando clientes activos...</div>
-            ) : activeClients.length ? (
-              activeClients.map((client) => (
-                <div key={`mob-active-${client.id}`} className="mobile-data-card" style={{ padding: '14px' }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
-                    <strong style={{ fontSize: '0.92rem', color: '#111d15' }}>{client.nombre} {client.apellido}</strong>
-                    <span className="badge" style={{ background: '#ecfccb', color: '#15803d', fontWeight: 800, fontSize: '0.74rem' }}>
-                      ● En sala
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', color: '#64748b' }}>
-                    <span>DNI: {client.dni}</span>
-                    <span>Ingreso: <strong className="text-dark font-monospace">{formatTimeOnly(client.horaEntrada)} hrs</strong></span>
-                  </div>
-                </div>
-              ))
-            ) : (
-              <div style={{ textAlign: 'center', padding: '24px', color: '#5f7165', fontSize: '0.85rem' }}>
-                No hay clientes dentro del gimnasio en este momento.
-              </div>
-            )}
-          </div>
-        </div>
+      <div style={{ marginTop: '12px' }}>
+        <CheckInView token={token} embedded />
       </div>
     )
   }
@@ -1009,9 +1429,9 @@ export default function DashboardReservationsView({ token, user }) {
         <div className="dashboard-cards-row dashboard-summary-row" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '16px' }}>
           {/* Card 1: Asistencias Totales */}
           <article className="dashboard-info-card" style={{ padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Asistencias Registradas</span>
-              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem', lineHeight: 1.25 }}>Asistencias Registradas</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex', flexShrink: 0 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
                   <polyline points="22 4 12 14.01 9 11.01"></polyline>
@@ -1028,9 +1448,9 @@ export default function DashboardReservationsView({ token, user }) {
 
           {/* Card 2: Saldo Mi Pandita */}
           <article className="dashboard-info-card" style={{ padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Bambús Disponibles</span>
-              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex', fontSize: '1rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem', lineHeight: 1.25 }}>Bambús Disponibles</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex', fontSize: '1rem', flexShrink: 0 }}>
                 <i className="bi bi-gem"></i>
               </div>
             </div>
@@ -1044,9 +1464,9 @@ export default function DashboardReservationsView({ token, user }) {
 
           {/* Card 3: Estado de Membresía */}
           <article className="dashboard-info-card" style={{ padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Mi Membresía</span>
-              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem', lineHeight: 1.25 }}>Mi Membresía</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex', flexShrink: 0 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <rect x="2" y="5" width="20" height="14" rx="2"></rect>
                   <line x1="2" y1="10" x2="22" y2="10"></line>
@@ -1064,9 +1484,9 @@ export default function DashboardReservationsView({ token, user }) {
 
           {/* Card 4: Aforo del Club en Vivo */}
           <article className="dashboard-info-card" style={{ padding: '22px' }}>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '12px' }}>
-              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.84rem' }}>Aforo en Tiempo Real</span>
-              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex' }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '10px', marginBottom: '12px' }}>
+              <span className="dashboard-info-label" style={{ margin: 0, fontSize: '0.82rem', lineHeight: 1.25 }}>Aforo en Tiempo Real</span>
+              <div style={{ color: '#235833', background: '#ecfccb', padding: '6px', borderRadius: '8px', display: 'flex', flexShrink: 0 }}>
                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                   <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
                   <circle cx="9" cy="7" r="4"></circle>
@@ -1206,6 +1626,8 @@ export default function DashboardReservationsView({ token, user }) {
               <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
                 {config?.horario_sabado_estado === '0'
                   ? 'Cerrado'
+                  : config?.horario_sabado_modalidad === 'partido'
+                  ? `${config?.horario_sabado_inicio || '07:00'} - ${config?.horario_sabado_fin || '12:00'} / ${config?.horario_sabado_tarde_inicio || '16:00'} - ${config?.horario_sabado_tarde_fin || '20:00'}`
                   : `${config?.horario_sabado_inicio || '07:00'} - ${config?.horario_sabado_fin || '12:00'}`}
               </strong>
             </div>
@@ -1229,7 +1651,9 @@ export default function DashboardReservationsView({ token, user }) {
               </div>
               <strong style={{ fontSize: '1.05rem', color: '#0f172a' }}>
                 {config?.horario_domingo_abierto === '1'
-                  ? `${config?.horario_domingo_inicio || '08:00'} - ${config?.horario_domingo_fin || '13:00'}`
+                  ? config?.horario_domingo_modalidad === 'partido'
+                    ? `${config?.horario_domingo_inicio || '08:00'} - ${config?.horario_domingo_fin || '13:00'} / ${config?.horario_domingo_tarde_inicio || '16:00'} - ${config?.horario_domingo_tarde_fin || '20:00'}`
+                    : `${config?.horario_domingo_inicio || '08:00'} - ${config?.horario_domingo_fin || '13:00'}`
                   : 'Descanso general'}
               </strong>
             </div>
@@ -1456,41 +1880,11 @@ export default function DashboardReservationsView({ token, user }) {
               </button>)}
             </div>
           )}
-
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '20px', flexWrap: 'wrap', marginBottom: '24px' }}>
-            <div>
-              <h1 style={{ margin: 0, fontSize: '2.2rem', fontWeight: 900, color: '#111d15', letterSpacing: '-0.03em' }}>
-                {moduleLabel('inicio',user)}
-              </h1>
-              <p style={{ margin: '6px 0 0', color: '#5f7165', fontSize: '0.96rem' }}>
-                Tu operación de hoy: socios, accesos en sala y crecimiento en un solo lugar.
-              </p>
-            </div>
-            {canAccess(user,'socios') && (<button
-              type="button"
-              className="primary-action"
-              onClick={() => navigate('/app/socios')}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: '8px',
-                padding: '12px 22px',
-                fontSize: '0.94rem',
-                borderRadius: '12px',
-              }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                <line x1="12" y1="5" x2="12" y2="19"></line>
-                <line x1="5" y1="12" x2="19" y2="12"></line>
-              </svg>
-              Registrar membresía
-            </button>)}
-          </div>
         </>
       ) : (
         <ViewTitle
           title={moduleLabel('inicio',user)}
-          text="Tu resumen diario de entrenamientos, bambús acumulados y aforo en sala."
+          text="Resumen de asistencias, bambús y aforo."
         />
       )}
 

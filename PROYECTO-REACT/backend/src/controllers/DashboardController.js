@@ -53,66 +53,121 @@ class DashboardController {
             const nombreMes = new Date().toLocaleDateString('es-ES', { month: 'long' });
             const mesActualCapitalizado = nombreMes.charAt(0).toUpperCase() + nombreMes.slice(1);
 
-            // 3. Tendencia de Asistencia Real de los Últimos 7 Días
-            const [asistenciasSemanaRows] = await db.execute(`
-                SELECT 
-                    DATE(hora_entrada) AS fecha,
-                    COUNT(*) AS total
+            // 3. Rango para gráficos de Asistencias e Ingresos (month=YYYY-MM o startDate/endDate o últimos 7 días)
+            const nowLima = new Date(new Date().toLocaleString('en-US', { timeZone: 'America/Lima' }));
+            const pad2 = (n) => String(n).padStart(2, '0');
+            const toIso = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
+            const todayIso = toIso(nowLima);
+
+            let rangeStartIso;
+            let rangeEndIso;
+            let filterMode = '7d';
+
+            const reqMonth = String(req.query.month || '').trim();
+            const reqStart = String(req.query.startDate || '').trim();
+            const reqEnd = String(req.query.endDate || '').trim();
+
+            if (/^\d{4}-\d{2}$/.test(reqMonth)) {
+                const [y, m] = reqMonth.split('-').map(Number);
+                const firstDay = new Date(y, m - 1, 1);
+                const lastDay = new Date(y, m, 0);
+                rangeStartIso = toIso(firstDay);
+                rangeEndIso = toIso(lastDay);
+                filterMode = 'month';
+            } else if (/^\d{4}-\d{2}-\d{2}$/.test(reqStart) && /^\d{4}-\d{2}-\d{2}$/.test(reqEnd) && reqStart <= reqEnd) {
+                rangeStartIso = reqStart;
+                rangeEndIso = reqEnd;
+                filterMode = 'range';
+            } else {
+                const start7 = new Date(nowLima);
+                start7.setDate(start7.getDate() - 6);
+                rangeStartIso = toIso(start7);
+                rangeEndIso = todayIso;
+                filterMode = '7d';
+            }
+
+            const [asistenciasRangoRows] = await db.execute(`
+                SELECT DATE(hora_entrada) AS fecha, COUNT(*) AS total
                 FROM asistencias
-                WHERE hora_entrada >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY)
+                WHERE DATE(hora_entrada) BETWEEN ? AND ?
                 GROUP BY DATE(hora_entrada)
-            `);
+            `, [rangeStartIso, rangeEndIso]);
 
-            const [invitadosSemanaRows] = await db.execute(`
-                SELECT 
-                    DATE(fecha_inicio) AS fecha,
-                    COUNT(*) AS total
+            const [invitadosRangoRows] = await db.execute(`
+                SELECT DATE(fecha_inicio) AS fecha, COUNT(*) AS total, COALESCE(SUM(monto), 0) AS totalMonto
                 FROM usuarios_invitados
-                WHERE fecha_inicio >= DATE_SUB(CURRENT_DATE(), INTERVAL 6 DAY)
+                WHERE DATE(fecha_inicio) BETWEEN ? AND ?
                 GROUP BY DATE(fecha_inicio)
-            `);
+            `, [rangeStartIso, rangeEndIso]);
 
-            // Construir los 7 días con nombres reales (es-ES)
+            const [pagosRangoRows] = await db.execute(`
+                SELECT DATE(fecha_pago) AS fecha, COALESCE(SUM(monto), 0) AS totalMonto
+                FROM pagos
+                WHERE DATE(fecha_pago) BETWEEN ? AND ?
+                GROUP BY DATE(fecha_pago)
+            `, [rangeStartIso, rangeEndIso]);
+
             const daysMap = {};
-            for (let i = 6; i >= 0; i--) {
-                const d = new Date();
-                d.setDate(d.getDate() - i);
-                const year = d.getFullYear();
-                const month = String(d.getMonth() + 1).padStart(2, '0');
-                const dayStr = String(d.getDate()).padStart(2, '0');
-                const isoDate = `${year}-${month}-${dayStr}`;
+            const startDateObj = new Date(`${rangeStartIso}T12:00:00`);
+            const endDateObj = new Date(`${rangeEndIso}T12:00:00`);
+            const totalDaysCount = Math.max(1, Math.min(90, Math.round((endDateObj - startDateObj) / 86400000) + 1));
+            const compactLabels = totalDaysCount > 10;
 
+            for (let i = 0; i < totalDaysCount; i++) {
+                const d = new Date(startDateObj);
+                d.setDate(startDateObj.getDate() + i);
+                const isoDate = toIso(d);
                 const dayName = d.toLocaleDateString('es-ES', { weekday: 'short' });
                 const dayNumber = d.getDate();
-                const label = i === 0 ? 'Hoy' : `${dayName.charAt(0).toUpperCase() + dayName.slice(1, 3)} ${dayNumber}`;
-                daysMap[isoDate] = { day: label, isoDate, count: 0, isToday: i === 0 };
+                const isToday = isoDate === todayIso;
+                const label = isToday
+                    ? 'Hoy'
+                    : compactLabels
+                        ? String(dayNumber)
+                        : `${dayName.charAt(0).toUpperCase() + dayName.slice(1, 3)} ${dayNumber}`;
+                daysMap[isoDate] = { day: label, isoDate, count: 0, amount: 0, isToday };
             }
 
-            for (const row of asistenciasSemanaRows) {
-                const dateKey = typeof row.fecha === 'string'
-                    ? row.fecha.slice(0, 10)
-                    : new Date(row.fecha).toISOString().slice(0, 10);
-                if (daysMap[dateKey]) {
-                    daysMap[dateKey].count += Number(row.total);
+            const normDateKey = (val) => (typeof val === 'string' ? val.slice(0, 10) : new Date(val).toISOString().slice(0, 10));
+
+            for (const row of asistenciasRangoRows) {
+                const key = normDateKey(row.fecha);
+                if (daysMap[key]) daysMap[key].count += Number(row.total || 0);
+            }
+            for (const row of invitadosRangoRows) {
+                const key = normDateKey(row.fecha);
+                if (daysMap[key]) {
+                    daysMap[key].count += Number(row.total || 0);
+                    daysMap[key].amount += Number(row.totalMonto || 0);
                 }
             }
-            for (const row of invitadosSemanaRows) {
-                const dateKey = typeof row.fecha === 'string'
-                    ? row.fecha.slice(0, 10)
-                    : new Date(row.fecha).toISOString().slice(0, 10);
-                if (daysMap[dateKey]) {
-                    daysMap[dateKey].count += Number(row.total);
-                }
+            for (const row of pagosRangoRows) {
+                const key = normDateKey(row.fecha);
+                if (daysMap[key]) daysMap[key].amount += Number(row.totalMonto || 0);
             }
 
-            const weeklyData = Object.values(daysMap);
-            const maxWeeklyCount = Math.max(1, ...weeklyData.map((d) => d.count));
-            const totalWeeklyCount = weeklyData.reduce((acc, d) => acc + d.count, 0);
-            const averageDaily = (totalWeeklyCount / 7).toFixed(1);
+            const series = Object.values(daysMap);
+            const maxAtt = Math.max(1, ...series.map((d) => d.count));
+            const maxRev = Math.max(1, ...series.map((d) => d.amount));
+            const totalAsistenciasPeriodo = series.reduce((acc, d) => acc + d.count, 0);
+            const totalIngresosPeriodo = series.reduce((acc, d) => acc + d.amount, 0);
+            const averageDaily = (totalAsistenciasPeriodo / series.length).toFixed(1);
 
-            weeklyData.forEach((d) => {
-                d.height = d.count === 0 ? 12 : Math.round(15 + (d.count / maxWeeklyCount) * 85);
-            });
+            const weeklyData = series.map((d) => ({
+                day: d.day,
+                isoDate: d.isoDate,
+                count: d.count,
+                isToday: d.isToday,
+                height: d.count === 0 ? 10 : Math.round(16 + (d.count / maxAtt) * 84),
+            }));
+
+            const revenueChartData = series.map((d) => ({
+                day: d.day,
+                isoDate: d.isoDate,
+                amount: Number(d.amount.toFixed(2)),
+                isToday: d.isToday,
+                height: d.amount === 0 ? 10 : Math.round(16 + (d.amount / maxRev) * 84),
+            }));
 
             // 4. Actividad Reciente en Recepción Real
             const [recentAttendances] = await db.execute(`
@@ -121,6 +176,7 @@ class DashboardController {
                     a.hora_entrada,
                     a.hora_salida,
                     a.metodo_registro,
+                    a.observacion_salida,
                     u.nombre,
                     u.apellido,
                     u.dni
@@ -163,17 +219,20 @@ class DashboardController {
 
             for (const att of recentAttendances) {
                 const isExit = Boolean(att.hora_salida);
+                const isNoCheckout = att.observacion_salida === 'no_marco_salida';
                 const timestamp = att.hora_salida || att.hora_entrada;
                 rawActivities.push({
                     name: `${att.nombre} ${att.apellido || ''}`.trim(),
                     timestamp: new Date(timestamp).getTime(),
                     time: formatTimePeru(timestamp),
-                    detail: isExit
+                    detail: isNoCheckout
+                        ? `Cierre automático tras 4h sin marcar salida (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})`
+                        : isExit
                         ? `Salida registrada · Sesión finalizada (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})`
                         : `Check-in ingreso · +25 XP Bambús (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})`,
-                    badge: isExit ? 'Salida' : 'Autorizado',
-                    bg: isExit ? '#e0f2fe' : '#ecfccb',
-                    col: isExit ? '#0369a1' : '#1b4d24',
+                    badge: isNoCheckout ? 'Sin salida (+4h)' : isExit ? 'Salida' : 'Autorizado',
+                    bg: isNoCheckout ? '#fef3c7' : isExit ? '#e0f2fe' : '#ecfccb',
+                    col: isNoCheckout ? '#92400e' : isExit ? '#0369a1' : '#1b4d24',
                 });
             }
 
@@ -267,6 +326,10 @@ class DashboardController {
                 ingresosMes,
                 mesActual: mesActualCapitalizado,
                 weeklyData,
+                revenueChartData,
+                totalAsistenciasPeriodo,
+                totalIngresosPeriodo: Number(totalIngresosPeriodo.toFixed(2)),
+                filterRange: { startDate: rangeStartIso, endDate: rangeEndIso, mode: filterMode },
                 averageDaily,
                 recentActivity,
                 renewals,

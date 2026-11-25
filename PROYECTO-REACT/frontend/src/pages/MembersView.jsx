@@ -5,6 +5,7 @@ import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
 import MemberProfileModal from '../components/MemberProfileModal'
 import OfferModal from '../components/OfferModal'
+import TablePagination, { paginateList } from '../components/TablePagination'
 import { formatDate, getTodayPeru } from '../utils/formatters'
 import { SocioService } from '../services/SocioService'
 import { PlanService } from '../services/PlanService'
@@ -26,6 +27,8 @@ export default function MembersView({ token, user }) {
   // Filtro de segmentación inteligente (CRM Socios)
   // 'todos' | 'vip' | 'nuevos' | 'por_vencer' | 'inactivos' | 'activos'
   const [segmentFilter, setSegmentFilter] = useState('todos')
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 10
 
   // Modales interactivos
   const [profileModalSocioId, setProfileModalSocioId] = useState(null)
@@ -174,6 +177,10 @@ export default function MembersView({ token, user }) {
     // Validación Teléfono
     if (form.telefono && !/^\d{9}$/.test(form.telefono.trim())) {
       errors.telefono = 'El teléfono debe contener exactamente 9 dígitos numéricos'
+    }
+
+    if (!editingId && !form.planId) {
+      errors.planId = 'Selecciona un plan de membresía'
     }
 
     // Validación Fecha de inicio
@@ -326,6 +333,15 @@ export default function MembersView({ token, user }) {
     })
   }, [members, segmentFilter, searchTerm])
 
+  useEffect(() => {
+    setCurrentPage(1)
+  }, [segmentFilter, searchTerm])
+
+  const paginatedMembers = useMemo(
+    () => paginateList(filteredMembers, currentPage, PAGE_SIZE),
+    [filteredMembers, currentPage]
+  )
+
   function getBadgeStyle(segmentoKey) {
     if (segmentoKey === 'vip') return { background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }
     if (segmentoKey === 'nuevo') return { background: '#ecfccb', color: '#15803d', border: '1px solid #d9f99d' }
@@ -339,7 +355,7 @@ export default function MembersView({ token, user }) {
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3">
         <ViewTitle
           title={moduleLabel('socios')}
-          text="Control integral de socios, vigencias de planes, renovaciones, fidelización y expedientes 360°."
+          text="Socios, planes y renovaciones."
         />
 
         <div className="d-flex gap-2 flex-wrap">
@@ -388,8 +404,7 @@ export default function MembersView({ token, user }) {
 
       {/* PESTAÑAS DE SEGMENTACIÓN ESTRATÉGICA (CRM SOCIOS & MEMBRESÍAS) */}
       <div
-        className="d-flex gap-2 overflow-auto pb-2 mb-3"
-        style={{ scrollbarWidth: 'none', whiteSpace: 'nowrap' }}
+        className="d-flex flex-wrap gap-2 pb-2 mb-3"
       >
         {[
           { key: 'todos', label: 'Todos los Socios', count: segmentCounts.todos, iconClass: 'bi bi-people-fill' },
@@ -477,9 +492,8 @@ export default function MembersView({ token, user }) {
               )}
 
               {!loading &&
-                filteredMembers.map((socio) => {
+                paginatedMembers.items.map((socio) => {
                   const diasRest = socio.diasRestantes !== null ? Number(socio.diasRestantes) : null
-                  const esActivo = socio.estadoMembresia === 'activo' || (diasRest !== null && diasRest >= 0)
                   return (
                     <tr key={socio.id}>
                       {/* Código */}
@@ -648,7 +662,7 @@ export default function MembersView({ token, user }) {
 
         {!loading && (
           <div className="mobile-card-list">
-            {filteredMembers.map((socio) => {
+            {paginatedMembers.items.map((socio) => {
               const diasRest = socio.diasRestantes !== null ? Number(socio.diasRestantes) : null
               return (
                 <div key={socio.id} className="mobile-data-card">
@@ -779,16 +793,26 @@ export default function MembersView({ token, user }) {
         )}
       </div>
 
+      {!loading && (
+        <TablePagination
+          totalItems={filteredMembers.length}
+          currentPage={paginatedMembers.safePage}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          itemLabel="socios"
+        />
+      )}
+
       {/* MODAL: ALTA DE NUEVO SOCIO */}
       <ModalDialog
         isOpen={showForm}
         onClose={() => { if (!formStatus.loading) { setShowForm(false); resetForm() } }}
         title={editingId ? "Editar socio" : "Registrar Nuevo Socio"}
-        subtitle={editingId ? "Actualiza sus datos o vincula otro dispositivo." : "Crea su cuenta de socio con DNI y contraseña, y selecciona su membresía."}
+        subtitle={editingId ? "Actualiza sus datos o dispositivo." : "Datos del socio y plan inicial."}
         badge={editingId ? "Datos del socio" : "Alta de Socio"}
         size="lg"
       >
-        <form onSubmit={handleCreateMember}>
+        <form onSubmit={handleCreateMember} noValidate>
           {formStatus.error && (
             <div className="alert alert-danger py-2 px-3 small mb-3">{formStatus.error}</div>
           )}
@@ -840,8 +864,12 @@ export default function MembersView({ token, user }) {
               </label>
               <select
                 id="new-plan"
-                className="form-select"
-                style={{ borderRadius: '10px', borderColor: '#cbd5e1' }}
+                className={`form-select ${fieldErrors.planId ? 'is-invalid' : ''}`}
+                style={{
+                  borderRadius: '10px',
+                  borderColor: fieldErrors.planId ? '#ef4444' : '#cbd5e1',
+                  backgroundColor: fieldErrors.planId ? '#fef2f2' : '#ffffff',
+                }}
                 value={form.planId}
                 onChange={(e) => updateField('planId', e.target.value)}
                 required
@@ -852,6 +880,12 @@ export default function MembersView({ token, user }) {
                   </option>
                 ))}
               </select>
+              {fieldErrors.planId && (
+                <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
+                  <i className="bi bi-exclamation-circle-fill"></i>
+                  <span>{fieldErrors.planId}</span>
+                </div>
+              )}
             </div>
 
             </>}
@@ -1023,14 +1057,6 @@ export default function MembersView({ token, user }) {
 
           <div className="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
             <button
-              type="button"
-              className="btn btn-outline-dark px-4 py-2 fw-semibold"
-              onClick={() => { setShowForm(false); resetForm() }}
-              disabled={formStatus.loading}
-            >
-              Cancelar
-            </button>
-            <button
               type="submit"
               className="btn px-4 py-2 fw-bold shadow-sm"
               disabled={formStatus.loading}
@@ -1051,7 +1077,7 @@ export default function MembersView({ token, user }) {
         badge="Renovación de Plan"
         size="md"
       >
-        <form onSubmit={handleRenew}>
+        <form onSubmit={handleRenew} noValidate>
           <div className="mb-3">
             <label className="form-label fw-bold small text-dark" htmlFor="renew-plan">
               Selecciona el Nuevo Plan *
@@ -1140,14 +1166,6 @@ export default function MembersView({ token, user }) {
           )}
 
           <div className="d-flex justify-content-end gap-2 pt-3 border-top">
-            <button
-              type="button"
-              className="btn btn-outline-dark px-3 py-2 fw-semibold"
-              onClick={() => setShowRenewModal(false)}
-              disabled={renewLoading}
-            >
-              Cancelar
-            </button>
             <button
               type="submit"
               className="btn px-4 py-2 fw-bold"

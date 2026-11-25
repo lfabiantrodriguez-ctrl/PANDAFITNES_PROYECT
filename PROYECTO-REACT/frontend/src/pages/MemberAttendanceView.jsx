@@ -41,7 +41,7 @@ export default function MemberAttendanceView({ token, user }) {
   const [bonusAdminTab, setBonusAdminTab] = useState('general')
 
   // Mapa de Bonos XP y Bambús asignables por el Administrador para eventos especiales
-  const xpBonuses={}
+  const xpBonuses=(account?.xpBonuses && typeof account.xpBonuses === 'object' && !Array.isArray(account.xpBonuses)) ? account.xpBonuses : {}
 
   // Modal para días bloqueados fuera de matrícula
   const [showRenewModal, setShowRenewModal] = useState(false)
@@ -49,18 +49,19 @@ export default function MemberAttendanceView({ token, user }) {
 
   // Modal para administración de Recompensas y Bonos XP
   const [showBonusAdminModal, setShowBonusAdminModal] = useState(false)
-  const [newBonusDate, setNewBonusDate] = useState('2026-09-26')
-  const [newBonusXp, setNewBonusXp] = useState(100)
-  const [newBonusBambus, setNewBonusBambus] = useState(25)
-  const [newBonusLabel, setNewBonusLabel] = useState('Reto Fin de Semana x2 XP')
+  const [newBonusDate, setNewBonusDate] = useState(() => peruDate(new Date()))
+  const [newBonusXp, setNewBonusXp] = useState(50)
+  const [newBonusBambus, setNewBonusBambus] = useState(20)
+  const [newBonusLabel, setNewBonusLabel] = useState('')
   const [bonusFeedback, setBonusFeedback] = useState('')
   const [bonusErrors, setBonusErrors] = useState({})
+  const [savingRules, setSavingRules] = useState(false)
 
   // Sincronizar inputs temporales cuando cambian los valores generales
   useEffect(() => {
     setTempGeneralXp(generalRewards.baseXp)
     setTempGeneralBambus(generalRewards.baseBambus)
-  }, [generalRewards])
+  }, [generalRewards.baseXp, generalRewards.baseBambus])
 
   // Modal para cambiar objetivos semanales (únicamente selección de días, sin selector de horario)
   const [showGoalModal, setShowGoalModal] = useState(false)
@@ -130,6 +131,101 @@ export default function MemberAttendanceView({ token, user }) {
       setTempGoals(tempGoals.filter(d => d !== dayNumber))
     } else {
       setTempGoals([...tempGoals, dayNumber].sort((a, b) => a - b))
+    }
+  }
+
+  async function handleSaveGeneralRewards(e) {
+    e.preventDefault()
+    setGeneralFeedback('')
+    const errs = {}
+    const xpVal = Number(tempGeneralXp)
+    const bambusVal = Number(tempGeneralBambus)
+    if (tempGeneralXp === '' || !Number.isFinite(xpVal) || xpVal < 1) {
+      errs.xp = 'Ingresa un valor de XP mayor o igual a 1.'
+    }
+    if (tempGeneralBambus === '' || !Number.isFinite(bambusVal) || bambusVal < 0) {
+      errs.bambus = 'Ingresa un valor de bambús igual o mayor a 0.'
+    }
+    if (Object.keys(errs).length > 0) {
+      setGeneralErrors(errs)
+      return
+    }
+    setGeneralErrors({})
+    setSavingRules(true)
+    try {
+      await AttendanceService.updateAttendanceRules(token, {
+        baseXp: Math.round(xpVal),
+        baseBambus: Math.round(bambusVal),
+      })
+      await refresh()
+      window.dispatchEvent(new Event('panda-progress-updated'))
+      setGeneralFeedback('Puntos base actualizados.')
+    } catch (err) {
+      setGeneralErrors({ xp: err.message || 'No se pudo guardar.' })
+    } finally {
+      setSavingRules(false)
+    }
+  }
+
+  async function handleAddBonus(e) {
+    e.preventDefault()
+    setBonusFeedback('')
+    const errs = {}
+    if (!newBonusDate || !/^\d{4}-\d{2}-\d{2}$/.test(newBonusDate)) {
+      errs.date = 'Selecciona una fecha válida.'
+    }
+    const xpVal = Number(newBonusXp)
+    if (newBonusXp === '' || !Number.isFinite(xpVal) || xpVal < 1) {
+      errs.xp = 'Mínimo 1 XP.'
+    }
+    const bambusVal = Number(newBonusBambus)
+    if (newBonusBambus === '' || !Number.isFinite(bambusVal) || bambusVal < 0) {
+      errs.bambus = 'Mínimo 0 bambús.'
+    }
+    if (!String(newBonusLabel || '').trim()) {
+      errs.label = 'Ingresa el nombre de la promoción o evento.'
+    }
+    if (Object.keys(errs).length > 0) {
+      setBonusErrors(errs)
+      return
+    }
+    setBonusErrors({})
+    setSavingRules(true)
+    try {
+      const updatedBonuses = {
+        ...xpBonuses,
+        [newBonusDate]: {
+          xp: Math.round(xpVal),
+          bambus: Math.round(bambusVal),
+          label: newBonusLabel.trim(),
+        },
+      }
+      await AttendanceService.updateAttendanceRules(token, { xpBonuses: updatedBonuses })
+      await refresh()
+      window.dispatchEvent(new Event('panda-progress-updated'))
+      setNewBonusLabel('')
+      setBonusFeedback(`Bono asignado para el ${newBonusDate}.`)
+    } catch (err) {
+      setBonusErrors({ label: err.message || 'No se pudo asignar el bono.' })
+    } finally {
+      setSavingRules(false)
+    }
+  }
+
+  async function handleDeleteBonus(dateStr) {
+    setBonusFeedback('')
+    setSavingRules(true)
+    try {
+      const updatedBonuses = { ...xpBonuses }
+      delete updatedBonuses[dateStr]
+      await AttendanceService.updateAttendanceRules(token, { xpBonuses: updatedBonuses })
+      await refresh()
+      window.dispatchEvent(new Event('panda-progress-updated'))
+      setBonusFeedback(`Bono del ${dateStr} eliminado.`)
+    } catch (err) {
+      setBonusErrors({ label: err.message || 'No se pudo eliminar el bono.' })
+    } finally {
+      setSavingRules(false)
     }
   }
 
@@ -309,20 +405,19 @@ export default function MemberAttendanceView({ token, user }) {
     }
   }, [year, month, daysInMonth, firstDayWeekIndex, todayNumber, currentDate, realNow, userGoals.diasObjetivo, attendancesInViewMonth, xpBonuses, generalRewards, account?.racha, membership?.fechaInicio, membership?.fechaFin])
 
-  if(!account) return <div className="attendance-view-container"><h1>{moduleLabel('asistencias',user)}</h1><p role="status">{error || 'Cargando tus registros…'}</p>{error&&<button className="btn btn-dark" onClick={refresh}>Volver a consultar</button>}</div>
+  if(!account) return <div className="attendance-view-container"><p role="status">{error || 'Cargando tus registros…'}</p>{error&&<button className="btn btn-dark" onClick={refresh}>Volver a consultar</button>}</div>
   const weekStart=new Date(realNow);weekStart.setDate(realNow.getDate()-((realNow.getDay()+6)%7))
   const weekKey=peruDate(weekStart)
   const weekCount=account.diasAsistidos.filter(d=>d>=weekKey && d<=account.today).length
   return (
     <div className="attendance-view-container">
       {/* ----------------------------------------------------------------------
-          BARRA SUPERIOR COMPACTA (TÍTULO Y 4 KPIS EN FILA HORIZONTAL)
+          BARRA SUPERIOR COMPACTA (RESUMEN Y 4 KPIS EN FILA HORIZONTAL)
           ---------------------------------------------------------------------- */}
       <header className="attendance-top-bar">
         <div className="attendance-title-area">
-          <h1>{moduleLabel('asistencias',user)}</h1>
           <p>
-            {MONTH_NAMES[month]} {year} · Hoy es {realNow.toLocaleDateString('es-PE',{weekday:'long',day:'numeric'})}. Las inasistencias solo se computan una vez finalizado el día.
+            {MONTH_NAMES[month]} {year} · Hoy: {realNow.toLocaleDateString('es-PE',{weekday:'long',day:'numeric'})}
           </p>
         </div>
 
@@ -590,7 +685,7 @@ export default function MemberAttendanceView({ token, user }) {
         badge="MIS METAS"
         size="md"
       >
-        <form onSubmit={handleSaveGoals}>
+        <form onSubmit={handleSaveGoals} noValidate>
           <div style={{ marginBottom: '22px' }}>
             <label style={{ display: 'block', fontWeight: 800, fontSize: '0.88rem', color: '#111d15', marginBottom: '10px' }}>
               Días de entrenamiento por semana ({tempGoals.length} días seleccionados)
@@ -633,9 +728,6 @@ export default function MemberAttendanceView({ token, user }) {
               })}
             </div>
 
-            <p style={{ fontSize: '0.82rem', color: '#5f7165', margin: '14px 0 0', lineHeight: 1.45 }}>
-               <strong>Acceso libre total:</strong> Tu membresía te permite ingresar a sala a cualquier hora dentro del horario de atención del club. No requieres agendar ningún horario fijo.
-            </p>
           </div>
 
           {goalFeedback && (
@@ -645,22 +737,6 @@ export default function MemberAttendanceView({ token, user }) {
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', marginTop: '10px' }}>
-            <button
-              type="button"
-              onClick={() => setShowGoalModal(false)}
-              style={{
-                padding: '10px 20px',
-                borderRadius: '10px',
-                border: '1.5px solid #cbd5e1',
-                background: '#ffffff',
-                fontWeight: 700,
-                fontSize: '0.86rem',
-                cursor: 'pointer',
-                color: '#475569',
-              }}
-            >
-              Cancelar
-            </button>
             <button
               type="submit"
               disabled={savingGoal}
@@ -900,7 +976,322 @@ export default function MemberAttendanceView({ token, user }) {
       {/* ----------------------------------------------------------------------
           MODAL: ADMINISTRACIÓN DE BONOS XP POR DÍA (SOLO ADMIN)
           ---------------------------------------------------------------------- */}
-      <ModalDialog isOpen={showBonusAdminModal} onClose={()=>setShowBonusAdminModal(false)} title="Puntos por asistencia" badge="Reglas del club"><p>Cada día con una entrada registrada suma {generalRewards.baseXp} XP y {generalRewards.baseBambus} bambús. Los descansos programados no cortan tu racha. Los canjes descuentan el saldo guardado.</p><button className="btn btn-dark" onClick={()=>setShowBonusAdminModal(false)}>Entendido</button></ModalDialog>
+      <ModalDialog
+        isOpen={showBonusAdminModal}
+        onClose={() => setShowBonusAdminModal(false)}
+        title="Reglas de Puntos y Promociones"
+        subtitle="Puntos base por asistencia y bonos por fecha."
+        badge="ADMIN"
+        size="md"
+      >
+        <div>
+          <div style={{ display: 'flex', gap: '8px', borderBottom: '1px solid #e2e8f0', paddingBottom: '12px', marginBottom: '16px' }}>
+            <button
+              type="button"
+              onClick={() => {
+                setBonusAdminTab('general')
+                setGeneralFeedback('')
+              }}
+              style={{
+                flex: 1,
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: bonusAdminTab === 'general' ? '2px solid #111d15' : '1px solid #e2e8f0',
+                background: bonusAdminTab === 'general' ? '#111d15' : '#f8fafc',
+                color: bonusAdminTab === 'general' ? '#c4f039' : '#475569',
+                fontWeight: 800,
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              <i className="bi bi-sliders"></i>
+              <span>Puntos por Día</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => {
+                setBonusAdminTab('eventos')
+                setBonusFeedback('')
+              }}
+              style={{
+                flex: 1,
+                padding: '10px 14px',
+                borderRadius: '10px',
+                border: bonusAdminTab === 'eventos' ? '2px solid #111d15' : '1px solid #e2e8f0',
+                background: bonusAdminTab === 'eventos' ? '#111d15' : '#f8fafc',
+                color: bonusAdminTab === 'eventos' ? '#c4f039' : '#475569',
+                fontWeight: 800,
+                fontSize: '0.84rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '6px',
+              }}
+            >
+              <i className="bi bi-calendar-event"></i>
+              <span>Días con Promoción ({Object.keys(xpBonuses).length})</span>
+            </button>
+          </div>
+
+          {bonusAdminTab === 'general' ? (
+            <form onSubmit={handleSaveGeneralRewards} noValidate style={{ display: 'grid', gap: '14px' }}>
+              {generalFeedback && (
+                <div style={{ padding: '10px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem' }}>
+                  ✓ {generalFeedback}
+                </div>
+              )}
+
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '14px' }}>
+                <div className="form-element">
+                  <label className="element-label" style={{ fontSize: '0.8rem' }}>
+                    Experiencia por Asistencia (XP) *
+                  </label>
+                  <input
+                    type="number"
+                    min="1"
+                    step="1"
+                    className={`input-field ${generalErrors.xp ? 'is-invalid' : ''}`}
+                    value={tempGeneralXp}
+                    onChange={(e) => {
+                      setTempGeneralXp(e.target.value)
+                      if (generalErrors.xp) setGeneralErrors((prev) => ({ ...prev, xp: '' }))
+                    }}
+                    style={generalErrors.xp ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
+                  />
+                  {generalErrors.xp && (
+                    <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem', color: '#dc2626' }}>
+                      <i className="bi bi-exclamation-circle-fill"></i>
+                      <span>{generalErrors.xp}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div className="form-element">
+                  <label className="element-label" style={{ fontSize: '0.8rem' }}>
+                    Bambús por Asistencia *
+                  </label>
+                  <input
+                    type="number"
+                    min="0"
+                    step="1"
+                    className={`input-field ${generalErrors.bambus ? 'is-invalid' : ''}`}
+                    value={tempGeneralBambus}
+                    onChange={(e) => {
+                      setTempGeneralBambus(e.target.value)
+                      if (generalErrors.bambus) setGeneralErrors((prev) => ({ ...prev, bambus: '' }))
+                    }}
+                    style={generalErrors.bambus ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
+                  />
+                  {generalErrors.bambus && (
+                    <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem', color: '#dc2626' }}>
+                      <i className="bi bi-exclamation-circle-fill"></i>
+                      <span>{generalErrors.bambus}</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px', marginTop: '6px' }}>
+                <button
+                  type="button"
+                  onClick={() => setShowBonusAdminModal(false)}
+                  className="btn btn-outline-dark px-3 py-2"
+                  style={{ borderRadius: '10px', fontSize: '0.84rem', fontWeight: 700 }}
+                >
+                  Cerrar
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingRules}
+                  style={{
+                    padding: '9px 18px',
+                    background: '#c4f039',
+                    color: '#111d15',
+                    border: 'none',
+                    borderRadius: '10px',
+                    fontWeight: 900,
+                    fontSize: '0.84rem',
+                    cursor: savingRules ? 'not-allowed' : 'pointer',
+                  }}
+                >
+                  {savingRules ? 'Guardando...' : 'Guardar Puntos Base'}
+                </button>
+              </div>
+            </form>
+          ) : (
+            <div>
+              {bonusFeedback && (
+                <div style={{ padding: '10px 14px', background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#065f46', borderRadius: '10px', fontWeight: 700, fontSize: '0.82rem', marginBottom: '12px' }}>
+                  ✓ {bonusFeedback}
+                </div>
+              )}
+
+              <form onSubmit={handleAddBonus} noValidate style={{ display: 'grid', gap: '12px', marginBottom: '18px' }}>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))', gap: '10px' }}>
+                  <div className="form-element">
+                    <label className="element-label" style={{ fontSize: '0.78rem' }}>Fecha *</label>
+                    <input
+                      type="date"
+                      className={`input-field ${bonusErrors.date ? 'is-invalid' : ''}`}
+                      value={newBonusDate}
+                      onChange={(e) => {
+                        setNewBonusDate(e.target.value)
+                        if (bonusErrors.date) setBonusErrors((prev) => ({ ...prev, date: '' }))
+                      }}
+                      style={bonusErrors.date ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
+                    />
+                    {bonusErrors.date && (
+                      <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.76rem', color: '#dc2626' }}>
+                        <i className="bi bi-exclamation-circle-fill"></i>
+                        <span>{bonusErrors.date}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-element">
+                    <label className="element-label" style={{ fontSize: '0.78rem' }}>XP del Día *</label>
+                    <input
+                      type="number"
+                      min="1"
+                      className={`input-field ${bonusErrors.xp ? 'is-invalid' : ''}`}
+                      value={newBonusXp}
+                      onChange={(e) => {
+                        setNewBonusXp(e.target.value)
+                        if (bonusErrors.xp) setBonusErrors((prev) => ({ ...prev, xp: '' }))
+                      }}
+                      style={bonusErrors.xp ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
+                    />
+                    {bonusErrors.xp && (
+                      <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.76rem', color: '#dc2626' }}>
+                        <i className="bi bi-exclamation-circle-fill"></i>
+                        <span>{bonusErrors.xp}</span>
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="form-element">
+                    <label className="element-label" style={{ fontSize: '0.78rem' }}>Bambús del Día *</label>
+                    <input
+                      type="number"
+                      min="0"
+                      className={`input-field ${bonusErrors.bambus ? 'is-invalid' : ''}`}
+                      value={newBonusBambus}
+                      onChange={(e) => {
+                        setNewBonusBambus(e.target.value)
+                        if (bonusErrors.bambus) setBonusErrors((prev) => ({ ...prev, bambus: '' }))
+                      }}
+                      style={bonusErrors.bambus ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
+                    />
+                    {bonusErrors.bambus && (
+                      <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.76rem', color: '#dc2626' }}>
+                        <i className="bi bi-exclamation-circle-fill"></i>
+                        <span>{bonusErrors.bambus}</span>
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="form-element">
+                  <label className="element-label" style={{ fontSize: '0.78rem' }}>Nombre de la Promoción / Evento *</label>
+                  <input
+                    type="text"
+                    className={`input-field ${bonusErrors.label ? 'is-invalid' : ''}`}
+                    value={newBonusLabel}
+                    onChange={(e) => {
+                      setNewBonusLabel(e.target.value)
+                      if (bonusErrors.label) setBonusErrors((prev) => ({ ...prev, label: '' }))
+                    }}
+                    placeholder="Ej: Viernes x2 XP o Reto Fin de Semana"
+                    style={bonusErrors.label ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
+                  />
+                  {bonusErrors.label && (
+                    <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.76rem', color: '#dc2626' }}>
+                      <i className="bi bi-exclamation-circle-fill"></i>
+                      <span>{bonusErrors.label}</span>
+                    </div>
+                  )}
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
+                  <button
+                    type="submit"
+                    disabled={savingRules}
+                    style={{
+                      padding: '9px 18px',
+                      background: '#c4f039',
+                      color: '#111d15',
+                      border: 'none',
+                      borderRadius: '10px',
+                      fontWeight: 900,
+                      fontSize: '0.84rem',
+                      cursor: savingRules ? 'not-allowed' : 'pointer',
+                    }}
+                  >
+                    {savingRules ? 'Guardando...' : '+ Asignar Bono'}
+                  </button>
+                </div>
+              </form>
+
+              <h5 style={{ margin: '0 0 8px', fontSize: '0.84rem', fontWeight: 800, color: '#0f172a' }}>
+                Fechas con Promoción Activa:
+              </h5>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', maxHeight: '180px', overflowY: 'auto' }}>
+                {Object.entries(xpBonuses).length === 0 ? (
+                  <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>Sin fechas especiales configuradas.</p>
+                ) : (
+                  Object.entries(xpBonuses)
+                    .sort(([a], [b]) => a.localeCompare(b))
+                    .map(([dStr, bData]) => (
+                      <div
+                        key={dStr}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'space-between',
+                          padding: '8px 12px',
+                          background: '#f8fafc',
+                          borderRadius: '10px',
+                          border: '1px solid #e2e8f0',
+                        }}
+                      >
+                        <div>
+                          <strong style={{ fontSize: '0.82rem', color: '#111d15' }}>{dStr}</strong> · {bData.label}
+                          <span style={{ marginLeft: '8px', background: '#fef08a', color: '#854d0e', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                            +{bData.xp} XP
+                          </span>
+                          <span style={{ marginLeft: '6px', background: '#ecfccb', color: '#15803d', padding: '2px 6px', borderRadius: '4px', fontSize: '0.72rem', fontWeight: 800 }}>
+                            +{bData.bambus ?? generalRewards.baseBambus} bambús
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          disabled={savingRules}
+                          onClick={() => handleDeleteBonus(dStr)}
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            color: '#ef4444',
+                            cursor: 'pointer',
+                            fontSize: '0.8rem',
+                            fontWeight: 700,
+                          }}
+                        >
+                          ✕ Quitar
+                        </button>
+                      </div>
+                    ))
+                )}
+              </div>
+            </div>
+          )}
+        </div>
+      </ModalDialog>
     </div>
   )
 }

@@ -1,9 +1,7 @@
 export const STAFF_WINDOWS = [
   {key:'inicio',label:'Inicio',icon:'bi-grid',group:'ADMINISTRACIÓN & RECEPCIÓN'},
-  {key:'check-in',label:'Control de acceso (check-in)',icon:'bi-fingerprint',group:'ADMINISTRACIÓN & RECEPCIÓN'},
   {key:'socios',label:'Gestión de socios & membresías',icon:'bi-people',group:'ADMINISTRACIÓN & RECEPCIÓN'},
   {key:'invitados',label:'Clientes diarios',icon:'bi-ticket-perforated',group:'ADMINISTRACIÓN & RECEPCIÓN'},
-  {key:'aforo',label:'Control de aforo',icon:'bi-bar-chart',group:'ADMINISTRACIÓN & RECEPCIÓN'},
   {key:'recompensas',label:'Recompensas y promociones',icon:'bi-gift',group:'GESTIÓN COMERCIAL & BENEFICIOS'},
   {key:'mi-pandita',label:'Mi pandita (Socio)',icon:'bi-stars',group:'EXPERIENCIA DEL SOCIO (VISTA)'},
   {key:'asistencias',label:'Asistencias (Socio)',icon:'bi-calendar-check',group:'EXPERIENCIA DEL SOCIO (VISTA)'},
@@ -11,7 +9,7 @@ export const STAFF_WINDOWS = [
   {key:'configuracion',label:'Configuración Empresa',icon:'bi-gear',group:'CONFIGURACIÓN DEL SISTEMA'},
   {key:'usuarios',label:'Usuarios y roles',icon:'bi-person-lock',group:'CONFIGURACIÓN DEL SISTEMA'},
 ];
-const CLIENT=['inicio','aforo','recompensas','mi-pandita','asistencias','mi-membresia'];
+const CLIENT=['inicio','recompensas','mi-pandita','asistencias','mi-membresia'];
 const CLIENT_LABELS={inicio:'Dashboard personal','mi-pandita':'Mi pandita',asistencias:'Mis asistencias'};
 export function moduleLabel(key,user) {
   if(user?.rol==='cliente'&&CLIENT_LABELS[key])return CLIENT_LABELS[key];
@@ -24,12 +22,15 @@ export function canManageMemberLink(user) {
 export function withPersonalTraining(user,sections) {
   if(user?.rol==='cliente'||!user?.memberLink)return sections;
   const result=sections.map(section=>({...section,items:section.items.filter(item=>!PERSONAL_WINDOWS.includes(item.to.split('/').pop()))})).filter(section=>section.items.length);
-  const training={category:'EXPERIENCIA DEL SOCIO (VISTA)',items:[
+  const trainingItems=[
     {to:'/app/mi-pandita',label:moduleLabel('mi-pandita',user),icon:'bi-stars'},
     {to:'/app/asistencias',label:moduleLabel('asistencias',user),icon:'bi-calendar-check'},
     {to:'/app/mi-membresia',label:'Mi membresía',icon:'bi-person-vcard'},
-    {to:'/app/mis-recompensas',label:'Mis recompensas',icon:'bi-gift'},
-  ]};
+  ];
+  if(!canAccess(user,'recompensas')){
+    trainingItems.push({to:'/app/mis-recompensas',label:'Mis recompensas',icon:'bi-gift'});
+  }
+  const training={category:'EXPERIENCIA DEL SOCIO (VISTA)',items:trainingItems};
   result.splice(Math.max(0,result.length-1),0,training);
   return result;
 }

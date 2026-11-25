@@ -10,6 +10,7 @@ const membershipRoutes = require("./membershipRoutes");
 const guestRoutes = require("./guestRoutes");
 const configRoutes = require("./configRoutes");
 const rewardRoutes = require("./rewardRoutes");
+const zkRoutes = require("./zkRoutes");
 
 const router = express.Router();
 
@@ -32,5 +33,6 @@ router.use("/invitados", guestRoutes);
 router.use("/admin/dashboard", require("./dashboardRoutes"));
 router.use("/configuracion", configRoutes);
 router.use("/recompensas", rewardRoutes);
+router.use("/zk", zkRoutes);
 
 module.exports = router;

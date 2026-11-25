@@ -3,6 +3,7 @@ const UserModel = require("../models/UserModel");
 const { sendEmail } = require("../utils/email");
 const { getCurrentWeekRange } = require("../utils/helpers");
 const { checkAndCancelExpiredReservations } = require("../services/cronService");
+const { isValidConfiguredSchedule: isValidGymSchedule } = require("../utils/reservationHelpers");
 
 function buildDatetime(dateValue, timeValue) {
     const normalizedDate = String(dateValue || "").trim();
@@ -28,55 +29,6 @@ function formatMysqlDatetime(date) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(
         date.getHours(),
     )}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
-}
-
-async function isValidGymSchedule(dateTime, durationMinutes) {
-    const dayOfWeek = dateTime.getDay(); // 0 = Sunday, 1 = Monday, ..., 6 = Saturday
-    const entryHour = dateTime.getHours();
-    const entryMinutes = entryHour * 60 + dateTime.getMinutes();
-    const exitMinutes = entryMinutes + durationMinutes;
-
-    try {
-        const [rows] = await db.execute("SELECT clave, valor FROM configuracion WHERE clave LIKE 'horario_%'");
-        const config = {};
-        for (const row of rows) config[row.clave] = row.valor;
-
-        const toMins = (timeStr, def) => {
-            const [h, m] = (timeStr || def).split(":").map(Number);
-            return h * 60 + (m || 0);
-        };
-
-        if (dayOfWeek === 0) {
-            if (config.horario_domingo_abierto !== "1") return false;
-            const domStart = toMins(config.horario_domingo_inicio, "08:00");
-            const domEnd = toMins(config.horario_domingo_fin, "13:00");
-            return entryMinutes >= domStart && exitMinutes <= domEnd;
-        }
-
-        if (dayOfWeek === 6) {
-            const sStart = toMins(config.horario_sabado_inicio, "07:00");
-            const sEnd = toMins(config.horario_sabado_fin, "12:00");
-            return entryMinutes >= sStart && exitMinutes <= sEnd;
-        } else {
-            if (config.horario_semana_modalidad === "continuo") {
-                const cStart = toMins(config.horario_semana_corrido_inicio || config.horario_semana_manana_inicio, "06:30");
-                const cEnd = toMins(config.horario_semana_corrido_fin || config.horario_semana_tarde_fin, "22:00");
-                return entryMinutes >= cStart && exitMinutes <= cEnd;
-            }
-            const mStart = toMins(config.horario_semana_manana_inicio, "06:30");
-            const mEnd = toMins(config.horario_semana_manana_fin, "11:00");
-            const tStart = toMins(config.horario_semana_tarde_inicio, "16:00");
-            const tEnd = toMins(config.horario_semana_tarde_fin, "22:00");
-
-            const inMorning = entryMinutes >= mStart && exitMinutes <= mEnd;
-            const inEvening = entryMinutes >= tStart && exitMinutes <= tEnd;
-            return inMorning || inEvening;
-        }
-    } catch {
-        if (dayOfWeek === 0) return false;
-        if (dayOfWeek === 6) return entryMinutes >= 420 && exitMinutes <= 720;
-        return (entryMinutes >= 390 && exitMinutes <= 660) || (entryMinutes >= 960 && exitMinutes <= 1320);
-    }
 }
 
 class ReservationController {

@@ -5,16 +5,16 @@ const { requireMember } = require('../services/staffMemberLink');
 
 const router = express.Router();
 
-// Rutas de catálogo de recompensas (público / autenticado)
+// Rutas de catálogo de recompensas (solo admin puede crear/editar/eliminar)
 router.get("/catalogo", authenticateToken, RewardController.getRewards);
-router.post("/catalogo", authenticateToken, requireRole("admin"), RewardController.createReward);
-router.put("/catalogo/:id", authenticateToken, requireRole("admin"), RewardController.updateReward);
-router.delete("/catalogo/:id", authenticateToken, requireRole("admin"), RewardController.deleteReward);
+router.post("/catalogo", authenticateToken, requireRole("admin", { strict: true }), RewardController.createReward);
+router.put("/catalogo/:id", authenticateToken, requireRole("admin", { strict: true }), RewardController.updateReward);
+router.delete("/catalogo/:id", authenticateToken, requireRole("admin", { strict: true }), RewardController.deleteReward);
 
-// Rutas de convenios comerciales
+// Rutas de convenios comerciales (solo admin puede crear/eliminar)
 router.get("/convenios", authenticateToken, RewardController.getPartnerships);
-router.post("/convenios", authenticateToken, requireRole("admin"), RewardController.createPartnership);
-router.delete("/convenios/:id", authenticateToken, requireRole("admin"), RewardController.deletePartnership);
+router.post("/convenios", authenticateToken, requireRole("admin", { strict: true }), RewardController.createPartnership);
+router.delete("/convenios/:id", authenticateToken, requireRole("admin", { strict: true }), RewardController.deletePartnership);
 
 // Rutas de canjes
 router.get("/mis-canjes", authenticateToken, requireMember, RewardController.getMyRedemptions);

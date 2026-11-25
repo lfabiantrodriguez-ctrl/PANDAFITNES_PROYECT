@@ -12,6 +12,22 @@ class AttendanceController {
         }
     }
 
+    static async getTodayAttendances(req, res) {
+        try {
+            const records = await AttendanceModel.getTodayRecords();
+            const summary = {
+                enSala: records.filter((r) => r.estado === "en_sala").length,
+                salieron: records.filter((r) => r.estado === "finalizada").length,
+                noMarcaronSalida: records.filter((r) => r.estado === "no_marco_salida").length,
+                totalHoy: records.length,
+            };
+            return res.json({ records, summary });
+        } catch (error) {
+            console.error("Error consultando asistencias de hoy:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
     static async searchBySocio(req, res) {
         try {
             const query = String(req.query.search || "").trim();
@@ -99,6 +115,26 @@ class AttendanceController {
         } catch (error) {
             console.error("Error canjeando recompensa:", error);
             return res.status(400).json({ message: error.message || "No se pudo canjear" });
+        }
+    }
+
+    static async updateAttendanceRules(req, res) {
+        try {
+            const { baseXp, baseBambus, xpBonuses } = req.body || {};
+            if (baseXp !== undefined && (!Number.isFinite(Number(baseXp)) || Number(baseXp) < 1)) {
+                return res.status(400).json({ message: "La experiencia base (XP) debe ser al menos 1." });
+            }
+            if (baseBambus !== undefined && (!Number.isFinite(Number(baseBambus)) || Number(baseBambus) < 0)) {
+                return res.status(400).json({ message: "Los bambús base deben ser 0 o más." });
+            }
+            const saved = await AttendanceModel.saveAttendanceRules({ baseXp, baseBambus, xpBonuses });
+            return res.json({
+                message: "Reglas de puntos actualizadas correctamente.",
+                ...saved,
+            });
+        } catch (error) {
+            console.error("Error actualizando reglas de puntos:", error);
+            return res.status(500).json({ message: "No se pudieron guardar las reglas de puntos." });
         }
     }
 }

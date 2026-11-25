@@ -1,15 +1,24 @@
 const db = require("../config/database");
+const AttendanceModel = require("../models/AttendanceModel");
+const GuestModel = require("../models/GuestModel");
 
 class CapacityController {
     static async getCapacity(req, res) {
         try {
+            await Promise.all([
+                AttendanceModel.closeOverdueAttendances(4),
+                GuestModel.finalizeExpiredGuests(),
+            ]);
             const [configRows] = await db.execute(
                 "SELECT valor FROM configuracion WHERE clave = 'max_capacidad' LIMIT 1",
             );
             const maximo = configRows[0] ? Number(configRows[0].valor) : 0;
 
             const [activeRows] = await db.execute(
-                "SELECT COUNT(*) AS total FROM asistencias WHERE hora_salida IS NULL",
+                `SELECT COUNT(*) AS total
+                 FROM asistencias
+                 WHERE hora_salida IS NULL
+                   AND TIMESTAMPDIFF(MINUTE, hora_entrada, NOW()) < 240`,
             );
             const [guestRows] = await db.execute(
                 `SELECT COUNT(*) AS total

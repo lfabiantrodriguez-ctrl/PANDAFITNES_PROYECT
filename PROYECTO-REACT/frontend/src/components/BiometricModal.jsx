@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { DeviceService } from '../services/DeviceService';
+import { ZkService } from '../services/ZkService';
 
 export default function BiometricModal({
   isOpen,
@@ -14,24 +15,26 @@ export default function BiometricModal({
   const [status, setStatus] = useState('idle'); // 'idle' | 'waiting' | 'scanning' | 'success' | 'error'
   const [errorMessage, setErrorMessage] = useState('');
   const [successMessage, setSuccessMessage] = useState('');
-  const [remoteSessionId, setRemoteSessionId] = useState(null);
-  const [hasPlatform, setHasPlatform] = useState(false);
   const pollTimerRef = useRef(null);
+  const bioCloseBtnRef = useRef(null);
 
   useEffect(() => {
+    let active = true;
     if (!isOpen) {
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
-      setStatus('idle');
-      setErrorMessage('');
-      setSuccessMessage('');
-      setRemoteSessionId(null);
-      return;
+      Promise.resolve().then(() => {
+        if (!active) return;
+        setStatus('idle');
+        setErrorMessage('');
+        setSuccessMessage('');
+      });
+      return () => {
+        active = false;
+      };
     }
 
     DeviceService.hasPlatformAuthenticator().then((available) => {
-      setHasPlatform(available);
-      // Si tiene sensor nativo (ej. celular o laptop con lector), por defecto local
-      // Si está en laptop común sin sensor, por defecto 'phone' o 'simulate'
+      if (!active) return;
       if (available) {
         setActiveMode('local');
       } else {
@@ -40,6 +43,7 @@ export default function BiometricModal({
     });
 
     return () => {
+      active = false;
       if (pollTimerRef.current) clearInterval(pollTimerRef.current);
     };
   }, [isOpen]);
@@ -93,7 +97,6 @@ export default function BiometricModal({
       });
 
       const sessId = sessionData.session.id;
-      setRemoteSessionId(sessId);
 
       // Polling cada 1.5s esperando confirmación del celular
       pollTimerRef.current = setInterval(async () => {
@@ -112,7 +115,9 @@ export default function BiometricModal({
             setStatus('idle');
             setErrorMessage('La sesión de escaneo fue cancelada.');
           }
-        } catch (_) {}
+        } catch {
+          // Reintentar en el siguiente ciclo
+        }
       }, 1500);
     } catch (err) {
       setStatus('error');
@@ -149,10 +154,67 @@ export default function BiometricModal({
     }
   }
 
+  // 4. ESCÁNER USB DE ESCRITORIO (Puente local ZKFinger / DigitalPersona)
+  async function handleUsbBridgeScan() {
+    setStatus('scanning');
+    setErrorMessage('');
+    try {
+      await ZkService.checkUsbBridgeHealth();
+      if (mode === 'register') {
+        if (!dni) {
+          throw new Error('Ingresa el DNI del socio antes de capturar la huella en el lector USB.');
+        }
+        const captured = await ZkService.captureUsbBridge(dni);
+        await ZkService.saveUsbTemplate(token, {
+          dni,
+          template: captured.template,
+          formato: captured.formato || 'ZKFINGER',
+          dispositivo: captured.dispositivo || 'LECTOR_USB',
+        });
+        const sim = await DeviceService.simulateRegister(token, dni);
+        setStatus('success');
+        setSuccessMessage('Huella USB capturada y vinculada correctamente.');
+        setTimeout(() => {
+          onSuccess({ ...sim, usbCaptured: true });
+          onClose();
+        }, 1000);
+      } else {
+        const res = await ZkService.identifyUsbBridge(dni || '');
+        const displayName = res.nombre || res.dni || 'socio';
+        setStatus('success');
+        setSuccessMessage(`Marcación USB registrada para ${displayName}.`);
+        setTimeout(() => {
+          onSuccess({
+            dni: res.dni,
+            user: { dni: res.dni, nombre: res.nombre || '', apellido: res.apellido || '' },
+            usbAlreadyLogged: true,
+            ok: res.ok,
+            message: res.message || `Marcación por lector USB registrada para ${displayName}.`,
+          });
+          onClose();
+        }, 900);
+      }
+    } catch (err) {
+      setStatus('error');
+      setErrorMessage(err.message || 'No se pudo completar la lectura en el lector USB.');
+    }
+  }
+
   if (!isOpen) return null;
+
+  function triggerBioCloseJump() {
+    const btn = bioCloseBtnRef.current;
+    if (!btn) return;
+    btn.classList.remove('modal-close-jump');
+    void btn.offsetWidth;
+    btn.classList.add('modal-close-jump');
+  }
 
   return (
     <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) triggerBioCloseJump();
+      }}
       style={{
         position: 'fixed',
         inset: 0,
@@ -167,6 +229,7 @@ export default function BiometricModal({
       }}
     >
       <div
+        onClick={(e) => e.stopPropagation()}
         style={{
           width: '100%',
           maxWidth: '480px',
@@ -216,15 +279,23 @@ export default function BiometricModal({
             </div>
           </div>
           <button
+            ref={bioCloseBtnRef}
             type="button"
             onClick={onClose}
+            aria-label="Cerrar modal"
             style={{
-              background: 'transparent',
+              width: '34px',
+              height: '34px',
+              borderRadius: '50%',
+              background: 'rgba(255, 255, 255, 0.1)',
               border: 'none',
-              color: '#8fa89b',
+              color: '#cbd5e1',
               fontSize: '1.4rem',
               cursor: 'pointer',
               lineHeight: 1,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
             }}
           >
             <i className="bi bi-x"></i>
@@ -271,7 +342,30 @@ export default function BiometricModal({
               borderRadius: '10px',
               fontWeight: 700,
               fontSize: '0.82rem',
-              padding: '9px 12px',
+              padding: '9px 10px',
+              background: activeMode === 'usb' ? '#c4f039' : 'rgba(255, 255, 255, 0.06)',
+              color: activeMode === 'usb' ? '#111d15' : '#8fa89b',
+              border: 'none',
+              transition: 'all 0.2s',
+            }}
+            onClick={() => {
+              setActiveMode('usb');
+              setStatus('idle');
+              setErrorMessage('');
+            }}
+          >
+            <i className="bi bi-usb-symbol me-1"></i>
+            Lector USB
+          </button>
+
+          <button
+            type="button"
+            className="btn btn-sm flex-fill"
+            style={{
+              borderRadius: '10px',
+              fontWeight: 700,
+              fontSize: '0.82rem',
+              padding: '9px 10px',
               background: activeMode === 'simulate' ? '#c4f039' : 'rgba(255, 255, 255, 0.06)',
               color: activeMode === 'simulate' ? '#111d15' : '#8fa89b',
               border: 'none',
@@ -294,6 +388,7 @@ export default function BiometricModal({
           <div
             onClick={() => {
               if (activeMode === 'phone') handlePhoneScan();
+              else if (activeMode === 'usb') handleUsbBridgeScan();
               else if (activeMode === 'local') handleLocalScan();
               else handleSimulateScan();
             }}
@@ -368,6 +463,8 @@ export default function BiometricModal({
               <h6 style={{ fontWeight: 800, color: '#ffffff', marginBottom: '6px' }}>
                 {activeMode === 'phone'
                   ? 'Conecta o abre tu celular para escanear'
+                  : activeMode === 'usb'
+                  ? 'Lector USB de escritorio listo'
                   : activeMode === 'local'
                   ? 'Sensor biométrico listo'
                   : 'Haz clic en la huella para simular lectura'}
@@ -375,6 +472,8 @@ export default function BiometricModal({
               <p style={{ fontSize: '0.82rem', color: '#8fa89b', marginBottom: '16px' }}>
                 {activeMode === 'phone'
                   ? 'Al pulsar el botón, tu celular vibrará y te pedirá colocar el dedo en su sensor.'
+                  : activeMode === 'usb'
+                  ? 'Requiere el puente local activo (tools/usb-reader-agent/iniciar_lector_usb.bat) y el lector conectado.'
                   : activeMode === 'local'
                   ? 'Se activará el sensor de huella dactilar de este dispositivo.'
                   : 'Prueba la validación y guardado sin necesidad de lector físico.'}
@@ -391,13 +490,16 @@ export default function BiometricModal({
                 }}
                 onClick={() => {
                   if (activeMode === 'phone') handlePhoneScan();
+                  else if (activeMode === 'usb') handleUsbBridgeScan();
                   else if (activeMode === 'local') handleLocalScan();
                   else handleSimulateScan();
                 }}
               >
-                <i className="bi bi-fingerprint me-2"></i>
+                <i className={`bi ${activeMode === 'usb' ? 'bi-usb-symbol' : 'bi-fingerprint'} me-2`}></i>
                 {activeMode === 'phone'
                   ? 'Solicitar huella al Celular'
+                  : activeMode === 'usb'
+                  ? 'Capturar con Lector USB'
                   : activeMode === 'local'
                   ? 'Activar Sensor Local'
                   : 'Simular Huella Dactilar'}
@@ -420,7 +522,7 @@ export default function BiometricModal({
                 style={{ borderRadius: '8px' }}
                 onClick={() => setStatus('idle')}
               >
-                Cancelar espera
+                Detener espera
               </button>
             </div>
           )}

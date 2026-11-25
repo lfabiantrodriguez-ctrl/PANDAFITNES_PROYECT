@@ -34,7 +34,7 @@ test('custom role sees only its permitted API and its own profile',()=>{
  assert.equal(access.canRequest(auth,{originalUrl:'/api/admin/socios'}),true);
  for(const url of ['/api/admin/usuarios','/api/admin/checkin/confirm','/api/configuracion','/api/unknown'])assert.equal(access.canRequest(auth,{originalUrl:url}),false);
  assert.equal(access.canRequest(auth,{originalUrl:'/api/auth/me'}),true);
- assert.equal(access.canRequest({rol:'recepcion',permissions:['check-in']},{originalUrl:'/api/admin/dispositivos/simulate/register'}),false);
+ assert.equal(access.canRequest({rol:'recepcion',permissions:['inicio']},{originalUrl:'/api/admin/dispositivos/simulate/register'}),false);
 });
 test('JWT role is ignored; current role and active state control access',async()=>{
  const middleware=require('../src/middleware/authMiddleware'),original=access.identity;
@@ -78,7 +78,7 @@ test('last administrator cannot be removed',async()=>{
 test('role permissions are persisted atomically',async()=>{
  const original=db.getConnection,calls=[];
  db.getConnection=async()=>({beginTransaction:async()=>{},commit:async()=>calls.push('commit'),rollback:async()=>{},release:()=>{},execute:async(sql,args)=>{calls.push({sql,args});return [{insertId:11}];}});
- try{const res=await route('post','/roles',{etiqueta:'Recepción',descripcion:'Equipo de recepción',permissions:['socios','check-in']});assert.equal(res.statusCode,201);const insert=calls.find(c=>c.sql?.startsWith('INSERT INTO role_access'));assert.deepEqual(JSON.parse(insert.args[3]),['socios','check-in']);assert.ok(calls.includes('commit'));}finally{db.getConnection=original;}
+ try{const res=await route('post','/roles',{etiqueta:'Recepción',descripcion:'Equipo de recepción',permissions:['socios','inicio']});assert.equal(res.statusCode,201);const insert=calls.find(c=>c.sql?.startsWith('INSERT INTO role_access'));assert.deepEqual(JSON.parse(insert.args[3]),['socios','inicio']);assert.ok(calls.includes('commit'));}finally{db.getConnection=original;}
 });
 test('frontend and server catalogs match and custom navigation omits hidden windows',async()=>{
  const {STAFF_WINDOWS,canAccess,homeFor,staffSections,moduleLabel}=await import('../../frontend/src/utils/access.js');

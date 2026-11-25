@@ -1,18 +1,24 @@
 import {homeFor} from '../utils/access'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { AuthService } from '../services/AuthService'
-import {createBackdropGesture} from '../utils/modalBackdrop'
 
 export const ROLE_HOME = {
-  admin: '/app/check-in',
-  cliente: '/app/aforo',
+  admin: '/app/inicio',
+  cliente: '/app/inicio',
 }
 
 export default function LoginModal({ isOpen, onClose, onLogin, initialDni = '' }) {
   const navigate = useNavigate()
-  const [backdrop] = useState(createBackdropGesture)
-  useEffect(() => { backdrop.reset() }, [isOpen, backdrop])
+  const closeBtnRef = useRef(null)
+
+  function triggerCloseJump() {
+    const btn = closeBtnRef.current
+    if (!btn) return
+    btn.classList.remove('modal-close-jump')
+    void btn.offsetWidth
+    btn.classList.add('modal-close-jump')
+  }
   
   // Modos del modal: 'login' | 'forgot_step1' | 'forgot_step2'
   const [viewMode, setViewMode] = useState('login')
@@ -211,15 +217,13 @@ export default function LoginModal({ isOpen, onClose, onLogin, initialDni = '' }
 
   return (
     <div className="plm-overlay"
-      onPointerDownCapture={backdrop.pointerDown}
-      onPointerMoveCapture={backdrop.pointerMove}
-      onPointerUpCapture={backdrop.pointerUp}
-      onPointerCancel={backdrop.reset}
-      onClick={event=>{if(backdrop.shouldDismiss(event))onClose()}}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) triggerCloseJump()
+      }}
       role="dialog" aria-modal="true" aria-labelledby="plm-login-title">
       <div className="plm-card" onClick={(e) => e.stopPropagation()}>
         {/* Botón cerrar */}
-        <button className="plm-close-btn" onClick={onClose} type="button" aria-label="Cerrar modal">
+        <button ref={closeBtnRef} className="plm-close-btn" onClick={onClose} type="button" aria-label="Cerrar modal">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round">
             <line x1="18" y1="6" x2="6" y2="18"></line>
             <line x1="6" y1="6" x2="18" y2="18"></line>

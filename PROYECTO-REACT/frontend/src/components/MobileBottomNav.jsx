@@ -17,14 +17,16 @@ export default function MobileBottomNav({ user }) {
       {isAdmin ? (
         <>
           <NavLink
-            to="/app/check-in"
+            to="/app/inicio"
             className={({ isActive }) => `mbn-item ${isActive ? 'active' : ''}`}
           >
             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M9 11l3 3L22 4" />
-              <path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11" />
+              <rect x="3" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="3" width="7" height="7" rx="1.5" />
+              <rect x="14" y="14" width="7" height="7" rx="1.5" />
+              <rect x="3" y="14" width="7" height="7" rx="1.5" />
             </svg>
-            <span>{moduleLabel('check-in',user)}</span>
+            <span>{moduleLabel('inicio',user)}</span>
           </NavLink>
 
           <NavLink
@@ -134,16 +136,6 @@ export default function MobileBottomNav({ user }) {
               <line x1="12" y1="22" x2="12" y2="7"></line>
             </svg>
             <span>{moduleLabel('recompensas',user)}</span>
-          </NavLink>
-
-          <NavLink
-            to="/app/aforo"
-            className={({ isActive }) => `mbn-item ${isActive ? 'active' : ''}`}
-          >
-            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"></path>
-            </svg>
-            <span>{moduleLabel('aforo',user)}</span>
           </NavLink>
         </>
       )}

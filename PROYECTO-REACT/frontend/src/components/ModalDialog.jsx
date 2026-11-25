@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 
 export default function ModalDialog({
   isOpen,
@@ -10,6 +10,8 @@ export default function ModalDialog({
   size = 'md', // 'sm' | 'md' | 'lg' | 'xl'
   badge,
 }) {
+  const closeBtnRef = useRef(null)
+
   useEffect(() => {
     if (!isOpen) return
 
@@ -23,6 +25,14 @@ export default function ModalDialog({
 
   if (!isOpen) return null
 
+  function triggerCloseJump() {
+    const btn = closeBtnRef.current
+    if (!btn) return
+    btn.classList.remove('modal-close-jump')
+    void btn.offsetWidth
+    btn.classList.add('modal-close-jump')
+  }
+
   const sizeClass = size === 'lg' ? 'modal-lg' : size === 'sm' ? 'modal-sm' : size === 'xl' ? 'modal-xl' : ''
 
   return (
@@ -31,6 +41,11 @@ export default function ModalDialog({
       tabIndex="-1"
       role="dialog"
       aria-modal="true"
+      onClick={(e) => {
+        if (!e.target.closest('.modal-content')) {
+          triggerCloseJump()
+        }
+      }}
       style={{
         backgroundColor: 'rgba(15, 23, 42, 0.72)',
         backdropFilter: 'blur(8px)',
@@ -44,17 +59,18 @@ export default function ModalDialog({
         role="document"
         style={{
           margin: '16px auto',
-          maxWidth: size === 'lg' ? '880px' : size === 'sm' ? '420px' : '580px',
+          maxWidth: size === 'xl' ? '1020px' : size === 'lg' ? '840px' : size === 'sm' ? '420px' : '580px',
           width: 'calc(100% - 32px)',
         }}
-        onClick={(e) => e.stopPropagation()}
       >
         <div
           className="modal-content border-0 shadow-lg"
+          onClick={(e) => e.stopPropagation()}
           style={{
             borderRadius: '20px',
             overflow: 'hidden',
             background: '#ffffff',
+            maxWidth: '100%',
             boxShadow: '0 25px 60px -15px rgba(15, 23, 42, 0.35)',
           }}
         >
@@ -98,6 +114,7 @@ export default function ModalDialog({
             </div>
 
             <button
+              ref={closeBtnRef}
               type="button"
               className="btn text-white p-1 d-flex align-items-center justify-content-center"
               onClick={onClose}

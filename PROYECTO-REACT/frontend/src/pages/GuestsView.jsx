@@ -2,8 +2,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import ViewTitle from '../components/ViewTitle'
 import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
+import TablePagination, { paginateList } from '../components/TablePagination'
 import { GuestService } from '../services/GuestService'
-import { getTodayPeru } from '../utils/formatters'
 
 function formatToLocalDateTime(date) {
   const pad = (value) => String(value).padStart(2, '0')
@@ -13,29 +13,6 @@ function formatToLocalDateTime(date) {
 function formatToLocalTime(date) {
   const pad = (value) => String(value).padStart(2, '0')
   return `${pad(date.getHours())}:${pad(date.getMinutes())}`
-}
-
-function isWithinOpeningHours(date) {
-  const day = date.getDay()
-  const hours = date.getHours()
-  const minutes = date.getMinutes()
-  const time = hours * 100 + minutes
-
-  const inRange = (startH, startM, endH, endM) => {
-    const start = startH * 100 + startM
-    const end = endH * 100 + endM
-    return time >= start && time <= end
-  }
-
-  if (day >= 1 && day <= 5) {
-    return inRange(6, 30, 11, 0) || inRange(16, 0, 22, 0)
-  }
-
-  if (day === 6) {
-    return inRange(7, 0, 12, 0)
-  }
-
-  return false
 }
 
 function getDefaultGuestSchedule() {
@@ -53,14 +30,8 @@ function getDefaultGuestSchedule() {
   }
 }
 
-function isGymOpenNow() {
-  return isWithinOpeningHours(new Date())
-}
-
 export default function GuestsView({ token }) {
-  const today = useMemo(() => getTodayPeru(), [])
   const defaultSchedule = useMemo(() => getDefaultGuestSchedule(), [])
-  const [gymOpenNow, setGymOpenNow] = useState(isGymOpenNow())
   const [guests, setGuests] = useState([])
   const [loading, setLoading] = useState(true)
   const [showForm, setShowForm] = useState(false)
@@ -68,6 +39,8 @@ export default function GuestsView({ token }) {
   const [message, setMessage] = useState('')
   const [formStatus, setFormStatus] = useState({ loading: false, error: '' })
   const [searchTerm, setSearchTerm] = useState('')
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 10
 
   const [form, setForm] = useState({
     nombre: '',
@@ -92,27 +65,47 @@ export default function GuestsView({ token }) {
   }, [token])
 
   useEffect(() => {
-    loadGuests()
-  }, [loadGuests])
+    let active = true
+    GuestService.getGuests(token)
+      .then((data) => {
+        if (active) setGuests(data.guests || [])
+      })
+      .catch((error) => {
+        if (active) setMessage(error.message)
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    const timer = setInterval(() => {
+      GuestService.getGuests(token)
+        .then((data) => {
+          if (active && data?.guests) setGuests(data.guests)
+        })
+        .catch(() => {})
+    }, 15000)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [token])
 
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setGymOpenNow(isGymOpenNow())
-    }, 30000)
+  async function handleCheckoutGuest(guest) {
+    try {
+      const res = await GuestService.checkoutGuest(token, guest.id)
+      setMessage(res.message || 'Salida registrada y cupo liberado del aforo.')
+      await loadGuests()
+    } catch (error) {
+      setMessage(error.message || 'No se pudo finalizar el pase.')
+    }
+  }
 
-    return () => clearInterval(interval)
-  }, [])
-
-  useEffect(() => {
+  const computedFechaFin = useMemo(() => {
     const start = new Date(`${form.fecha}T${form.horaInicio}:00`)
-    if (Number.isNaN(start.getTime())) return
+    if (Number.isNaN(start.getTime())) return form.fechaFin
     const duration = Number(form.duracionHoras) || 1
     const end = new Date(start)
     end.setMinutes(end.getMinutes() + duration * 60)
-    const nextEnd = formatToLocalDateTime(end)
-    if (form.fechaFin !== nextEnd) {
-      setForm((current) => ({ ...current, fechaFin: nextEnd }))
-    }
+    return formatToLocalDateTime(end)
   }, [form.fecha, form.horaInicio, form.duracionHoras, form.fechaFin])
 
   const [fieldErrors, setFieldErrors] = useState({})
@@ -179,7 +172,7 @@ export default function GuestsView({ token }) {
         nombre: form.nombre.trim(),
         telefono: form.telefono.trim(),
         fechaInicio: `${form.fecha}T${form.horaInicio}:00`,
-        fechaFin: form.fechaFin,
+        fechaFin: computedFechaFin,
         duracionHoras: Number(form.duracionHoras),
         bypassSchedule: !!form.testMode,
       })
@@ -211,6 +204,11 @@ export default function GuestsView({ token }) {
     )
   }, [guests, searchTerm])
 
+  const paginatedGuests = useMemo(
+    () => paginateList(filteredGuests, currentPage, PAGE_SIZE),
+    [filteredGuests, currentPage]
+  )
+
   const calculateFee = (hours) => {
     const h = Number(hours) || 1
     if (h === 1) return 5
@@ -224,7 +222,7 @@ export default function GuestsView({ token }) {
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3">
         <ViewTitle
           title={moduleLabel('invitados')}
-          text="Control de pases diarios, ingresos por horas y cobranzas en recepción."
+          text="Pases diarios e ingresos por hora."
         />
 
         {/* Botón Desktop */}
@@ -256,7 +254,10 @@ export default function GuestsView({ token }) {
           className="form-control form-control-lg border shadow-sm"
           placeholder="Buscar por nombre o teléfono del cliente..."
           value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
+          onChange={(e) => {
+            setSearchTerm(e.target.value)
+            setCurrentPage(1)
+          }}
           style={{ borderRadius: '12px', fontSize: '0.95rem' }}
         />
       </div>
@@ -294,7 +295,7 @@ export default function GuestsView({ token }) {
                 </tr>
               )}
               {!loading &&
-                filteredGuests.map((guest) => (
+                paginatedGuests.items.map((guest) => (
                   <tr key={guest.id}>
                     <td className="px-3 fw-bold text-dark">#CD-{guest.id}</td>
                     <td className="px-3 fw-bold text-dark">{guest.nombre}</td>
@@ -303,19 +304,39 @@ export default function GuestsView({ token }) {
                     <td className="px-3">{guest.fechaFin ? new Date(guest.fechaFin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
                     <td className="px-3 fw-bold">S/. {Number(guest.monto || calculateFee(guest.duracionHoras)).toFixed(2)}</td>
                     <td className="px-3">
-                      <span className="badge bg-dark text-white px-2 py-1 text-uppercase" style={{ fontSize: '0.72rem' }}>
-                        {guest.estado || 'Activo'}
+                      <span
+                        className="badge px-2 py-1 text-uppercase"
+                        style={{
+                          fontSize: '0.72rem',
+                          background: guest.estado === 'activo' ? '#ecfccb' : '#f1f5f9',
+                          color: guest.estado === 'activo' ? '#15803d' : '#475569',
+                          border: guest.estado === 'activo' ? '1px solid #d9f99d' : '1px solid #e2e8f0',
+                        }}
+                      >
+                        {guest.estado === 'activo' ? 'En sala' : 'Finalizado'}
                       </span>
                     </td>
                     <td className="px-3 text-end">
-                      <button
-                        className="btn btn-sm btn-outline-dark fw-bold px-3 py-1"
-                        style={{ borderRadius: '8px', fontSize: '0.8rem' }}
-                        type="button"
-                        onClick={() => setSelectedGuest(guest)}
-                      >
-                        Ver Detalle
-                      </button>
+                      <div className="d-inline-flex gap-2">
+                        {guest.estado === 'activo' && (
+                          <button
+                            className="btn btn-sm btn-outline-danger fw-bold px-2 py-1"
+                            style={{ borderRadius: '8px', fontSize: '0.78rem' }}
+                            type="button"
+                            onClick={() => handleCheckoutGuest(guest)}
+                          >
+                            Marcar Salida
+                          </button>
+                        )}
+                        <button
+                          className="btn btn-sm btn-outline-dark fw-bold px-3 py-1"
+                          style={{ borderRadius: '8px', fontSize: '0.8rem' }}
+                          type="button"
+                          onClick={() => setSelectedGuest(guest)}
+                        >
+                          Ver Detalle
+                        </button>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -339,7 +360,7 @@ export default function GuestsView({ token }) {
         )}
         {!loading && (
           <div className="mobile-card-list">
-            {filteredGuests.map((guest) => (
+            {paginatedGuests.items.map((guest) => (
               <div key={guest.id} className="mobile-data-card">
                 {/* Header */}
                 <div className="mobile-card-header">
@@ -356,8 +377,15 @@ export default function GuestsView({ token }) {
                     </div>
                   </div>
                   <div>
-                    <span className="badge bg-dark text-white px-2 py-1 text-uppercase" style={{ fontSize: '0.68rem' }}>
-                      {guest.estado || 'Activo'}
+                    <span
+                      className="badge px-2 py-1 text-uppercase"
+                      style={{
+                        fontSize: '0.68rem',
+                        background: guest.estado === 'activo' ? '#ecfccb' : '#f1f5f9',
+                        color: guest.estado === 'activo' ? '#15803d' : '#475569',
+                      }}
+                    >
+                      {guest.estado === 'activo' ? 'En sala' : 'Finalizado'}
                     </span>
                   </div>
                 </div>
@@ -367,7 +395,8 @@ export default function GuestsView({ token }) {
                   <div className="mobile-card-field">
                     <div className="mobile-card-label">Horario Entrada / Salida</div>
                     <div className="mobile-card-value" style={{ fontSize: '0.8rem' }}>
-                      <span>🕒 {guest.fechaInicio ? new Date(guest.fechaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
+                      <i className="bi bi-clock me-1 text-muted" aria-hidden="true" />
+                      <span>{guest.fechaInicio ? new Date(guest.fechaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
                       <span className="text-muted mx-1">→</span>
                       <span>{guest.fechaFin ? new Date(guest.fechaFin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</span>
                     </div>
@@ -382,9 +411,19 @@ export default function GuestsView({ token }) {
                 </div>
 
                 {/* Acción */}
-                <div className="mobile-card-actions">
+                <div className="mobile-card-actions d-flex gap-2">
+                  {guest.estado === 'activo' && (
+                    <button
+                      className="btn btn-sm btn-outline-danger fw-bold py-2 flex-fill"
+                      style={{ borderRadius: '10px', fontSize: '0.82rem' }}
+                      type="button"
+                      onClick={() => handleCheckoutGuest(guest)}
+                    >
+                      Marcar Salida
+                    </button>
+                  )}
                   <button
-                    className="btn btn-sm btn-dark fw-bold w-100 py-2 d-flex align-items-center justify-content-center gap-2"
+                    className="btn btn-sm btn-dark fw-bold flex-fill py-2 d-flex align-items-center justify-content-center gap-2"
                     style={{
                       borderRadius: '10px',
                       background: '#111d15',
@@ -395,8 +434,8 @@ export default function GuestsView({ token }) {
                     type="button"
                     onClick={() => setSelectedGuest(guest)}
                   >
-                    <span>📋</span>
-                    <span>Ver Detalle del Pase</span>
+                    <i className="bi bi-card-text" aria-hidden="true" />
+                    <span>Ver Detalle</span>
                   </button>
                 </div>
               </div>
@@ -405,16 +444,26 @@ export default function GuestsView({ token }) {
         )}
       </div>
 
+      {!loading && (
+        <TablePagination
+          totalItems={filteredGuests.length}
+          currentPage={paginatedGuests.safePage}
+          pageSize={PAGE_SIZE}
+          onPageChange={setCurrentPage}
+          itemLabel="clientes"
+        />
+      )}
+
       {/* MODAL 1: REGISTRAR CLIENTE DIARIO */}
       <ModalDialog
         isOpen={showForm}
         onClose={() => setShowForm(false)}
         title="Registrar Cliente Diario"
-        subtitle="Registra el pase por horas y tarifa de un usuario sin membresía"
+        subtitle="Pase por horas sin membresía."
         badge="Acceso Diario"
         size="md"
       >
-        <form onSubmit={handleCreateGuest}>
+        <form onSubmit={handleCreateGuest} noValidate>
           {formStatus.error && (
             <div className="alert alert-danger py-2 px-3 small mb-3">
               {formStatus.error}
@@ -544,7 +593,10 @@ export default function GuestsView({ token }) {
           <div className="p-3 mt-4 rounded-3 border bg-light d-flex justify-content-between align-items-center">
             <div>
               <strong className="text-dark">Total a Cobrar</strong>
-              <div className="text-muted small">Tolerancia de 10 min al finalizar</div>
+              <div className="text-muted small">
+                Salida directa a las{' '}
+                <strong>{computedFechaFin ? computedFechaFin.slice(11, 16) : '--:--'}</strong> (se descuenta del aforo automáticamente, sin huella)
+              </div>
             </div>
             <span className="badge bg-dark text-white fs-6 px-3 py-2">
               S/. {calculateFee(form.duracionHoras).toFixed(2)}
@@ -552,14 +604,6 @@ export default function GuestsView({ token }) {
           </div>
 
           <div className="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
-            <button
-              type="button"
-              className="btn btn-outline-dark px-4 py-2 fw-semibold"
-              onClick={() => setShowForm(false)}
-              disabled={formStatus.loading}
-            >
-              Cancelar
-            </button>
             <button
               type="submit"
               className="btn px-4 py-2 fw-bold shadow-sm"
@@ -580,16 +624,6 @@ export default function GuestsView({ token }) {
         subtitle={selectedGuest ? `Pase Diario #CD-${selectedGuest.id}` : ''}
         badge="Ticket de Ingreso"
         size="md"
-        footer={
-          <button
-            type="button"
-            className="btn w-100 fw-bold py-2"
-            onClick={() => setSelectedGuest(null)}
-            style={{ background: '#121e17', color: '#c4f039', fontWeight: 800, border: '1.5px solid #c4f039', borderRadius: '10px' }}
-          >
-            Cerrar
-          </button>
-        }
       >
         {selectedGuest && (
           <div className="d-flex flex-column gap-3">

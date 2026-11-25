@@ -110,7 +110,8 @@ function getPartnerImage(partner) {
 
 export default function RewardsView({ token, user, personal = false }) {
   const navigate = useNavigate()
-  const isAdmin = Boolean(user && user.rol !== 'cliente' && !personal)
+  const canConfigureRewards = Boolean(user && user.rol === 'admin' && !personal)
+  const canDeliverRewards = Boolean(user && user.rol !== 'cliente' && !personal && (user.rol === 'admin' || user.permissions?.includes('recompensas')))
   const hasMemberAccount = user?.rol === 'cliente' || Boolean(user?.memberLink?.activo)
   const [activeTab, setActiveTab] = useState('catalogo')
   const [loading, setLoading] = useState(true)
@@ -144,6 +145,7 @@ export default function RewardsView({ token, user, personal = false }) {
   })
   const [showCategoryModal, setShowCategoryModal] = useState(false)
   const [newCatName, setNewCatName] = useState('')
+  const [catError, setCatError] = useState('')
 
   const [searchTerm, setSearchTerm] = useState('')
   const [selectedCategory, setSelectedCategory] = useState('all')
@@ -206,14 +208,14 @@ export default function RewardsView({ token, user, personal = false }) {
     window.addEventListener('focus', update)
     window.addEventListener('panda-progress-updated', update)
     return () => { clearInterval(timer); window.removeEventListener('focus', update); window.removeEventListener('panda-progress-updated', update) }
-  }, [token, isAdmin, user?.memberLink?.id, user?.memberLink?.activo])
+  }, [token, canDeliverRewards, user?.memberLink?.id, user?.memberLink?.activo])
 
   async function loadAllData(background = false) {
     if (!background) setLoading(true)
     try {
       const [panda, catalog, partners, mine, all] = await Promise.all([
         hasMemberAccount ? AttendanceService.getPandaStatus(token) : Promise.resolve({bambusDisponibles:null,canRedeem:false}), RewardService.getRewards(token), RewardService.getPartnerships(token),
-        hasMemberAccount ? RewardService.getMyRedemptions(token) : Promise.resolve({redemptions:[]}), isAdmin ? RewardService.getAllRedemptions(token) : Promise.resolve(null),
+        hasMemberAccount ? RewardService.getMyRedemptions(token) : Promise.resolve({redemptions:[]}), canDeliverRewards ? RewardService.getAllRedemptions(token) : Promise.resolve(null),
       ])
       setBambooBalance(panda.bambusDisponibles)
       setCanRedeem(panda.canRedeem)
@@ -396,18 +398,22 @@ export default function RewardsView({ token, user, personal = false }) {
   function handleAddCategory(e) {
     e.preventDefault()
     const trimmed = newCatName.trim()
-    if (!trimmed) return
-    if (categories.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
-      alert('Esta categoría ya se encuentra en el catálogo.')
+    if (!trimmed) {
+      setCatError('Ingresa el nombre de la categoría.')
       return
     }
+    if (categories.some((c) => c.toLowerCase() === trimmed.toLowerCase())) {
+      setCatError('Esta categoría ya existe.')
+      return
+    }
+    setCatError('')
     const updated = [...categories, trimmed]
     setCategories(updated)
     try {
       localStorage.setItem('panda_custom_categories', JSON.stringify(updated))
     } catch (_) {}
     setNewCatName('')
-    setStatus({ loading: false, error: '', success: 'Categoría "' + trimmed + '" añadida exitosamente.' })
+    setStatus({ loading: false, error: '', success: 'Categoría "' + trimmed + '" añadida.' })
   }
 
   function handleRemoveCategory(catName) {
@@ -643,76 +649,78 @@ export default function RewardsView({ token, user, personal = false }) {
   }
 
   return (
-    <div className="dashboard-page" style={{ maxWidth: '1240px', margin: '0 auto', paddingBottom: '70px', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
+    <div className="dashboard-page" style={{ maxWidth: '100%', margin: 0, paddingBottom: '70px', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       {/* Encabezado */}
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
           <ViewTitle
             title={moduleLabel(personal?'mis-recompensas':'recompensas',user)}
-            subtitle="Canjea tus bambús ganados con tu Pandita y aprovecha beneficios exclusivos con marcas aliadas."
+            subtitle="Canjea bambús por premios y convenios."
           />
         </div>
 
         {/* Saldo de Bambús & Acceso a Mi Pandita */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
-          <button
-            type="button"
-            onClick={() => navigate('/app/mi-pandita')}
-            style={{
-              padding: isMobile ? '10px 14px' : '12px 18px',
-              borderRadius: '14px',
-              border: '1.5px solid #16241c',
-              background: '#ffffff',
-              color: '#111d15',
-              fontWeight: 800,
-              fontSize: isMobile ? '0.8rem' : '0.86rem',
-              cursor: 'pointer',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '8px',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
-              transition: 'all 0.2s',
-              flex: isMobile ? '1 1 140px' : 'none',
-            }}
-          >
-            <i className="bi bi-stars" style={{ fontSize: '1.15rem' }} aria-hidden="true" />
-            <span>Ver Mi Pandita</span>
-          </button>
+        {hasMemberAccount && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap', width: isMobile ? '100%' : 'auto' }}>
+            <button
+              type="button"
+              onClick={() => navigate('/app/mi-pandita')}
+              style={{
+                padding: isMobile ? '10px 14px' : '12px 18px',
+                borderRadius: '14px',
+                border: '1.5px solid #16241c',
+                background: '#ffffff',
+                color: '#111d15',
+                fontWeight: 800,
+                fontSize: isMobile ? '0.8rem' : '0.86rem',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: '8px',
+                boxShadow: '0 2px 8px rgba(0,0,0,0.04)',
+                transition: 'all 0.2s',
+                flex: isMobile ? '1 1 140px' : 'none',
+              }}
+            >
+              <i className="bi bi-stars" style={{ fontSize: '1.15rem' }} aria-hidden="true" />
+              <span>Ver Mi Pandita</span>
+            </button>
 
-          <div
-            style={{
-              background: 'linear-gradient(135deg, #111d15 0%, #16241c 100%)',
-              border: '1px solid #233c2a',
-              borderRadius: '16px',
-              padding: isMobile ? '10px 16px' : '12px 22px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: '10px',
-              boxShadow: '0 6px 18px rgba(17, 29, 21, 0.25)',
-              flex: isMobile ? '1 1 180px' : 'none',
-              boxSizing: 'border-box',
-            }}
-          >
-            <i className="bi bi-fire" style={{ fontSize: isMobile ? '1.3rem' : '1.6rem', color: '#c4f039' }}></i>
-            <div>
-              <div
-                style={{
-                  fontSize: isMobile ? '0.65rem' : '0.72rem',
-                  fontWeight: 800,
-                  color: '#84cc16',
-                  letterSpacing: '0.06em',
-                  textTransform: 'uppercase',
-                }}
-              >
-                Tus Bambús Disponibles
-              </div>
-              <div style={{ fontSize: isMobile ? '1.25rem' : '1.45rem', fontWeight: 900, color: '#ffffff', lineHeight: 1.1 }}>
-                {bambooBalance} <span style={{ fontSize: '0.82rem', color: '#c4f039' }}>BAMBÚS</span>
+            <div
+              style={{
+                background: 'linear-gradient(135deg, #111d15 0%, #16241c 100%)',
+                border: '1px solid #233c2a',
+                borderRadius: '16px',
+                padding: isMobile ? '10px 16px' : '12px 22px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '10px',
+                boxShadow: '0 6px 18px rgba(17, 29, 21, 0.25)',
+                flex: isMobile ? '1 1 180px' : 'none',
+                boxSizing: 'border-box',
+              }}
+            >
+              <i className="bi bi-fire" style={{ fontSize: isMobile ? '1.3rem' : '1.6rem', color: '#c4f039' }}></i>
+              <div>
+                <div
+                  style={{
+                    fontSize: isMobile ? '0.65rem' : '0.72rem',
+                    fontWeight: 800,
+                    color: '#84cc16',
+                    letterSpacing: '0.06em',
+                    textTransform: 'uppercase',
+                  }}
+                >
+                  Tus Bambús Disponibles
+                </div>
+                <div style={{ fontSize: isMobile ? '1.25rem' : '1.45rem', fontWeight: 900, color: '#ffffff', lineHeight: 1.1 }}>
+                  {bambooBalance ?? 0} <span style={{ fontSize: '0.82rem', color: '#c4f039' }}>BAMBÚS</span>
+                </div>
               </div>
             </div>
           </div>
-        </div>
+        )}
       </div>
 
       {/* Alertas */}
@@ -798,8 +806,8 @@ export default function RewardsView({ token, user, personal = false }) {
                   style={{
                     position: 'relative',
                     zIndex: 2,
-                    padding: isMobile ? '16px 14px' : '32px 38px',
-                    maxWidth: '660px',
+                    padding: isMobile ? '16px 46px' : '32px 62px',
+                    maxWidth: '680px',
                     width: '100%',
                     boxSizing: 'border-box',
                   }}
@@ -1127,7 +1135,7 @@ export default function RewardsView({ token, user, personal = false }) {
               <span>Mis Canjes ({myRedemptions.length})</span>
             </button>
 
-            {isAdmin && (
+            {canDeliverRewards && (
               <button
                 type="button"
                 onClick={() => setActiveTab('admin_canjes')}
@@ -1152,7 +1160,7 @@ export default function RewardsView({ token, user, personal = false }) {
           </div>
         </div>
 
-        {isAdmin && (
+        {canConfigureRewards && (
           <div className="rewards-admin-actions-bar">
             <button
               type="button"
@@ -1598,7 +1606,7 @@ export default function RewardsView({ token, user, personal = false }) {
                           </span>
                         </button>
 
-                        {isAdmin && (
+                        {canConfigureRewards && (
                           <div
                             className="reward-card-admin-row"
                             style={{
@@ -1942,7 +1950,7 @@ export default function RewardsView({ token, user, personal = false }) {
                           </button>
                         </div>
 
-                        {isAdmin && (
+                        {canConfigureRewards && (
                           <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '4px' }}>
                             <button
                               type="button"
@@ -2036,8 +2044,8 @@ export default function RewardsView({ token, user, personal = false }) {
         </div>
       )}
 
-      {/* RECEPCIÓN / ENTREGAS (ADMIN) */}
-      {isAdmin && activeTab === 'admin_canjes' && (
+      {/* RECEPCIÓN / ENTREGAS (ADMIN Y RECEPCIÓN) */}
+      {canDeliverRewards && activeTab === 'admin_canjes' && (
         <div style={{ background: '#ffffff', borderRadius: '20px', padding: '24px 18px', border: '1px solid #e3e8e2' }}>
           <h3 style={{ fontSize: '1.15rem', fontWeight: 800, color: '#111d15', margin: '0 0 16px 0', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <i className="bi bi-box-seam-fill text-primary"></i>
@@ -2503,23 +2511,29 @@ export default function RewardsView({ token, user, personal = false }) {
       {/* MODAL GESTIÓN DE CATEGORÍAS */}
       <ModalDialog
         isOpen={showCategoryModal}
-        onClose={() => setShowCategoryModal(false)}
-        title="Gestionar Categorías del Catálogo"
-        subtitle="Crea o elimina las categorías para organizar productos y filtros"
+        onClose={() => { setShowCategoryModal(false); setCatError('') }}
+        title="Gestionar Categorías"
+        subtitle="Organiza los premios del catálogo."
         badge="Administración"
         size="md"
       >
         <div>
-          <form onSubmit={handleAddCategory} className="mb-4">
+          <form onSubmit={handleAddCategory} noValidate className="mb-4">
             <label className="form-label fw-bold text-dark small mb-1">Nueva Categoría</label>
             <div className="input-group">
               <input
                 type="text"
-                className="form-control"
-                placeholder="Ej: Snacks Saludables, Merchandising..."
+                className={`form-control ${catError ? 'is-invalid' : ''}`}
+                placeholder="Ej: Snacks Saludables..."
                 value={newCatName}
-                onChange={(e) => setNewCatName(e.target.value)}
-                style={{ borderRadius: '10px 0 0 10px' }}
+                onChange={(e) => {
+                  setNewCatName(e.target.value)
+                  if (catError) setCatError('')
+                }}
+                style={{
+                  borderRadius: '10px 0 0 10px',
+                  ...(catError ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}),
+                }}
               />
               <button
                 type="submit"
@@ -2530,6 +2544,12 @@ export default function RewardsView({ token, user, personal = false }) {
                 <span>Agregar</span>
               </button>
             </div>
+            {catError && (
+              <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
+                <i className="bi bi-exclamation-circle-fill"></i>
+                <span>{catError}</span>
+              </div>
+            )}
           </form>
 
           <div>
@@ -2587,7 +2607,7 @@ export default function RewardsView({ token, user, personal = false }) {
         badge="Administración"
         size="lg"
       >
-        <form onSubmit={handleCreateReward}>
+        <form onSubmit={handleCreateReward} noValidate>
           {createRewardErrors.general && (
             <div className="alert alert-danger py-2 px-3 small mb-3 d-flex align-items-center gap-2">
               <i className="bi bi-exclamation-triangle-fill"></i>
@@ -2876,14 +2896,6 @@ export default function RewardsView({ token, user, personal = false }) {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
             <button
-              type="button"
-              onClick={() => setShowAddRewardModal(false)}
-              className="btn btn-outline-dark px-3 py-2"
-              style={{ borderRadius: '10px', fontSize: '0.86rem' }}
-            >
-              Cancelar
-            </button>
-            <button
               type="submit"
               className="btn btn-dark px-4 py-2"
               style={{ background: '#c4f039', color: '#111d15', border: 'none', fontWeight: 800, borderRadius: '10px', fontSize: '0.86rem' }}
@@ -2903,7 +2915,7 @@ export default function RewardsView({ token, user, personal = false }) {
         badge="Administración"
         size="lg"
       >
-        <form onSubmit={handleUpdateReward}>
+        <form onSubmit={handleUpdateReward} noValidate>
           {editRewardErrors.general && (
             <div className="alert alert-danger py-2 px-3 small mb-3 d-flex align-items-center gap-2">
               <i className="bi bi-exclamation-triangle-fill"></i>
@@ -3154,14 +3166,6 @@ export default function RewardsView({ token, user, personal = false }) {
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
             <button
-              type="button"
-              onClick={() => setEditingReward(null)}
-              className="btn btn-outline-dark px-3 py-2"
-              style={{ borderRadius: '10px', fontSize: '0.86rem' }}
-            >
-              Cancelar
-            </button>
-            <button
               type="submit"
               className="btn btn-dark px-4 py-2"
               style={{ background: '#c4f039', color: '#111d15', border: 'none', fontWeight: 800, borderRadius: '10px', fontSize: '0.86rem' }}
@@ -3181,7 +3185,7 @@ export default function RewardsView({ token, user, personal = false }) {
         badge="Alianzas"
         size="lg"
       >
-        <form onSubmit={handleCreatePartner}>
+        <form onSubmit={handleCreatePartner} noValidate>
           {partnerErrors.general && (
             <div className="alert alert-danger py-2 px-3 small mb-3 d-flex align-items-center gap-2">
               <i className="bi bi-exclamation-triangle-fill"></i>
@@ -3313,14 +3317,6 @@ export default function RewardsView({ token, user, personal = false }) {
           </div>
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
-            <button
-              type="button"
-              onClick={() => setShowAddPartnerModal(false)}
-              className="btn btn-outline-dark px-3 py-2"
-              style={{ borderRadius: '10px', fontSize: '0.86rem' }}
-            >
-              Cancelar
-            </button>
             <button
               type="submit"
               className="btn btn-dark px-4 py-2"

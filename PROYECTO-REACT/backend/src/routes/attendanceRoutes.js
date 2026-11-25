@@ -6,6 +6,7 @@ const { requireMember } = require('../services/staffMemberLink');
 const router = express.Router();
 
 router.get("/activos", authenticateToken, requireRole("admin"), AttendanceController.getActiveClients);
+router.get("/hoy", authenticateToken, requireRole("admin"), AttendanceController.getTodayAttendances);
 router.get("/buscar", authenticateToken, requireRole("admin"), AttendanceController.searchBySocio);
 router.get("/usuario", authenticateToken, requireMember, AttendanceController.getUserAttendanceSummary);
 
@@ -14,5 +15,6 @@ router.get("/mi-historial", authenticateToken, requireMember, AttendanceControll
 router.put("/mi-objetivo", authenticateToken, requireMember, AttendanceController.updateMyGoals);
 router.get("/pandita-estado", authenticateToken, requireMember, AttendanceController.getPandaStatus);
 router.post("/canjear-recompensa", authenticateToken, requireMember, AttendanceController.redeemReward);
+router.put("/reglas-puntos", authenticateToken, requireRole("admin", { strict: true }), AttendanceController.updateAttendanceRules);
 
 module.exports = router;

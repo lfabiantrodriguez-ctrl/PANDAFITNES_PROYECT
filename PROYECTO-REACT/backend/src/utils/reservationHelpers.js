@@ -1,3 +1,4 @@
+const db = require("../config/database");
 const TOLERANCE_MINUTES = 15;
 
 function formatDurationLabel(minutes) {
@@ -72,10 +73,69 @@ function isValidGymSchedule(dateTime, durationMinutes) {
     }
 }
 
+async function isValidConfiguredSchedule(dateTime, durationMinutes = 0) {
+    const d = dateTime instanceof Date ? dateTime : new Date(dateTime);
+    const dayOfWeek = d.getDay();
+    const entryMinutes = d.getHours() * 60 + d.getMinutes();
+    const exitMinutes = entryMinutes + Number(durationMinutes || 0);
+
+    try {
+        const [rows] = await db.execute("SELECT clave, valor FROM configuracion WHERE clave LIKE 'horario_%'");
+        const config = {};
+        for (const row of rows) config[row.clave] = row.valor;
+
+        const toMins = (timeStr, def) => {
+            const [h, m] = String(timeStr || def).split(":").map(Number);
+            return (h || 0) * 60 + (m || 0);
+        };
+
+        if (dayOfWeek === 0) {
+            if (config.horario_domingo_abierto !== "1") return false;
+            const domStart = toMins(config.horario_domingo_inicio, "08:00");
+            const domEnd = toMins(config.horario_domingo_fin, "13:00");
+            const inFirst = entryMinutes >= domStart && exitMinutes <= domEnd;
+            if (config.horario_domingo_modalidad === "partido") {
+                const domPmStart = toMins(config.horario_domingo_tarde_inicio, "16:00");
+                const domPmEnd = toMins(config.horario_domingo_tarde_fin, "20:00");
+                return inFirst || (entryMinutes >= domPmStart && exitMinutes <= domPmEnd);
+            }
+            return inFirst;
+        }
+
+        if (dayOfWeek === 6) {
+            if (config.horario_sabado_estado === "0") return false;
+            const sStart = toMins(config.horario_sabado_inicio, "07:00");
+            const sEnd = toMins(config.horario_sabado_fin, "12:00");
+            const inFirst = entryMinutes >= sStart && exitMinutes <= sEnd;
+            if (config.horario_sabado_modalidad === "partido") {
+                const sPmStart = toMins(config.horario_sabado_tarde_inicio, "16:00");
+                const sPmEnd = toMins(config.horario_sabado_tarde_fin, "20:00");
+                return inFirst || (entryMinutes >= sPmStart && exitMinutes <= sPmEnd);
+            }
+            return inFirst;
+        }
+
+        if (config.horario_semana_modalidad === "continuo") {
+            const cStart = toMins(config.horario_semana_corrido_inicio || config.horario_semana_manana_inicio, "06:30");
+            const cEnd = toMins(config.horario_semana_corrido_fin || config.horario_semana_tarde_fin, "22:00");
+            return entryMinutes >= cStart && exitMinutes <= cEnd;
+        }
+
+        const mStart = toMins(config.horario_semana_manana_inicio, "06:30");
+        const mEnd = toMins(config.horario_semana_manana_fin, "11:00");
+        const tStart = toMins(config.horario_semana_tarde_inicio, "16:00");
+        const tEnd = toMins(config.horario_semana_tarde_fin, "22:00");
+        return (entryMinutes >= mStart && exitMinutes <= mEnd) || (entryMinutes >= tStart && exitMinutes <= tEnd);
+    } catch {
+        return isValidGymSchedule(d, durationMinutes);
+    }
+}
+
 module.exports = {
     TOLERANCE_MINUTES,
     formatDurationLabel,
     getEndOfGymDay,
     isValidGymSchedule,
+    isValidConfiguredSchedule,
     formatMysqlDatetime,
 };

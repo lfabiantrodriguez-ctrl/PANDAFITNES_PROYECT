@@ -1,6 +1,11 @@
 export const DashboardService = {
-  async getMetrics(token) {
-    const response = await fetch('/api/admin/dashboard/metricas', {
+  async getMetrics(token, params = {}) {
+    const qs = new URLSearchParams();
+    if (params.month) qs.set('month', params.month);
+    if (params.startDate) qs.set('startDate', params.startDate);
+    if (params.endDate) qs.set('endDate', params.endDate);
+    const query = qs.toString() ? `?${qs.toString()}` : '';
+    const response = await fetch(`/api/admin/dashboard/metricas${query}`, {
       headers: {
         Authorization: `Bearer ${token}`,
       },

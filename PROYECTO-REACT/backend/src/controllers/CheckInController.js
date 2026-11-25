@@ -6,7 +6,7 @@ const { sendEmail } = require("../utils/email");
 const {
     getEndOfGymDay,
     formatMysqlDatetime,
-    isValidGymSchedule,
+    isValidConfiguredSchedule,
     TOLERANCE_MINUTES,
 } = require("../utils/reservationHelpers");
 
@@ -163,11 +163,16 @@ class CheckInController {
 
             const targetId = userId || reservationId;
             if (targetId) {
-                const active = await AttendanceModel.findActiveByUser(targetId);
-                if (active) {
-                    await AttendanceModel.setExitById(active.id, horaSalidaDb);
-                    return res.json({ message: "Salida registrada con éxito" });
+                const exitedByAttendance = reservationId && !userId
+                    ? await AttendanceModel.setExitById(reservationId, horaSalidaDb)
+                    : false;
+                if (!exitedByAttendance) {
+                    const active = await AttendanceModel.findActiveByUser(targetId);
+                    if (active) {
+                        await AttendanceModel.setExitById(active.id, horaSalidaDb);
+                    }
                 }
+                return res.json({ message: "Salida registrada con éxito" });
             }
 
             return res.json({ message: "Salida registrada con éxito" });
@@ -200,6 +205,11 @@ class CheckInController {
                 return res.status(400).json({ message: "El usuario no tiene una membresía activa" });
             }
 
+            const activeAttendance = await AttendanceModel.findActiveByUser(userId);
+            if (activeAttendance) {
+                return res.status(400).json({ message: "El socio ya tiene un ingreso activo en sala" });
+            }
+
             const now = new Date();
             const duration = Number(durationMinutes) || 60;
             const allowed = [60, 90, 120, 150, 180];
@@ -210,7 +220,7 @@ class CheckInController {
             const horaSalida = formatMysqlDatetime(salidaDate);
 
             // Validar que el ingreso y la salida estén dentro del horario de atención del gimnasio
-            if (!isValidGymSchedule(now, dur)) {
+            if (!(await isValidConfiguredSchedule(now, dur))) {
                 return res.status(400).json({
                     message: "No se puede realizar el registro porque el gimnasio está fuera del horario de atención",
                 });

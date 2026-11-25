@@ -669,7 +669,7 @@ export default function MembershipsView({ token }) {
         badge="Renovación de Plan"
         size="md"
       >
-        <form onSubmit={handleRenew}>
+        <form onSubmit={handleRenew} noValidate>
           {renewErrors.general && (
             <div className="alert alert-danger py-2 px-3 small mb-3 d-flex align-items-center gap-2">
               <i className="bi bi-exclamation-triangle-fill"></i>
@@ -722,17 +722,11 @@ export default function MembershipsView({ token }) {
                 }}
                 style={renewErrors.fechaInicio ? { borderColor: '#ef4444', backgroundColor: '#fef2f2' } : {}}
               />
-              {renewErrors.fechaInicio ? (
+              {renewErrors.fechaInicio && (
                 <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
                   <i className="bi bi-exclamation-circle-fill"></i>
                   <span>{renewErrors.fechaInicio}</span>
                 </div>
-              ) : (
-                <small className="text-muted d-block mt-1">
-                  {renewForm.isReincorporacion
-                    ? 'El socio no tiene plan activo, por lo que su vigencia iniciará a partir de la fecha elegida.'
-                    : `Se mantiene la continuidad sumando los días a su vencimiento actual.`}
-                </small>
               )}
             </div>
 
@@ -765,14 +759,6 @@ export default function MembershipsView({ token }) {
           </div>
 
           <div className="d-flex justify-content-end gap-2 mt-4 pt-3 border-top">
-            <button
-              type="button"
-              className="btn btn-outline-dark px-4 py-2 fw-semibold"
-              onClick={() => setShowRenewModal(false)}
-              disabled={renewLoading}
-            >
-              Cancelar
-            </button>
             <button
               type="submit"
               className="btn px-4 py-2 fw-bold shadow-sm"

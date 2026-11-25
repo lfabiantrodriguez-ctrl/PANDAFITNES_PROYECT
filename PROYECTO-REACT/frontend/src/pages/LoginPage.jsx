@@ -3,8 +3,8 @@ import { Navigate, useNavigate } from 'react-router-dom'
 import { AuthService } from '../services/AuthService'
 
 export const ROLE_HOME = {
-  admin: '/app/check-in',
-  cliente: '/app/aforo',
+  admin: '/app/inicio',
+  cliente: '/app/inicio',
 }
 
 export default function LoginPage({ onLogin, token, user }) {

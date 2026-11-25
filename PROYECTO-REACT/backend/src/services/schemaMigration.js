@@ -326,10 +326,11 @@ async function runSchemaMigrations() {
             WHERE (imagen_url IS NULL OR imagen_url = '') AND nombre LIKE '%Descuento en Renovación%'
         `);
 
-        // Asegurar que asistencias.reserva_id sea nullable
+        // Asegurar que asistencias.reserva_id sea nullable y tenga columna de observación de salida
         try {
             await db.execute("ALTER TABLE asistencias MODIFY reserva_id INT NULL DEFAULT NULL");
         } catch (_) {}
+        await ensureColumnExists("asistencias", "observacion_salida", "VARCHAR(80) NULL DEFAULT NULL");
 
         // Tabla de Ofertas y Promociones (individuales y generales para socios)
         await db.execute(`
@@ -350,6 +351,46 @@ async function runSchemaMigrations() {
 
         // Las ofertas se registran desde el sistema; no insertar ejemplos.
         const [ofertasExist] = await db.execute("SELECT COUNT(*) AS total FROM ofertas_socios");
+
+        // Tablas para huellero ZKTeco (LAN / USB pendrive / Cable USB) y lector USB de escritorio
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS asistencia_marcaciones_zk (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT NULL,
+                dni VARCHAR(15) NOT NULL,
+                fecha_hora DATETIME NOT NULL,
+                origen VARCHAR(24) NOT NULL DEFAULT 'ZK_LIVE',
+                dispositivo VARCHAR(80) NOT NULL DEFAULT 'ZKTECO',
+                resultado VARCHAR(40) NOT NULL DEFAULT 'PROCESADO',
+                detalle VARCHAR(200) NULL,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_zk_dni_fh (dni, fecha_hora)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS socio_huellas_usb (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT NOT NULL UNIQUE,
+                dni VARCHAR(15) NOT NULL UNIQUE,
+                template LONGTEXT NOT NULL,
+                formato VARCHAR(40) NOT NULL DEFAULT 'ZKFINGER',
+                dispositivo VARCHAR(80) NULL,
+                actualizado TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        const [zkTokRows] = await db.execute(
+            "SELECT valor FROM configuracion WHERE clave = 'zk_sync_token' LIMIT 1",
+        );
+        if (!zkTokRows.length || !zkTokRows[0].valor) {
+            const crypto = require("node:crypto");
+            await db.execute(
+                `INSERT INTO configuracion (clave, valor) VALUES ('zk_sync_token', ?)
+                 ON DUPLICATE KEY UPDATE valor = IF(valor IS NULL OR valor = '', VALUES(valor), valor)`,
+                [crypto.randomUUID()],
+            );
+        }
         
     } catch (error) {
         console.error("Error ejecutando migraciones de esquema:", error);

@@ -1,8 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import ViewTitle from '../components/ViewTitle'
 import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
 import { MembershipService } from '../services/MembershipService'
+import { formatDate } from '../utils/formatters'
 
 export default function MemberMembershipView({ token, user }) {
   const [loading, setLoading] = useState(true)
@@ -14,24 +15,40 @@ export default function MemberMembershipView({ token, user }) {
   const [renewPhone, setRenewPhone] = useState(user?.telefono || '')
   const [renewError, setRenewError] = useState('')
 
-  useEffect(() => {
-    loadMembership()
-  }, [])
-
-  useEffect(() => {
-    if (user?.telefono) {
-      setRenewPhone(user.telefono)
-    }
-  }, [user?.telefono])
-
-  async function loadMembership() {
-    setLoading(true);setError('');
+  const loadMembership = useCallback(async () => {
+    setLoading(true)
+    setError('')
     try {
-      const data=await MembershipService.getClientMembership(token);
-      setMembership(data.membership||null);
-    } catch(error) { setMembership(null);setError(error.message||'No se pudo consultar tu membresía.'); }
-    finally { setLoading(false); }
-  }
+      const data = await MembershipService.getClientMembership(token)
+      setMembership(data.membership || null)
+    } catch (err) {
+      setMembership(null)
+      setError(err.message || 'No se pudo consultar tu membresía.')
+    } finally {
+      setLoading(false)
+    }
+  }, [token])
+
+  useEffect(() => {
+    let active = true
+    MembershipService.getClientMembership(token)
+      .then((data) => {
+        if (!active) return
+        setMembership(data.membership || null)
+        setError('')
+      })
+      .catch((err) => {
+        if (!active) return
+        setMembership(null)
+        setError(err.message || 'No se pudo consultar tu membresía.')
+      })
+      .finally(() => {
+        if (active) setLoading(false)
+      })
+    return () => {
+      active = false
+    }
+  }, [token])
   function handleRenewRequest(e) {
     e.preventDefault()
     if (!renewPhone.trim()) {
@@ -52,20 +69,24 @@ export default function MemberMembershipView({ token, user }) {
 
   if(loading)return <div className="card p-4 rounded-4" role="status">Consultando tu membresía…</div>;
   if(error)return <div className="alert alert-danger" role="alert">{error}<button className="btn btn-sm btn-outline-dark ms-3" onClick={loadMembership}>Volver a consultar</button></div>;
-  if(!membership)return <section className="card p-4 p-md-5 rounded-4"><i className="bi bi-person-vcard fs-1 text-success mb-3"/><h2 className="fs-4 fw-bold">{moduleLabel('mi-membresia',user)}</h2><p className="text-secondary mb-0">Todavía no tienes una membresía. Administración puede asignarte un plan desde {moduleLabel('socios')}.</p></section>;
+  if(!membership)return <section className="card p-4 p-md-5 rounded-4"><i className="bi bi-person-vcard fs-1 text-success mb-3"/><h2 className="fs-4 fw-bold">Sin membresía activa</h2><p className="text-secondary mb-0">Todavía no tienes una membresía. Administración puede asignarte un plan desde {moduleLabel('socios')}.</p></section>;
   return (
-    <div className="dashboard-page" style={{ maxWidth: '1240px', margin: '0 auto', paddingBottom: '60px' }}>
+    <div className="dashboard-page" style={{ width: '100%', maxWidth: '100%', margin: 0, paddingBottom: '60px' }}>
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>
           <ViewTitle
             title={moduleLabel('mi-membresia',user)}
-            subtitle="Consulta la vigencia de tu plan, beneficios incluidos y estado de tus accesos."
+            subtitle="Estado y vigencia de tu plan."
           />
         </div>
 
         <button
           type="button"
-          onClick={() => setShowRenewModal(true)}
+          onClick={() => {
+            setRenewPhone(user?.telefono || '')
+            setRenewError('')
+            setShowRenewModal(true)
+          }}
           style={{
             padding: '12px 24px',
             borderRadius: '12px',
@@ -78,7 +99,8 @@ export default function MemberMembershipView({ token, user }) {
             boxShadow: '0 4px 14px rgba(196, 240, 57, 0.35)',
           }}
         >
-          🔄 Renovar Membresía
+          <i className="bi bi-arrow-repeat me-2" aria-hidden="true" />
+          Renovar Membresía
         </button>
       </div>
 
@@ -163,22 +185,17 @@ export default function MemberMembershipView({ token, user }) {
               >
                 <div>
                   <span style={{ fontSize: '0.74rem', color: '#8fa295', display: 'block', marginBottom: '4px' }}>FECHA INICIO</span>
-                  <strong style={{ fontSize: '1rem', color: '#ffffff' }}>{membership.fechaInicio}</strong>
+                  <strong style={{ fontSize: '1rem', color: '#ffffff' }}>{formatDate(membership.fechaInicio)}</strong>
                 </div>
 
                 <div>
                   <span style={{ fontSize: '0.74rem', color: '#8fa295', display: 'block', marginBottom: '4px' }}>FECHA VENCIMIENTO</span>
-                  <strong style={{ fontSize: '1rem', color: '#c4f039' }}>{membership.fechaFin}</strong>
+                  <strong style={{ fontSize: '1rem', color: '#c4f039' }}>{formatDate(membership.fechaFin)}</strong>
                 </div>
 
                 <div>
                   <span style={{ fontSize: '0.74rem', color: '#8fa295', display: 'block', marginBottom: '4px' }}>DÍAS RESTANTES</span>
                   <strong style={{ fontSize: '1rem', color: '#ffffff' }}>{Math.max(0, Number(membership.diasRestantes) || 0)} días</strong>
-                </div>
-
-                <div>
-                  <span style={{ fontSize: '0.74rem', color: '#8fa295', display: 'block', marginBottom: '4px' }}>SEDE ASIGNADA</span>
-                  <strong style={{ fontSize: '1rem', color: '#ffffff' }}>Sede Centro</strong>
                 </div>
               </div>
 
@@ -240,7 +257,11 @@ export default function MemberMembershipView({ token, user }) {
               </p>
               <button
                 type="button"
-                onClick={() => setShowRenewModal(true)}
+                onClick={() => {
+                  setRenewPhone(user?.telefono || '')
+                  setRenewError('')
+                  setShowRenewModal(true)
+                }}
                 style={{
                   width: '100%',
                   padding: '12px',
@@ -270,7 +291,7 @@ export default function MemberMembershipView({ token, user }) {
                 Soporte en Recepción
               </h4>
               <p style={{ fontSize: '0.8rem', color: '#5f7165', lineHeight: 1.45, margin: '0 0 14px 0' }}>
-                Horario de atención para trámites, pagos en caja o congelamientos:
+                Horario de atención en recepción:
               </p>
               <div style={{ fontSize: '0.82rem', color: '#111d15', fontWeight: 700 }}>
                 Lunes a Sábado: 06:00 AM - 10:00 PM<br />
@@ -290,7 +311,7 @@ export default function MemberMembershipView({ token, user }) {
         badge="Renovaciones"
         size="sm"
       >
-        <form onSubmit={handleRenewRequest}>
+        <form onSubmit={handleRenewRequest} noValidate>
           <div style={{ marginBottom: '16px' }}>
             <label style={{ display: 'block', fontSize: '0.82rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>Plan a Renovar:</label>
             <input type="text" readOnly value={membership?.planNombre || ''} className="form-control" style={{ borderRadius: '10px', background: '#f8fafc' }} />
@@ -330,7 +351,6 @@ export default function MemberMembershipView({ token, user }) {
           )}
 
           <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '8px' }}>
-            <button type="button" onClick={() => setShowRenewModal(false)} className="btn btn-outline-dark px-3 py-2">Cerrar</button>
             <button type="submit" className="btn btn-dark px-4 py-2" style={{ background: '#c4f039', color: '#111d15', border: 'none', fontWeight: 800 }}>Confirmar Solicitud</button>
           </div>
         </form>

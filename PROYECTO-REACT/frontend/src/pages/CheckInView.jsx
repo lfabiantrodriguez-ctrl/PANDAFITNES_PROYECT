@@ -1,86 +1,119 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeviceService } from '../services/DeviceService'
 import ViewTitle from '../components/ViewTitle'
-import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
+import TablePagination, { paginateList } from '../components/TablePagination'
 import { CheckInService } from '../services/CheckInService'
-import { formatDate, formatTimePeru, getMinutesElapsed } from '../utils/formatters'
+import { ZkService } from '../services/ZkService'
+import { formatDate, formatTimePeru } from '../utils/formatters'
 import BiometricModal from '../components/BiometricModal'
 
-export default function CheckInView({ token }) {
-  // Pestaña activa: 'huella' | 'manual'
-  const [activeTab, setActiveTab] = useState('huella')
-
-  // Tiempo mínimo de entrenamiento para permitir salida biométrica (por defecto 20 min)
+export default function CheckInView({ token, embedded = false }) {
   const minTrainingMinutes = 20
 
-  // Estado para Validación Manual
+  // Estado para Validación Manual (Modal)
+  const [showManualModal, setShowManualModal] = useState(false)
   const [manualCode, setManualCode] = useState('')
   const [manualUser, setManualUser] = useState(null)
   const [manualMembership, setManualMembership] = useState(null)
   const [manualActiveAttendance, setManualActiveAttendance] = useState(null)
   const [manualHistory, setManualHistory] = useState([])
   const [directDuration, setDirectDuration] = useState(60)
+  const [manualError, setManualError] = useState('')
+  const [manualLoading, setManualLoading] = useState(false)
 
-  // Estado para Validación Biométrica (Huella Digital)
+  // Modo Simulación (oculto por defecto cuando opera con huellero físico; se activa en la esquina)
+  const [simulationMode, setSimulationMode] = useState(false)
   const [biometricDni, setBiometricDni] = useState('')
-  const [showDniFallback, setShowDniFallback] = useState(false)
   const [isScanning, setIsScanning] = useState(false)
   const [biometricResult, setBiometricResult] = useState(null)
-  const [biometricError, setBiometricError] = useState('')
   const [showBiometricModal, setShowBiometricModal] = useState(false)
 
-  // Lista de clientes activos en sala en tiempo real
-  const [activeClients, setActiveClients] = useState([])
-  const [loadingActive, setLoadingActive] = useState(false)
-
-  // Estados generales de alertas y modales
+  // Tabla unificada de ingresos y salidas de hoy (incluye validación automática de 4 horas)
+  const [records, setRecords] = useState([])
+  const [summary, setSummary] = useState({ enSala: 0, salieron: 0, noMarcaronSalida: 0, totalHoy: 0 })
+  const [capacity, setCapacity] = useState(null)
+  const [filterEstado, setFilterEstado] = useState('todos')
+  const [currentPage, setCurrentPage] = useState(1)
+  const PAGE_SIZE = 10
   const [status, setStatus] = useState({ loading: false, error: '', success: '' })
-  const [showManualModal, setShowManualModal] = useState(false)
-  const [manualError, setManualError] = useState('')
+  const attlogInputRef = useRef(null)
+  const [importingAttlog, setImportingAttlog] = useState(false)
 
-  // Cargar clientes activos en el gimnasio al iniciar
-  useEffect(() => {
-    loadActiveClients()
-    const timer = setInterval(() => {
-      loadActiveClients()
-    }, 12000)
-    return () => clearInterval(timer)
-  }, [token])
-
-  async function loadActiveClients() {
-    setLoadingActive(true)
+  const loadAttendanceData = useCallback(async () => {
     try {
-      const data = await CheckInService.getActiveClients(token)
-      if (data && data.clients) {
-        setActiveClients(data.clients)
+      const [todayData, capRes] = await Promise.all([
+        CheckInService.getTodayAttendances(token),
+        fetch('/api/aforo', { headers: { Authorization: `Bearer ${token}` } }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+      ])
+      if (todayData?.records) {
+        setRecords(todayData.records)
+      }
+      if (todayData?.summary) {
+        setSummary(todayData.summary)
+      }
+      if (capRes && typeof capRes.actual === 'number') {
+        setCapacity(capRes)
       }
     } catch {
-      // Mantener lista existente si falla la conexión
-    } finally {
-      setLoadingActive(false)
+      // Mantener registros actuales si falla la red temporalmente
     }
+  }, [token])
+
+  useEffect(() => {
+    let active = true
+    Promise.all([
+      CheckInService.getTodayAttendances(token).catch(() => null),
+      fetch('/api/aforo', { headers: { Authorization: `Bearer ${token}` } }).then((r) => (r.ok ? r.json() : null)).catch(() => null),
+    ]).then(([todayData, capRes]) => {
+      if (!active) return
+      if (todayData?.records) setRecords(todayData.records)
+      if (todayData?.summary) setSummary(todayData.summary)
+      if (capRes && typeof capRes.actual === 'number') setCapacity(capRes)
+    })
+
+    const timer = setInterval(loadAttendanceData, 6000)
+    return () => {
+      active = false
+      clearInterval(timer)
+    }
+  }, [token, loadAttendanceData])
+
+  function openManualModal() {
+    setManualError('')
+    setManualCode('')
+    setManualUser(null)
+    setManualMembership(null)
+    setManualActiveAttendance(null)
+    setManualHistory([])
+    setShowManualModal(true)
   }
 
-  // =========================================================
-  // MODO 1: VALIDACIÓN BIOMÉTRICA CON HUELLA DIGITAL (1-TOUCH)
-  // =========================================================
   function handleFingerprintScan(dniToScan = null) {
     if (isScanning) return
     const rawDni = (dniToScan !== null ? dniToScan : biometricDni).trim()
-    setBiometricError('')
+    setBiometricResult(null)
+    setStatus({ loading: false, error: '', success: '' })
     if (rawDni && !/^\d{8}$/.test(rawDni)) {
-      setBiometricError('El DNI debe tener 8 dígitos numéricos.')
+      setStatus({ loading: false, error: 'El DNI debe tener 8 dígitos numéricos.', success: '' })
       return
     }
     setShowBiometricModal(true)
   }
 
   async function handleBiometricSuccess(authRes) {
+    if (authRes?.usbAlreadyLogged) {
+      const msg = authRes.message || 'Marcación por lector USB registrada.'
+      setBiometricResult(null)
+      setStatus({ loading: false, error: '', success: msg })
+      await loadAttendanceData()
+      return
+    }
+
     const targetDni = authRes.dni || biometricDni.trim()
     setIsScanning(true)
     setBiometricResult(null)
-    setBiometricError('')
+    setStatus({ loading: false, error: '', success: '' })
     try {
       const res = await CheckInService.biometricCheckIn(token, {
         dni: targetDni,
@@ -91,30 +124,23 @@ export default function CheckInView({ token }) {
       })
 
       setIsScanning(false)
-      setBiometricResult(res)
       if (res.tipo === 'en_curso_reciente') {
-        setStatus({
-          loading: false,
-          error: '',
-          success: '',
-        })
+        setBiometricResult(res)
+        setStatus({ loading: false, error: '', success: '' })
       } else {
+        setBiometricResult(null)
         setStatus({
           loading: false,
           error: '',
-          success: res.message || '¡Acceso verificado con éxito!',
+          success: res.message || 'Acceso verificado con éxito.',
         })
       }
-      await loadActiveClients()
+      await loadAttendanceData()
     } catch (err) {
       setIsScanning(false)
+      setBiometricResult(null)
       const msg = err.message || 'Error al validar la huella digital del socio.'
-      setBiometricError(msg)
-      setStatus({
-        loading: false,
-        error: msg,
-        success: '',
-      })
+      setStatus({ loading: false, error: msg, success: '' })
     }
   }
 
@@ -122,671 +148,506 @@ export default function CheckInView({ token }) {
     if (isScanning) return
     setIsScanning(true)
     setBiometricResult(null)
-    setBiometricError('')
+    setStatus({ loading: false, error: '', success: '' })
     try {
-      // Autenticación con sensor / celular (sin requerir DNI previo si es null)
       const authRes = await DeviceService.authenticate(token, dni)
-      await handleBiometricSuccess(authRes)
-    } catch (err) {
+      const res = await CheckInService.biometricCheckIn(token, {
+        dni: authRes.dni || dni,
+        deviceProof: authRes.proof,
+        durationMinutes: 60,
+        minDurationMinutes: minTrainingMinutes,
+        forceExit,
+      })
       setIsScanning(false)
-      const msg = err.message || 'Error al validar la huella digital del socio.'
-      setBiometricError(msg)
+      setBiometricResult(null)
       setStatus({
         loading: false,
-        error: msg,
+        error: '',
+        success: res.message || 'Acceso verificado con éxito.',
+      })
+      await loadAttendanceData()
+    } catch (err) {
+      setIsScanning(false)
+      setBiometricResult(null)
+      const msg = err.message || 'Error al validar la huella digital del socio.'
+      setStatus({ loading: false, error: msg, success: '' })
+    }
+  }
+
+  async function handleManualLookup(event) {
+    if (event) event.preventDefault()
+    setManualError('')
+    if (!manualCode.trim()) {
+      setManualError('Ingresa el DNI o nombre del socio para buscar.')
+      return
+    }
+
+    setManualLoading(true)
+    try {
+      const data = await CheckInService.lookupMember(token, manualCode.trim())
+      setManualUser(data.user)
+      setManualMembership(data.membership)
+      setManualActiveAttendance(data.activeAttendance)
+      setManualHistory(data.history || [])
+    } catch (err) {
+      setManualUser(null)
+      setManualMembership(null)
+      setManualActiveAttendance(null)
+      setManualHistory([])
+      setManualError(err.message || 'No se encontró al socio.')
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
+  async function handleManualDirectCheckIn() {
+    if (!manualUser) return
+    setManualLoading(true)
+    setManualError('')
+    try {
+      await CheckInService.confirmDirectEntry(token, manualUser.id, directDuration)
+      setShowManualModal(false)
+      setStatus({
+        loading: false,
+        error: '',
+        success: `Entrada manual autorizada para ${manualUser.nombre} ${manualUser.apellido}.`,
+      })
+      await loadAttendanceData()
+    } catch (err) {
+      setManualError(err.message || 'No se pudo autorizar el acceso.')
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
+  async function handleManualCheckout(attendanceId, nombre) {
+    setManualLoading(true)
+    setManualError('')
+    try {
+      await CheckInService.finalizeDirectEntry(token, attendanceId)
+      setShowManualModal(false)
+      setStatus({
+        loading: false,
+        error: '',
+        success: `Salida registrada para ${nombre}.`,
+      })
+      await loadAttendanceData()
+    } catch (err) {
+      setManualError(err.message || 'No se pudo registrar la salida.')
+    } finally {
+      setManualLoading(false)
+    }
+  }
+
+  async function handleQuickCheckout(row) {
+    setStatus({ loading: true, error: '', success: '' })
+    try {
+      if (!row.id) {
+        throw new Error('Selecciona una asistencia válida para registrar la salida.')
+      }
+      await CheckInService.finalizeDirectEntry(token, row.id)
+      setStatus({
+        loading: false,
+        error: '',
+        success: `Salida registrada para ${row.nombre} ${row.apellido}. Cupo liberado del aforo.`,
+      })
+      await loadAttendanceData()
+    } catch (err) {
+      setStatus({
+        loading: false,
+        error: err.message || 'No se pudo registrar la salida.',
         success: '',
       })
     }
   }
 
-  // =========================================================
-  // MODO 2: VALIDACIÓN MANUAL EN RECEPCIÓN (CHECK-IN RÁPIDO)
-  // =========================================================
-  async function handleManualLookup() {
-    setManualError('')
-    if (!manualCode.trim()) {
-      setManualError('Ingresa el DNI o nombre del socio para realizar la búsqueda')
-      return
-    }
+  async function handleAttlogFileChange(event) {
+    const file = event.target.files?.[0]
+    event.target.value = ''
+    if (!file) return
 
-    setStatus({ loading: true, error: '', success: '' })
-    setManualUser(null)
-    setManualMembership(null)
-    setManualActiveAttendance(null)
-
+    setImportingAttlog(true)
+    setStatus({ loading: false, error: '', success: '' })
     try {
-      const data = await CheckInService.lookupReservation(token, manualCode.trim())
-      setManualUser(data.user)
-      setManualMembership(data.membership)
-      setManualActiveAttendance(data.activeAttendance || null)
-      setManualHistory(data.history || [])
-      setStatus({ loading: false, error: '', success: '' })
+      const content = await file.text()
+      const res = await ZkService.importArchivo(token, { content, filename: file.name })
+      setStatus({
+        loading: false,
+        error: '',
+        success: res.message || `Archivo ${file.name} importado correctamente.`,
+      })
+      await loadAttendanceData()
     } catch (err) {
-      setManualError(err.message || 'No se encontró ningún socio o membresía con este identificador')
-      setStatus({ loading: false, error: '', success: '' })
+      setStatus({
+        loading: false,
+        error: err.message || 'No se pudo importar el archivo attlog.',
+        success: '',
+      })
+    } finally {
+      setImportingAttlog(false)
     }
   }
 
-  async function handleManualDirectCheckIn(targetId = null) {
-    const id = targetId || manualUser?.id
-    if (!id) return
-    setStatus({ loading: true, error: '', success: '' })
-    try {
-      await CheckInService.confirmDirectEntry(token, id, directDuration)
-      setStatus({ loading: false, error: '', success: `¡Ingreso registrado con éxito para ${manualUser?.nombre || 'el socio'}!` })
-      setShowManualModal(false)
-      setManualCode('')
-      setManualUser(null)
-      await loadActiveClients()
-    } catch (err) {
-      setStatus({ loading: false, error: err.message || 'No se pudo registrar el ingreso directo', success: '' })
-    }
-  }
+  const canAuthorizeManual =
+    Boolean(manualUser) &&
+    Boolean(manualMembership && manualMembership.estado === 'activo') &&
+    !manualActiveAttendance
 
-  async function handleManualCheckout(attendanceId, userName = '') {
-    setStatus({ loading: true, error: '', success: '' })
-    try {
-      await CheckInService.finalizeReservation(token, attendanceId)
-      setStatus({ loading: false, error: '', success: `¡Salida registrada con éxito para ${userName || 'el socio'}!` })
-      setShowManualModal(false)
-      setManualCode('')
-      setManualUser(null)
-      await loadActiveClients()
-    } catch (err) {
-      setStatus({ loading: false, error: err.message || 'No se pudo registrar la salida', success: '' })
-    }
-  }
+  const filteredRecords = useMemo(
+    () => (filterEstado === 'todos' ? records : records.filter((row) => row.estado === filterEstado)),
+    [records, filterEstado]
+  )
 
-  // Finalizar salida de cliente activo en la sala
-  async function handleQuickCheckout(client) {
-    setStatus({ loading: true, error: '', success: '' })
-    try {
-      if (client.id) {
-        await CheckInService.finalizeReservation(token, client.id)
-      } else {
-        throw new Error('Selecciona una asistencia válida para registrar la salida.')
-      }
-      setStatus({ loading: false, error: '', success: `¡Salida registrada para ${client.nombre} ${client.apellido}!` })
-      await loadActiveClients()
-    } catch (err) {
-      setStatus({ loading: false, error: err.message || 'No se pudo registrar la salida', success: '' })
+  const paginatedRecords = useMemo(
+    () => paginateList(filteredRecords, currentPage, PAGE_SIZE),
+    [filteredRecords, currentPage]
+  )
+
+  function renderStatusBadge(estado) {
+    if (estado === 'en_sala') {
+      return (
+        <span
+          className="badge"
+          style={{
+            background: '#ecfccb',
+            color: '#15803d',
+            border: '1px solid #d9f99d',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+          }}
+        >
+          En sala
+        </span>
+      )
     }
+    if (estado === 'no_marco_salida') {
+      return (
+        <span
+          className="badge"
+          style={{
+            background: '#fef3c7',
+            color: '#b45309',
+            border: '1px solid #fde68a',
+            fontSize: '0.75rem',
+            fontWeight: 700,
+          }}
+        >
+          No marcó su salida (+4h)
+        </span>
+      )
+    }
+    return (
+      <span
+        className="badge"
+        style={{
+          background: '#e0f2fe',
+          color: '#0369a1',
+          border: '1px solid #bae6fd',
+          fontSize: '0.75rem',
+          fontWeight: 700,
+        }}
+      >
+        Completó salida
+      </span>
+    )
   }
 
   return (
-    <div className="dashboard-page" style={{ maxWidth: '1240px', margin: '0 auto', paddingBottom: '60px' }}>
-      {/* Encabezado Principal */}
-      <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+    <div className="dashboard-page" style={{ width: '100%', maxWidth: '100%', margin: 0, paddingBottom: '40px' }}>
+      {/* Barra superior: descripción + botón compacto en la esquina (Modo Simulación con huella, Importar USB y Registro Manual) */}
+      <div
+        className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3"
+        style={{ width: '100%' }}
+      >
         <div>
-          <ViewTitle
-            title={moduleLabel('check-in')}
-            subtitle=""
-          />
+          {!embedded ? (
+            <ViewTitle text="Control de ingreso y salida en sala." />
+          ) : (
+            <p className="m-0 text-muted" style={{ fontSize: '0.9rem' }}>
+              Monitoreo en tiempo real del huellero. Cierre automático tras 4 horas sin marcar salida (descuento automático de aforo).
+            </p>
+          )}
         </div>
 
-        {/* Contador rápido de aforo en sala */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e3e8e2',
-            borderRadius: '14px',
-            padding: '10px 20px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '12px',
-            boxShadow: '0 4px 14px rgba(18, 31, 23, 0.04)',
-          }}
-        >
-          <span style={{ width: '10px', height: '10px', borderRadius: '50%', background: '#22c55e', animation: 'pulseDot 2s infinite' }}></span>
-          <span style={{ fontSize: '0.88rem', fontWeight: 600, color: '#5f7165' }}>Socios en el club ahora:</span>
-          <strong style={{ fontSize: '1.25rem', fontWeight: 900, color: '#111d15' }}>{activeClients.length}</strong>
+        <div className="d-flex flex-wrap align-items-center gap-2">
+          <button
+            type="button"
+            onClick={() => {
+              setSimulationMode((prev) => !prev)
+              setBiometricResult(null)
+              setStatus({ loading: false, error: '', success: '' })
+            }}
+            title="Activar o desactivar modo simulación de huella"
+            className="btn d-inline-flex align-items-center gap-2 px-3 py-2 fw-bold"
+            style={{
+              background: simulationMode ? '#c4f039' : '#ffffff',
+              color: '#111d15',
+              border: simulationMode ? '1px solid #a3e635' : '1px solid #cbd5e1',
+              borderRadius: '10px',
+              fontSize: '0.86rem',
+            }}
+          >
+            <i className="bi bi-fingerprint" aria-hidden="true" />
+            <span>{simulationMode ? 'Modo Simulación: Activo' : 'Modo Simulación'}</span>
+          </button>
+
+          <input
+            ref={attlogInputRef}
+            type="file"
+            accept=".dat,.txt,.csv"
+            style={{ display: 'none' }}
+            onChange={handleAttlogFileChange}
+          />
+          <button
+            type="button"
+            disabled={importingAttlog}
+            onClick={() => attlogInputRef.current?.click()}
+            className="btn d-inline-flex align-items-center gap-2 px-3 py-2 fw-bold"
+            style={{
+              background: '#ffffff',
+              color: '#111d15',
+              border: '1px solid #cbd5e1',
+              borderRadius: '10px',
+              fontSize: '0.86rem',
+            }}
+          >
+            <i className="bi bi-usb-drive" aria-hidden="true" />
+            <span>{importingAttlog ? 'Importando...' : 'Importar USB (.dat)'}</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={openManualModal}
+            className="btn d-inline-flex align-items-center gap-2 px-4 py-2 fw-bold"
+            style={{
+              background: '#111d15',
+              color: '#c4f039',
+              border: 'none',
+              borderRadius: '10px',
+              fontSize: '0.88rem',
+            }}
+          >
+            <i className="bi bi-pencil-square" aria-hidden="true" />
+            <span>Registro Manual</span>
+          </button>
         </div>
       </div>
+
+      {/* Panel compacto opcional SOLO visible cuando se activa Modo Simulación en la esquina */}
+      {simulationMode && (
+        <div
+          className="mb-3 p-3"
+          style={{
+            background: '#ffffff',
+            borderRadius: '16px',
+            border: '1.5px solid #c4f039',
+            boxShadow: '0 4px 16px rgba(18, 31, 23, 0.06)',
+          }}
+        >
+          <div className="d-flex flex-wrap align-items-center justify-content-between gap-3">
+            <div className="d-flex align-items-center gap-2">
+              <span
+                style={{
+                  width: '38px',
+                  height: '38px',
+                  borderRadius: '10px',
+                  background: '#ecfccb',
+                  color: '#15803d',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.25rem',
+                }}
+              >
+                <i className="bi bi-fingerprint" aria-hidden="true" />
+              </span>
+              <div>
+                <div style={{ fontWeight: 800, color: '#111d15', fontSize: '0.94rem' }}>
+                  Simulador / Lector Biométrico en Pantalla
+                </div>
+                <div className="text-muted" style={{ fontSize: '0.78rem' }}>
+                  Úsalo para probar ingresos o salidas sin el reloj físico, o conectar el lector USB local.
+                </div>
+              </div>
+            </div>
+
+            <div className="d-flex flex-wrap align-items-center gap-2">
+              <input
+                type="text"
+                inputMode="numeric"
+                maxLength={8}
+                placeholder="DNI opcional (8 dígitos)"
+                value={biometricDni}
+                disabled={isScanning}
+                onChange={(e) => setBiometricDni(e.target.value.replace(/\D/g, '').slice(0, 8))}
+                className="form-control form-control-sm"
+                style={{ width: '190px', borderRadius: '9px' }}
+              />
+              <button
+                type="button"
+                disabled={isScanning}
+                onClick={() => handleFingerprintScan()}
+                className="btn btn-sm px-3 py-2 fw-bold d-inline-flex align-items-center gap-2"
+                style={{
+                  background: '#c4f039',
+                  color: '#111d15',
+                  border: 'none',
+                  borderRadius: '9px',
+                }}
+              >
+                <i className={`bi ${isScanning ? 'bi-hourglass-split' : 'bi-fingerprint'}`} />
+                <span>{isScanning ? 'Validando...' : 'Colocar huella / Simular'}</span>
+              </button>
+            </div>
+          </div>
+
+          {biometricResult && biometricResult.tipo === 'en_curso_reciente' && (
+            <div
+              className="mt-2 p-2 px-3 rounded-3 d-flex flex-wrap align-items-center justify-content-between gap-2"
+              style={{
+                background: '#fffbeb',
+                border: '1px solid #fde68a',
+                fontSize: '0.84rem',
+              }}
+            >
+              <div>
+                <strong>
+                  {biometricResult.user?.nombre} {biometricResult.user?.apellido}
+                </strong>{' '}
+                — {biometricResult.message}
+              </div>
+              {biometricResult.canForceExit && (
+                <button
+                  type="button"
+                  onClick={() => executeBiometricVerification(biometricResult.user?.dni, true)}
+                  className="btn btn-outline-danger btn-sm fw-bold"
+                  style={{ borderRadius: '8px' }}
+                >
+                  <i className="bi bi-box-arrow-right me-1" />
+                  Forzar Salida Anticipada
+                </button>
+              )}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Banners de Notificación */}
       {status.success && (
         <div
-          className="alert d-flex align-items-center gap-2 py-3 px-4 rounded-3 border mb-4"
+          className="alert d-flex align-items-center gap-2 py-3 px-4 rounded-3 border mb-3"
           style={{ background: '#ecfccb', borderColor: '#d9f99d', color: '#15803d', fontWeight: 600 }}
         >
-          <span>✓</span>
+          <i className="bi bi-check-circle-fill" aria-hidden="true" />
           <span>{status.success}</span>
         </div>
       )}
 
       {status.error && (
         <div
-          className="alert d-flex align-items-center gap-2 py-3 px-4 rounded-3 border mb-4"
+          className="alert d-flex align-items-center gap-2 py-3 px-4 rounded-3 border mb-3"
           style={{ background: '#fee2e2', borderColor: '#fecaca', color: '#b91c1c', fontWeight: 600 }}
         >
-          <span>⚠</span>
+          <i className="bi bi-exclamation-triangle-fill" aria-hidden="true" />
           <span>{status.error}</span>
         </div>
       )}
 
-      {/* Selector de Pestañas: HUELLA DIGITAL vs MANUAL RECEPCIÓN */}
-      <div
-        style={{
-          display: 'flex',
-          background: '#ffffff',
-          borderRadius: '16px',
-          padding: '6px',
-          border: '1px solid #e3e8e2',
-          marginBottom: '26px',
-          boxShadow: '0 2px 8px rgba(18, 31, 23, 0.04)',
-          maxWidth: '520px',
-        }}
-      >
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('huella')
-            setStatus({ loading: false, error: '', success: '' })
-          }}
-          style={{
-            flex: 1,
-            padding: '12px 18px',
-            borderRadius: '12px',
-            border: 'none',
-            background: activeTab === 'huella' ? '#111d15' : 'transparent',
-            color: activeTab === 'huella' ? '#c4f039' : '#5f7165',
-            fontWeight: 800,
-            fontSize: '0.92rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <i className="bi bi-fingerprint"></i>
-          <span>Huella Digital (Biométrico)</span>
-        </button>
-
-        <button
-          type="button"
-          onClick={() => {
-            setActiveTab('manual')
-            setStatus({ loading: false, error: '', success: '' })
-          }}
-          style={{
-            flex: 1,
-            padding: '12px 18px',
-            borderRadius: '12px',
-            border: 'none',
-            background: activeTab === 'manual' ? '#111d15' : 'transparent',
-            color: activeTab === 'manual' ? '#c4f039' : '#5f7165',
-            fontWeight: 800,
-            fontSize: '0.92rem',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <i className="bi bi-pencil-square"></i>
-          <span>Validación Manual</span>
-        </button>
-      </div>
-
-      {/* =====================================================
-          CONTENIDO PESTAÑA 1: ESCÁNER DE HUELLA DIGITAL
-          ===================================================== */}
-      {activeTab === 'huella' && (
-        <div className="checkin-biometric-grid">
-          <div className="checkin-scanner-card">
-            <div style={{ maxWidth: 440, margin: '0 auto', textAlign: 'center' }}>
-              <div
-                style={{
-                  width: '100px',
-                  height: '100px',
-                  borderRadius: '50%',
-                  background: isScanning ? '#111d15' : '#f0fdf4',
-                  border: isScanning ? '3px solid #c4f039' : '2px dashed #86efac',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  margin: '0 auto 18px',
-                  transition: 'all 0.3s ease',
-                  boxShadow: isScanning ? '0 0 25px rgba(196, 240, 57, 0.45)' : 'none',
-                }}
-              >
-                <i
-                  className={`bi ${isScanning ? 'bi-hourglass-split' : 'bi-fingerprint'}`}
-                  style={{
-                    fontSize: 52,
-                    color: isScanning ? '#c4f039' : '#15803d',
-                    transition: 'all 0.3s ease',
-                  }}
-                  aria-hidden="true"
-                />
-              </div>
-
-              <h3 className="mt-2 mb-2" style={{ fontWeight: 800, color: '#111d15' }}>
-                Control de Acceso Biométrico
-              </h3>
-              <p className="text-muted small mb-4">
-                Coloca tu huella en el lector o confirma en tu celular vinculado para validar tu ingreso o salida automáticamente.
-              </p>
-
-              <button
-                type="button"
-                className="btn w-100 py-3 fw-bold mb-3 shadow-sm"
-                style={{
-                  background: isScanning ? '#111d15' : '#c4f039',
-                  color: isScanning ? '#c4f039' : '#111d15',
-                  fontSize: '1.05rem',
-                  borderRadius: '14px',
-                  border: 'none',
-                  transition: 'all 0.2s ease',
-                }}
-                disabled={isScanning}
-                onClick={() => handleFingerprintScan()}
-              >
-                <i className={`bi ${isScanning ? 'bi-hourglass-split' : 'bi-fingerprint'} me-2`} />
-                {isScanning ? 'Leyendo huella… Confirma en el dispositivo' : 'Colocar huella / Validar'}
-              </button>
-
-              {/* Opción secundaria: Validar por DNI específico */}
-              <div className="text-center mt-2">
-                <button
-                  type="button"
-                  className="btn btn-link text-decoration-none small text-muted p-0"
-                  style={{ fontSize: '0.8rem' }}
-                  onClick={() => setShowDniFallback(!showDniFallback)}
-                >
-                  <i className={`bi ${showDniFallback ? 'bi-chevron-up' : 'bi-sliders'} me-1`}></i>
-                  {showDniFallback ? 'Ocultar búsqueda por DNI' : '¿Validar por un DNI específico?'}
-                </button>
-              </div>
-
-              {showDniFallback && (
-                <div className="mt-3 p-3 rounded-3 bg-light border text-start" style={{ animation: 'fadeIn 0.2s ease' }}>
-                  <label htmlFor="device-checkin-dni" className="form-label small fw-bold text-dark mb-1">
-                    DNI específico (Opcional)
-                  </label>
-                  <div className="d-flex gap-2">
-                    <input
-                      id="device-checkin-dni"
-                      className="form-control form-control-sm"
-                      inputMode="numeric"
-                      maxLength={8}
-                      placeholder="8 dígitos"
-                      value={biometricDni}
-                      disabled={isScanning}
-                      onChange={(e) => setBiometricDni(e.target.value.replace(/\D/g, '').slice(0, 8))}
-                    />
-                    <button
-                      type="button"
-                      className="btn btn-sm btn-dark px-3 fw-bold"
-                      disabled={isScanning || biometricDni.length !== 8}
-                      onClick={() => handleFingerprintScan(biometricDni)}
-                    >
-                      Validar
-                    </button>
-                  </div>
-                </div>
-              )}
-
-              {biometricError && (
-                <p role="alert" className="text-danger small mt-3 mb-0">
-                  <i className="bi bi-exclamation-triangle-fill me-1"></i>
-                  {biometricError}
-                </p>
-              )}
-            </div>
-          </div>
-
-          {/* Resultado Biométrico en Pantalla */}
-          <div className="checkin-result-card">
-            <h4 style={{ fontSize: '1.05rem', fontWeight: 800, color: '#111d15', margin: '0 0 18px 0' }}>
-              Estado del Acceso Biométrico
-            </h4>
-
-            {biometricResult ? (
-              <div style={{ textAlign: 'center', animation: 'fadeIn 0.3s ease' }}>
-                {/* 1. CASO: ENTRADA AUTORIZADA */}
-                {biometricResult.tipo === 'entrada' && (
-                  <>
-                    <div
-                      style={{
-                        width: '74px',
-                        height: '74px',
-                        borderRadius: '50%',
-                        background: '#ecfccb',
-                        border: '3px solid #84cc16',
-                        color: '#15803d',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '2rem',
-                        margin: '0 auto 16px',
-                        boxShadow: '0 6px 18px rgba(0,0,0,0.06)',
-                      }}
-                    >
-                      <i className="bi bi-check-lg"></i>
-                    </div>
-
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        padding: '4px 14px',
-                        borderRadius: '9999px',
-                        background: '#ecfccb',
-                        color: '#15803d',
-                        fontWeight: 800,
-                        fontSize: '0.76rem',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      ACCESO AUTORIZADO
-                    </span>
-
-                    <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#111d15', margin: '0 0 4px 0' }}>
-                      {biometricResult.user?.nombre} {biometricResult.user?.apellido}
-                    </h3>
-                    <p style={{ fontSize: '0.82rem', color: '#5f7165', margin: '0 0 16px 0' }}>
-                      DNI: {biometricResult.user?.dni}
-                    </p>
-
-                    <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '14px', textAlign: 'left', fontSize: '0.82rem', color: '#334155', lineHeight: 1.6, marginBottom: '16px' }}>
-                      <div><strong>Método:</strong> Dispositivo verificado <i className="bi bi-fingerprint text-success ms-1"></i></div>
-                      <div><strong>Hora de Ingreso:</strong> {formatTimePeru(biometricResult.horaEntrada || new Date())} hrs (Hora Perú)</div>
-                      <div style={{ color: '#166534', fontWeight: 700, marginTop: '4px' }}>
-                        <i className="bi bi-lightning-charge-fill text-warning me-1"></i>
-                        +{biometricResult.xpSumados ?? 0} XP y +{biometricResult.bambusSumados ?? 0} bambús otorgados a Mi Pandita
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* 2. CASO: SALIDA CONFIRMADA */}
-                {biometricResult.tipo === 'salida' && (
-                  <>
-                    <div
-                      style={{
-                        width: '74px',
-                        height: '74px',
-                        borderRadius: '50%',
-                        background: '#e0f2fe',
-                        border: '3px solid #0284c7',
-                        color: '#0369a1',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '2rem',
-                        margin: '0 auto 16px',
-                        boxShadow: '0 6px 18px rgba(0,0,0,0.06)',
-                      }}
-                    >
-                      <i className="bi bi-box-arrow-right"></i>
-                    </div>
-
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        padding: '4px 14px',
-                        borderRadius: '9999px',
-                        background: '#e0f2fe',
-                        color: '#0369a1',
-                        fontWeight: 800,
-                        fontSize: '0.76rem',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      SALIDA CONFIRMADA
-                    </span>
-
-                    <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#111d15', margin: '0 0 4px 0' }}>
-                      {biometricResult.user?.nombre} {biometricResult.user?.apellido}
-                    </h3>
-                    <p style={{ fontSize: '0.82rem', color: '#5f7165', margin: '0 0 16px 0' }}>
-                      DNI: {biometricResult.user?.dni}
-                    </p>
-
-                    <div style={{ background: '#f8fafc', padding: '14px', borderRadius: '14px', textAlign: 'left', fontSize: '0.82rem', color: '#334155', lineHeight: 1.6, marginBottom: '16px' }}>
-                      <div><strong>Método:</strong> Sensor Biométrico de Huella Digital <i className="bi bi-fingerprint text-primary ms-1"></i></div>
-                      <div><strong>Hora de Salida:</strong> {formatTimePeru(biometricResult.horaSalida || new Date())} hrs (Hora Perú)</div>
-                      <div style={{ color: '#0369a1', fontWeight: 700, marginTop: '4px' }}>
-                        <i className="bi bi-activity text-primary me-1"></i>
-                        Sesión completada: {biometricResult.tiempoTexto || 'Entrenamiento finalizado'}
-                      </div>
-                      <div style={{ color: '#166534', fontSize: '0.78rem', marginTop: '2px' }}>
-                        <i className="bi bi-check-circle-fill text-success me-1"></i>
-                        Asistencia registrada y puntos consolidados en Mi Pandita
-                      </div>
-                    </div>
-                  </>
-                )}
-
-                {/* 3. CASO: ENTRENAMIENTO EN CURSO (RECIENTE INGRESO) */}
-                {biometricResult.tipo === 'en_curso_reciente' && (
-                  <>
-                    <div
-                      style={{
-                        width: '74px',
-                        height: '74px',
-                        borderRadius: '50%',
-                        background: '#fef3c7',
-                        border: '3px solid #f59e0b',
-                        color: '#b45309',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '2rem',
-                        margin: '0 auto 16px',
-                        boxShadow: '0 6px 18px rgba(0,0,0,0.06)',
-                      }}
-                    >
-                      <i className="bi bi-hourglass-split"></i>
-                    </div>
-
-                    <span
-                      style={{
-                        display: 'inline-block',
-                        padding: '4px 14px',
-                        borderRadius: '9999px',
-                        background: '#fef3c7',
-                        color: '#b45309',
-                        fontWeight: 800,
-                        fontSize: '0.76rem',
-                        marginBottom: '8px',
-                      }}
-                    >
-                      ENTRENAMIENTO EN CURSO
-                    </span>
-
-                    <h3 style={{ fontSize: '1.3rem', fontWeight: 900, color: '#111d15', margin: '0 0 4px 0' }}>
-                      {biometricResult.user?.nombre} {biometricResult.user?.apellido}
-                    </h3>
-                    <p style={{ fontSize: '0.82rem', color: '#5f7165', margin: '0 0 16px 0' }}>
-                      DNI: {biometricResult.user?.dni}
-                    </p>
-
-                    <div style={{ background: '#fffbeb', border: '1px solid #fde68a', padding: '14px', borderRadius: '14px', textAlign: 'left', fontSize: '0.82rem', color: '#92400e', lineHeight: 1.6, marginBottom: '16px' }}>
-                      <div><strong>Ingreso registrado a las:</strong> {formatTimePeru(biometricResult.horaEntrada)} hrs</div>
-                      <div><strong>Tiempo en sala:</strong> {biometricResult.minutosTranscurridos} minutos entrenando</div>
-                      <div className="mt-2" style={{ color: '#78350f' }}>
-                        <i className="bi bi-info-circle-fill text-warning me-1"></i>
-                        Para validar tu salida con huella y asegurar tus puntos de Mi Pandita, debes entrenar un mínimo de <strong>{biometricResult.minutosMinimos} min</strong> (faltan {biometricResult.minutosRestantes} min).
-                      </div>
-                    </div>
-
-                    {biometricResult.canForceExit && (
-                      <button
-                        type="button"
-                        onClick={() => executeBiometricVerification(biometricResult.user?.dni, true)}
-                        className="btn btn-outline-danger btn-sm w-100 py-2 mb-2 fw-bold"
-                        style={{ borderRadius: '10px' }}
-                      >
-                        <i className="bi bi-box-arrow-right me-1"></i>
-                        Forzar Salida Anticipada (Recepción)
-                      </button>
-                    )}
-                  </>
-                )}
-
-                <button
-                  type="button"
-                  onClick={() => setBiometricResult(null)}
-                  style={{
-                    width: '100%',
-                    padding: '10px',
-                    background: '#111d15',
-                    color: '#c4f039',
-                    border: 'none',
-                    borderRadius: '10px',
-                    fontWeight: 700,
-                    cursor: 'pointer',
-                  }}
-                >
-                  Listo para siguiente socio
-                </button>
-              </div>
-            ) : (
-              <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
-                <div style={{ fontSize: '2.5rem', marginBottom: '12px' }}>
-                  <i className="bi bi-fingerprint" style={{ fontSize: '2.8rem', color: '#94a3b8' }}></i>
-                </div>
-                <p style={{ fontSize: '0.86rem', margin: 0 }}>
-                  Aún no se ha realizado ninguna lectura biométrica en esta sesión.
-                </p>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================
-          CONTENIDO PESTAÑA 2: VALIDACIÓN MANUAL EN RECEPCIÓN
-          ===================================================== */}
-      {activeTab === 'manual' && (
-        <div
-          style={{
-            background: '#ffffff',
-            borderRadius: '24px',
-            padding: '32px',
-            border: '1px solid #e3e8e2',
-            boxShadow: '0 6px 24px rgba(18, 31, 23, 0.05)',
-            marginBottom: '32px',
-          }}
-        >
-          <div style={{ maxWidth: '680px', margin: '0 auto' }}>
-            <h3 style={{ fontSize: '1.35rem', fontWeight: 900, color: '#111d15', marginBottom: '8px', textAlign: 'center' }}>
-              Validación Manual de Entrada en Recepción
-            </h3>
-            <p style={{ fontSize: '0.88rem', color: '#5f7165', marginBottom: '24px', textAlign: 'center' }}>
-              Busca al socio por su número de documento o nombre para comprobar su membresía, turno y autorizar su acceso manualmente.
-            </p>
-
-            <div style={{ display: 'flex', gap: '10px', marginBottom: manualError ? '8px' : '20px' }}>
-              <input
-                type="text"
-                value={manualCode}
-                onChange={(e) => {
-                  setManualCode(e.target.value)
-                  if (manualError) setManualError('')
-                }}
-                onKeyDown={(e) => e.key === 'Enter' && handleManualLookup()}
-                placeholder="Ingresa DNI o nombre completo del socio..."
-                className={`form-control ${manualError ? 'is-invalid' : ''}`}
-                style={{
-                  borderRadius: '12px',
-                  padding: '14px 18px',
-                  fontSize: '1rem',
-                  border: manualError ? '1.5px solid #ef4444' : '1.5px solid #cbd5e1',
-                  backgroundColor: manualError ? '#fef2f2' : '#ffffff',
-                }}
-              />
-              <button
-                type="button"
-                disabled={status.loading || !manualCode.trim()}
-                onClick={handleManualLookup}
-                style={{
-                  padding: '14px 28px',
-                  borderRadius: '12px',
-                  border: 'none',
-                  background: '#c4f039',
-                  color: '#111d15',
-                  fontWeight: 800,
-                  fontSize: '0.96rem',
-                  cursor: status.loading || !manualCode.trim() ? 'not-allowed' : 'pointer',
-                  boxShadow: '0 4px 14px rgba(196, 240, 57, 0.35)',
-                  whiteSpace: 'nowrap',
-                }}
-              >
-                {status.loading ? (
-                  'Buscando...'
-                ) : (
-                  <>
-                    <i className="bi bi-search me-1"></i> Buscar Socio
-                  </>
-                )}
-              </button>
-            </div>
-            {manualError && (
-              <div className="text-danger small mb-3 d-flex align-items-center gap-1" style={{ fontSize: '0.82rem' }}>
-                <i className="bi bi-exclamation-circle-fill"></i>
-                <span>{manualError}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* =====================================================
-          TABLA EN VIVO: SOCIOS ACTIVOS EN EL GIMNASIO AHORA
-          ===================================================== */}
+      {/* TABLA PRINCIPAL DE HORA DE INGRESO Y HORA DE SALIDA */}
       <div
         style={{
           background: '#ffffff',
-          borderRadius: '24px',
-          padding: '28px',
+          borderRadius: '20px',
+          padding: '22px',
           border: '1px solid #e3e8e2',
           boxShadow: '0 4px 18px rgba(18, 31, 23, 0.04)',
         }}
       >
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '18px' }}>
+        <div className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3">
           <div>
-            <h3 style={{ fontSize: '1.2rem', fontWeight: 800, color: '#111d15', margin: '0 0 4px 0' }}>
-              Socios Entrenando Ahora ({activeClients.length})
+            <h3 style={{ fontSize: '1.12rem', fontWeight: 800, color: '#111d15', margin: 0 }}>
+              Registro de Ingresos y Salidas de Hoy ({summary.totalHoy})
             </h3>
-            <p style={{ fontSize: '0.82rem', color: '#5f7165', margin: 0 }}>
-              Control de asistencias en sala con registro de método (Huella o Recepción Manual).
+            <p className="m-0 text-muted" style={{ fontSize: '0.8rem' }}>
+              Si un socio no marca su salida después de 4 horas, el sistema lo cierra como{' '}
+              <strong>No marcó su salida</strong> y libera su cupo del aforo.
             </p>
           </div>
 
-          <button
-            type="button"
-            onClick={loadActiveClients}
-            style={{
-              padding: '8px 14px',
-              borderRadius: '8px',
-              border: '1px solid #cbd5e1',
-              background: '#ffffff',
-              fontSize: '0.8rem',
-              fontWeight: 700,
-              cursor: 'pointer',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '6px',
-            }}
-          >
-            <i className="bi bi-arrow-clockwise"></i>
-            <span>Actualizar lista</span>
-          </button>
+          <div className="d-flex flex-wrap align-items-center gap-2">
+            {capacity && (
+              <span
+                className="badge"
+                style={{
+                  background: '#111d15',
+                  color: '#c4f039',
+                  padding: '8px 12px',
+                  borderRadius: '8px',
+                  fontSize: '0.8rem',
+                  fontWeight: 700,
+                }}
+              >
+                Aforo actual: {capacity.actual} / {capacity.maximo}
+              </span>
+            )}
+            <button
+              type="button"
+              onClick={loadAttendanceData}
+              style={{
+                padding: '7px 14px',
+                borderRadius: '8px',
+                border: '1px solid #cbd5e1',
+                background: '#ffffff',
+                fontSize: '0.82rem',
+                fontWeight: 700,
+                cursor: 'pointer',
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '6px',
+              }}
+            >
+              <i className="bi bi-arrow-clockwise" />
+              <span>Actualizar</span>
+            </button>
+          </div>
         </div>
 
-        {activeClients.length === 0 ? (
+        {/* Filtros rápidos */}
+        <div className="d-flex flex-wrap gap-2 mb-3">
+          {[
+            { id: 'todos', label: `Todos (${summary.totalHoy})` },
+            { id: 'en_sala', label: `En sala (${summary.enSala})` },
+            { id: 'finalizada', label: `Con salida (${summary.salieron})` },
+            { id: 'no_marco_salida', label: `No marcó salida +4h (${summary.noMarcaronSalida})` },
+          ].map((tab) => (
+            <button
+              key={tab.id}
+              type="button"
+              onClick={() => {
+                setFilterEstado(tab.id)
+                setCurrentPage(1)
+              }}
+              className="btn btn-sm fw-bold"
+              style={{
+                borderRadius: '9999px',
+                padding: '5px 14px',
+                fontSize: '0.78rem',
+                background: filterEstado === tab.id ? '#111d15' : '#f1f5f9',
+                color: filterEstado === tab.id ? '#c4f039' : '#475569',
+                border: 'none',
+              }}
+            >
+              {tab.label}
+            </button>
+          ))}
+        </div>
+
+        {filteredRecords.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '36px', color: '#94a3b8', fontSize: '0.9rem' }}>
-            No hay socios con ingreso activo en este momento.
+            No hay registros de ingreso o salida en esta vista.
           </div>
         ) : (
           <>
-            {/* VISTA DESKTOP: TABLA CORPORATIVA */}
             <div className="table-responsive d-none d-md-block">
               <table className="table table-hover align-middle m-0">
                 <thead>
@@ -794,19 +655,33 @@ export default function CheckInView({ token }) {
                     <th>Socio</th>
                     <th>DNI</th>
                     <th>Hora de Ingreso</th>
+                    <th>Hora de Salida</th>
                     <th>Método</th>
                     <th>Estado</th>
                     <th className="text-end">Acción</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {activeClients.map((client) => (
-                    <tr key={client.id}>
+                  {paginatedRecords.items.map((row) => (
+                    <tr key={row.id}>
                       <td className="px-3 fw-bold text-dark">
-                        {client.nombre} {client.apellido}
+                        {row.nombre} {row.apellido}
                       </td>
-                      <td className="px-3 text-muted">{client.dni}</td>
-                      <td className="px-3 font-monospace">{formatTimePeru(client.horaEntrada)} hrs</td>
+                      <td className="px-3 text-muted">{row.dni}</td>
+                      <td className="px-3 font-monospace fw-semibold">
+                        {formatTimePeru(row.horaEntrada)} hrs
+                      </td>
+                      <td className="px-3 font-monospace">
+                        {row.estado === 'en_sala' ? (
+                          <span className="text-muted">En curso</span>
+                        ) : row.estado === 'no_marco_salida' ? (
+                          <span style={{ color: '#b45309', fontWeight: 700, fontFamily: 'inherit', fontSize: '0.82rem' }}>
+                            No marcó salida (cierre {formatTimePeru(row.horaSalida)} hrs)
+                          </span>
+                        ) : (
+                          <span>{formatTimePeru(row.horaSalida)} hrs</span>
+                        )}
+                      </td>
                       <td className="px-3">
                         <span
                           style={{
@@ -814,40 +689,47 @@ export default function CheckInView({ token }) {
                             fontWeight: 800,
                             padding: '3px 10px',
                             borderRadius: '9999px',
-                            background: client.metodoRegistro === 'huella' ? '#ecfccb' : '#f1f5f9',
-                            color: client.metodoRegistro === 'huella' ? '#15803d' : '#475569',
-                            border: client.metodoRegistro === 'huella' ? '1px solid #d9f99d' : '1px solid #e2e8f0',
+                            background: row.metodoRegistro === 'huella' ? '#ecfccb' : '#f1f5f9',
+                            color: row.metodoRegistro === 'huella' ? '#15803d' : '#475569',
+                            border: row.metodoRegistro === 'huella' ? '1px solid #d9f99d' : '1px solid #e2e8f0',
                             display: 'inline-flex',
                             alignItems: 'center',
                             gap: '4px',
                           }}
                         >
-                          <i className={client.metodoRegistro === 'huella' ? 'bi bi-fingerprint' : 'bi bi-pencil-square'}></i>
-                          <span>{client.metodoRegistro === 'huella' ? 'Huella Digital' : 'Manual'}</span>
+                          <i className={row.metodoRegistro === 'huella' ? 'bi bi-fingerprint' : 'bi bi-pencil-square'} />
+                          <span>{row.metodoRegistro === 'huella' ? 'Huella' : 'Manual'}</span>
                         </span>
                       </td>
-                      <td className="px-3">
-                        <span className="badge text-dark" style={{ background: '#ecfccb', border: '1px solid #d9f99d', fontSize: '0.74rem' }}>
-                          En Entrenamiento
-                        </span>
-                      </td>
+                      <td className="px-3">{renderStatusBadge(row.estado)}</td>
                       <td className="px-3 text-end">
-                        <button
-                          type="button"
-                          onClick={() => handleQuickCheckout(client)}
-                          style={{
-                            padding: '6px 14px',
-                            background: '#ffffff',
-                            border: '1px solid #ef4444',
-                            color: '#b91c1c',
-                            borderRadius: '8px',
-                            fontWeight: 700,
-                            fontSize: '0.78rem',
-                            cursor: 'pointer',
-                          }}
-                        >
-                          Registrar Salida
-                        </button>
+                        {row.estado === 'en_sala' ? (
+                          <button
+                            type="button"
+                            onClick={() => handleQuickCheckout(row)}
+                            disabled={status.loading}
+                            style={{
+                              padding: '6px 14px',
+                              background: '#ffffff',
+                              border: '1px solid #ef4444',
+                              color: '#b91c1c',
+                              borderRadius: '8px',
+                              fontWeight: 700,
+                              fontSize: '0.78rem',
+                              cursor: 'pointer',
+                            }}
+                          >
+                            Registrar Salida
+                          </button>
+                        ) : row.estado === 'no_marco_salida' ? (
+                          <span className="text-muted" style={{ fontSize: '0.76rem' }}>
+                            Descontado del aforo
+                          </span>
+                        ) : (
+                          <span className="text-muted" style={{ fontSize: '0.76rem' }}>
+                            Completado
+                          </span>
+                        )}
                       </td>
                     </tr>
                   ))}
@@ -855,136 +737,178 @@ export default function CheckInView({ token }) {
               </table>
             </div>
 
-            {/* VISTA MÓVIL: TARJETAS NATIVAS ERGONÓMICAS */}
-            <div className="d-block d-md-none p-3">
+            <div className="d-block d-md-none">
               <div className="mobile-card-list">
-                {activeClients.map((client) => (
-                  <div key={client.id} className="mobile-data-card">
-                    {/* Header */}
+                {paginatedRecords.items.map((row) => (
+                  <div key={row.id} className="mobile-data-card">
                     <div className="mobile-card-header">
                       <div className="mobile-card-identity">
                         <div className="mobile-card-avatar" style={{ fontSize: '0.8rem' }}>
-                          {client.nombre?.charAt(0)}{client.apellido?.charAt(0)}
+                          {row.nombre?.charAt(0)}{row.apellido?.charAt(0)}
                         </div>
                         <div className="mobile-card-titles">
-                          <h4 className="mobile-card-title">{client.nombre} {client.apellido}</h4>
-                          <p className="mobile-card-subtitle">DNI: {client.dni || 'Sin DNI'}</p>
+                          <h4 className="mobile-card-title">{row.nombre} {row.apellido}</h4>
+                          <p className="mobile-card-subtitle">DNI: {row.dni || 'Sin DNI'}</p>
                         </div>
                       </div>
-                      <div>
-                        <span
-                          style={{
-                            fontSize: '0.68rem',
-                            fontWeight: 800,
-                            padding: '2px 8px',
-                            borderRadius: '9999px',
-                            background: client.metodoRegistro === 'huella' ? '#ecfccb' : '#f1f5f9',
-                            color: client.metodoRegistro === 'huella' ? '#15803d' : '#475569',
-                            border: client.metodoRegistro === 'huella' ? '1px solid #d9f99d' : '1px solid #e2e8f0',
-                            display: 'inline-flex',
-                            alignItems: 'center',
-                            gap: '4px',
-                          }}
-                        >
-                          <i className={client.metodoRegistro === 'huella' ? 'bi bi-fingerprint' : 'bi bi-pencil-square'}></i>
-                          <span>{client.metodoRegistro === 'huella' ? 'Huella' : 'Manual'}</span>
-                        </span>
-                      </div>
+                      {renderStatusBadge(row.estado)}
                     </div>
 
-                    {/* Grid */}
                     <div className="mobile-card-body-grid">
                       <div className="mobile-card-field">
                         <div className="mobile-card-label">Hora Ingreso</div>
                         <div className="mobile-card-value font-monospace">
-                          <i className="bi bi-clock me-1 text-muted"></i>
-                          {formatTimePeru(client.horaEntrada)} hrs
+                          {formatTimePeru(row.horaEntrada)} hrs
                         </div>
                       </div>
-
                       <div className="mobile-card-field">
-                        <div className="mobile-card-label">Estado Actual</div>
-                        <div className="mobile-card-value" style={{ color: '#166534' }}>
-                          <i className="bi bi-circle-fill text-success me-1" style={{ fontSize: '0.65rem' }}></i>
-                          En Entrenamiento
+                        <div className="mobile-card-label">Hora Salida</div>
+                        <div className="mobile-card-value font-monospace">
+                          {row.estado === 'en_sala'
+                            ? 'En sala'
+                            : row.estado === 'no_marco_salida'
+                            ? 'No marcó (+4h)'
+                            : `${formatTimePeru(row.horaSalida)} hrs`}
                         </div>
                       </div>
                     </div>
 
-                    {/* Acción Salida */}
-                    <div className="mobile-card-actions">
-                      <button
-                        type="button"
-                        onClick={() => handleQuickCheckout(client)}
-                        className="btn btn-outline-danger fw-bold w-100 py-2 d-flex align-items-center justify-content-center gap-2"
-                        style={{
-                          borderRadius: '10px',
-                          fontSize: '0.84rem',
-                        }}
-                      >
-                        <i className="bi bi-box-arrow-right"></i>
-                        <span>Registrar Salida del Club</span>
-                      </button>
-                    </div>
+                    {row.estado === 'en_sala' && (
+                      <div className="mobile-card-actions">
+                        <button
+                          type="button"
+                          onClick={() => handleQuickCheckout(row)}
+                          disabled={status.loading}
+                          className="btn btn-outline-danger fw-bold w-100 py-2 d-flex align-items-center justify-content-center gap-2"
+                          style={{ borderRadius: '10px', fontSize: '0.84rem' }}
+                        >
+                          <i className="bi bi-box-arrow-right" />
+                          <span>Registrar Salida</span>
+                        </button>
+                      </div>
+                    )}
                   </div>
                 ))}
               </div>
             </div>
+
+            <TablePagination
+              totalItems={filteredRecords.length}
+              currentPage={paginatedRecords.safePage}
+              pageSize={PAGE_SIZE}
+              onPageChange={setCurrentPage}
+              itemLabel="registros"
+            />
           </>
         )}
       </div>
 
-      {/* =====================================================
-          MODAL: FICHA DE SOCIO PARA VALIDACIÓN MANUAL
-          ===================================================== */}
+      {/* MODAL ÚNICO: REGISTRO MANUAL DE ENTRADA Y SALIDA */}
       <ModalDialog
         isOpen={showManualModal}
         onClose={() => setShowManualModal(false)}
-        title={manualUser ? `${manualUser.nombre} ${manualUser.apellido}` : 'Validación Manual'}
-        subtitle={manualUser ? `DNI: ${manualUser.dni} · ${manualUser.email || 'Sin correo'}` : ''}
+        title="Registro Manual de Acceso"
+        subtitle="Busca al socio por DNI o nombre para registrar su ingreso o salida."
         badge="Recepción"
         size="md"
         footer={
-          <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', width: '100%' }}>
-            <button
-              type="button"
-              className="btn btn-outline-dark px-3 py-2 fw-semibold"
-              onClick={() => setShowManualModal(false)}
-            >
-              Cancelar
-            </button>
-
-            {manualMembership && manualMembership.estado === 'activo' ? (
-              <button
-                type="button"
-                className="btn btn-dark px-4 py-2 fw-bold d-inline-flex align-items-center gap-1"
-                onClick={handleManualDirectCheckIn}
-                style={{ background: '#c4f039', color: '#111d15', border: 'none' }}
-              >
-                <i className="bi bi-check-lg"></i>
-                <span>Autorizar Entrada a Sala ({directDuration} min)</span>
-              </button>
-            ) : (
-              <button
-                type="button"
-                className="btn btn-secondary px-3 py-2 fw-bold"
-                disabled
-              >
-                Membresía No Válida
-              </button>
-            )}
-          </div>
+          manualUser ? (
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px', width: '100%' }}>
+              {manualActiveAttendance ? (
+                <button
+                  type="button"
+                  disabled={manualLoading}
+                  className="btn btn-danger px-4 py-2 fw-bold d-inline-flex align-items-center gap-2"
+                  onClick={() =>
+                    handleManualCheckout(
+                      manualActiveAttendance.id,
+                      `${manualUser.nombre} ${manualUser.apellido}`
+                    )
+                  }
+                >
+                  <i className="bi bi-box-arrow-right" />
+                  <span>{manualLoading ? 'Registrando...' : 'Registrar Salida'}</span>
+                </button>
+              ) : canAuthorizeManual ? (
+                <button
+                  type="button"
+                  disabled={manualLoading}
+                  className="btn btn-dark px-4 py-2 fw-bold d-inline-flex align-items-center gap-2"
+                  onClick={handleManualDirectCheckIn}
+                  style={{ background: '#c4f039', color: '#111d15', border: 'none' }}
+                >
+                  <i className="bi bi-check-lg" />
+                  <span>
+                    {manualLoading ? 'Registrando...' : `Autorizar Entrada (${directDuration} min)`}
+                  </span>
+                </button>
+              ) : (
+                <button type="button" className="btn btn-secondary px-3 py-2 fw-bold" disabled>
+                  Membresía No Válida
+                </button>
+              )}
+            </div>
+          ) : null
         }
       >
+        <form onSubmit={handleManualLookup} className="mb-3">
+          <label htmlFor="manual-lookup-input" className="form-label fw-bold small text-dark">
+            DNI o nombre del socio
+          </label>
+          <div className="d-flex gap-2">
+            <input
+              id="manual-lookup-input"
+              type="text"
+              value={manualCode}
+              onChange={(e) => {
+                setManualCode(e.target.value)
+                if (manualError) setManualError('')
+              }}
+              placeholder="Ej. 72145896 o nombre..."
+              className={`form-control ${manualError ? 'is-invalid' : ''}`}
+              style={{ borderRadius: '10px' }}
+              autoFocus
+            />
+            <button
+              type="submit"
+              disabled={manualLoading}
+              className="btn fw-bold px-3"
+              style={{
+                background: '#c4f039',
+                color: '#111d15',
+                border: 'none',
+                borderRadius: '10px',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              <i className="bi bi-search me-1" />
+              {manualLoading ? 'Buscando...' : 'Buscar'}
+            </button>
+          </div>
+        </form>
+
+        {manualError && (
+          <div className="alert alert-danger py-2 px-3 small d-flex align-items-center gap-2 mb-3">
+            <i className="bi bi-exclamation-circle-fill" />
+            <span>{manualError}</span>
+          </div>
+        )}
+
         {manualUser && (
           <div>
-            {/* Estado de Membresía */}
-            <div style={{ background: '#f8fafc', padding: '16px', borderRadius: '14px', marginBottom: '18px', border: '1px solid #e2e8f0' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
-                <span style={{ fontSize: '0.84rem', fontWeight: 700, color: '#64748b' }}>Plan de Membresía:</span>
+            <div style={{ background: '#f8fafc', padding: '14px 16px', borderRadius: '12px', marginBottom: '14px', border: '1px solid #e2e8f0' }}>
+              <div className="d-flex justify-content-between align-items-start gap-2 mb-2">
+                <div>
+                  <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#111d15' }}>
+                    {manualUser.nombre} {manualUser.apellido}
+                  </div>
+                  <div style={{ fontSize: '0.8rem', color: '#64748b' }}>
+                    DNI: {manualUser.dni}{manualUser.email ? ` · ${manualUser.email}` : ''}
+                  </div>
+                </div>
                 <span
                   style={{
-                    fontSize: '0.74rem',
+                    fontSize: '0.72rem',
                     fontWeight: 800,
                     padding: '3px 10px',
                     borderRadius: '9999px',
@@ -992,26 +916,36 @@ export default function CheckInView({ token }) {
                     color: manualMembership && manualMembership.estado === 'activo' ? '#15803d' : '#b91c1c',
                   }}
                 >
-                  {manualMembership && manualMembership.estado === 'activo' ? 'ACTIVO' : 'SIN MEMBRESÍA VIGENTE'}
+                  {manualMembership && manualMembership.estado === 'activo' ? 'ACTIVO' : 'SIN MEMBRESÍA'}
                 </span>
               </div>
-              <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#111d15' }}>
+              <div style={{ fontSize: '0.9rem', fontWeight: 700, color: '#334155' }}>
                 {manualMembership ? manualMembership.planNombre : 'Sin plan contratado'}
               </div>
               {manualMembership && (
-                <div style={{ fontSize: '0.8rem', color: '#64748b', marginTop: '4px' }}>
+                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>
                   Vence el: {formatDate(manualMembership.fechaFin)}
                 </div>
               )}
             </div>
 
-            {/* Selector de Duración de Ingreso Directo */}
-            {canDirectCheckIn && (
-              <div style={{ marginBottom: '16px' }}>
-                <label style={{ display: 'block', fontSize: '0.84rem', fontWeight: 700, color: '#334155', marginBottom: '6px' }}>
-                  Tiempo Estimado de Sesión:
+            {manualActiveAttendance && (
+              <div className="alert alert-warning py-2 px-3 small d-flex align-items-center gap-2 mb-3">
+                <i className="bi bi-clock-history" />
+                <span>
+                  El socio ya se encuentra en sala desde las{' '}
+                  <strong>{formatTimePeru(manualActiveAttendance.horaEntrada)} hrs</strong>.
+                </span>
+              </div>
+            )}
+
+            {canAuthorizeManual && (
+              <div className="mb-3">
+                <label htmlFor="manual-duration-select" className="form-label fw-bold small text-dark">
+                  Duración estimada de sesión
                 </label>
                 <select
+                  id="manual-duration-select"
                   value={directDuration}
                   onChange={(e) => setDirectDuration(Number(e.target.value))}
                   className="form-select"
@@ -1025,18 +959,18 @@ export default function CheckInView({ token }) {
               </div>
             )}
 
-            {/* Resumen de Asistencias Pasadas */}
-            {manualHistory && manualHistory.length > 0 && (
+            {manualHistory.length > 0 && (
               <div>
                 <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#64748b', display: 'block', marginBottom: '6px' }}>
-                  Últimos accesos registrados:
+                  Últimos accesos:
                 </span>
-                <div style={{ maxHeight: '140px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
+                <div style={{ maxHeight: '130px', overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: '10px' }}>
                   {manualHistory.slice(0, 3).map((h) => (
                     <div key={h.id} style={{ padding: '8px 12px', borderBottom: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem' }}>
                       <span>{formatDate(h.horaEntrada)} ({formatTimePeru(h.horaEntrada)} hrs)</span>
                       <span style={{ fontWeight: 700, color: h.metodoRegistro === 'huella' ? '#15803d' : '#475569' }}>
-                        {h.metodoRegistro === 'huella' ? '👆 Huella' : '✍️ Manual'}
+                        <i className={`bi ${h.metodoRegistro === 'huella' ? 'bi-fingerprint' : 'bi-pencil-square'} me-1`} />
+                        {h.metodoRegistro === 'huella' ? 'Huella' : 'Manual'}
                       </span>
                     </div>
                   ))}

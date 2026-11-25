@@ -1,6 +1,48 @@
 const db = require("../config/database");
 
 class AttendanceModel {
+    static async closeOverdueAttendances(maxHours = 4) {
+        try {
+            const maxMinutes = Math.max(1, Number(maxHours) || 4) * 60;
+            const [overdueRows] = await db.execute(
+                `SELECT id, reserva_id AS reservaId
+                 FROM asistencias
+                 WHERE hora_salida IS NULL
+                   AND TIMESTAMPDIFF(MINUTE, hora_entrada, NOW()) >= ?`,
+                [maxMinutes],
+            );
+
+            if (!overdueRows || overdueRows.length === 0) {
+                return 0;
+            }
+
+            const [result] = await db.execute(
+                `UPDATE asistencias
+                 SET hora_salida = DATE_ADD(hora_entrada, INTERVAL ? MINUTE),
+                     observacion_salida = 'no_marco_salida'
+                 WHERE hora_salida IS NULL
+                   AND TIMESTAMPDIFF(MINUTE, hora_entrada, NOW()) >= ?`,
+                [maxMinutes, maxMinutes],
+            );
+
+            const reservaIds = overdueRows.map((r) => r.reservaId).filter(Boolean);
+            if (reservaIds.length > 0) {
+                const placeholders = reservaIds.map(() => "?").join(",");
+                await db.execute(
+                    `UPDATE reservas
+                     SET estado = 'finalizada'
+                     WHERE id IN (${placeholders}) AND estado = 'confirmada'`,
+                    reservaIds,
+                );
+            }
+
+            return result.affectedRows || 0;
+        } catch (error) {
+            console.error("Error cerrando asistencias vencidas (>4h):", error);
+            return 0;
+        }
+    }
+
     static async create({ reservaId, usuarioId, horaEntrada, metodoRegistro }) {
         const metodo = metodoRegistro || "manual";
         const [result] = await db.execute(
@@ -20,6 +62,7 @@ class AttendanceModel {
     }
 
     static async getActiveClients() {
+        await this.closeOverdueAttendances(4);
         const [rows] = await db.execute(
             `SELECT
                 a.id,
@@ -28,7 +71,8 @@ class AttendanceModel {
                 u.dni,
                 a.hora_entrada AS horaEntrada,
                 a.hora_salida AS horaSalida,
-                COALESCE(a.metodo_registro, 'manual') AS metodoRegistro
+                COALESCE(a.metodo_registro, 'manual') AS metodoRegistro,
+                a.observacion_salida AS observacionSalida
              FROM asistencias a
              INNER JOIN usuarios u ON u.id = a.usuario_id
              WHERE a.hora_salida IS NULL
@@ -43,6 +87,43 @@ class AttendanceModel {
             horaEntrada: row.horaEntrada,
             horaSalida: row.horaSalida,
             metodoRegistro: row.metodoRegistro,
+            observacionSalida: row.observacionSalida || null,
+        }));
+    }
+
+    static async getTodayRecords() {
+        await this.closeOverdueAttendances(4);
+        const [rows] = await db.execute(
+            `SELECT
+                a.id,
+                u.nombre,
+                u.apellido,
+                u.dni,
+                a.hora_entrada AS horaEntrada,
+                a.hora_salida AS horaSalida,
+                COALESCE(a.metodo_registro, 'manual') AS metodoRegistro,
+                a.observacion_salida AS observacionSalida,
+                CASE
+                    WHEN a.hora_salida IS NULL THEN 'en_sala'
+                    WHEN a.observacion_salida = 'no_marco_salida' THEN 'no_marco_salida'
+                    ELSE 'finalizada'
+                END AS estado
+             FROM asistencias a
+             INNER JOIN usuarios u ON u.id = a.usuario_id
+             WHERE DATE(a.hora_entrada) = CURDATE() OR a.hora_salida IS NULL
+             ORDER BY (a.hora_salida IS NULL) DESC, a.hora_entrada DESC`,
+        );
+
+        return rows.map((row) => ({
+            id: row.id,
+            nombre: row.nombre,
+            apellido: row.apellido,
+            dni: row.dni,
+            horaEntrada: row.horaEntrada,
+            horaSalida: row.horaSalida,
+            metodoRegistro: row.metodoRegistro,
+            observacionSalida: row.observacionSalida || null,
+            estado: row.estado,
         }));
     }
 
@@ -58,6 +139,7 @@ class AttendanceModel {
     }
 
     static async getByUser(usuarioId) {
+        await this.closeOverdueAttendances(4);
         const [rows] = await db.execute(
             `SELECT
                 a.id,
@@ -68,8 +150,10 @@ class AttendanceModel {
                 a.hora_entrada AS horaEntrada,
                 a.hora_salida AS horaSalida,
                 COALESCE(a.metodo_registro, 'manual') AS metodoRegistro,
+                a.observacion_salida AS observacionSalida,
                 CASE
                     WHEN a.hora_salida IS NULL THEN 'activo'
+                    WHEN a.observacion_salida = 'no_marco_salida' THEN 'no_marco_salida'
                     ELSE 'finalizada'
                 END AS estado
              FROM asistencias a
@@ -88,6 +172,7 @@ class AttendanceModel {
             horaEntrada: row.horaEntrada,
             horaSalida: row.horaSalida,
             metodoRegistro: row.metodoRegistro,
+            observacionSalida: row.observacionSalida || null,
             estado: row.estado,
         }));
     }
@@ -114,6 +199,7 @@ class AttendanceModel {
     }
 
     static async findActiveByUser(usuarioId) {
+        await this.closeOverdueAttendances(4);
         const [rows] = await db.execute(
             `SELECT id, usuario_id AS usuarioId, hora_entrada AS horaEntrada
              FROM asistencias
@@ -164,6 +250,50 @@ class AttendanceModel {
         return true;
     }
 
+    static async getAttendanceRules(executor = db) {
+        try {
+            const [rows] = await executor.execute(
+                `SELECT clave, valor FROM configuracion WHERE clave IN ('panda_base_xp', 'panda_base_bambus', 'panda_xp_bonuses')`
+            );
+            const map = {};
+            for (const r of rows || []) map[r.clave] = r.valor;
+            const baseXp = Math.max(1, parseInt(map.panda_base_xp, 10) || 25);
+            const parsedBambus = parseInt(map.panda_base_bambus, 10);
+            const baseBambus = !isNaN(parsedBambus) && parsedBambus >= 0 ? parsedBambus : 10;
+            let xpBonuses = {};
+            if (map.panda_xp_bonuses) {
+                try {
+                    const parsed = JSON.parse(map.panda_xp_bonuses);
+                    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) xpBonuses = parsed;
+                } catch {}
+            }
+            return { baseXp, baseBambus, xpBonuses };
+        } catch {
+            return { baseXp: 25, baseBambus: 10, xpBonuses: {} };
+        }
+    }
+
+    static async saveAttendanceRules({ baseXp, baseBambus, xpBonuses }) {
+        const current = await this.getAttendanceRules();
+        const nextXp = baseXp !== undefined ? Math.max(1, parseInt(baseXp, 10) || 25) : current.baseXp;
+        const nextBambus = baseBambus !== undefined ? Math.max(0, parseInt(baseBambus, 10) || 0) : current.baseBambus;
+        const nextBonuses = xpBonuses !== undefined && xpBonuses && typeof xpBonuses === 'object' && !Array.isArray(xpBonuses)
+            ? xpBonuses
+            : current.xpBonuses;
+        const pairs = [
+            ['panda_base_xp', String(nextXp)],
+            ['panda_base_bambus', String(nextBambus)],
+            ['panda_xp_bonuses', JSON.stringify(nextBonuses)],
+        ];
+        for (const [clave, valor] of pairs) {
+            await db.execute(
+                `INSERT INTO configuracion (clave, valor) VALUES (?, ?) ON DUPLICATE KEY UPDATE valor = VALUES(valor)`,
+                [clave, valor]
+            );
+        }
+        return { baseXp: nextXp, baseBambus: nextBambus, xpBonuses: nextBonuses };
+    }
+
     static async redeemReward(usuarioId, { recompensaId }) {
         if (!Number.isInteger(Number(recompensaId)) || Number(recompensaId) < 1) throw new Error('Selecciona una recompensa del catálogo.');
         const connection = await db.getConnection();
@@ -177,7 +307,8 @@ class AttendanceModel {
             if (!reward || Number(reward.stock) < 1 || !Number.isFinite(Number(reward.costo_bambus)) || Number(reward.costo_bambus) < 1) throw new Error('Esta recompensa no está disponible.');
             const [entries] = await connection.execute('SELECT hora_entrada AS horaEntrada FROM asistencias WHERE usuario_id=?', [usuarioId]);
             const [spent] = await connection.execute('SELECT costo_bambus AS costoBambus, estado FROM canjes_recompensas WHERE usuario_id=?', [usuarioId]);
-            const balance = require('../services/pandaProgress').progress(entries, {}, spent).bambusDisponibles;
+            const rules = await this.getAttendanceRules(connection);
+            const balance = require('../services/pandaProgress').progress(entries, {}, spent, new Date(), rules).bambusDisponibles;
             const cost = Number(reward.costo_bambus);
             if (balance < cost) throw new Error(`Bambús insuficientes. Disponibles: ${balance}. Necesarios: ${cost}.`);
             const codigoCanje = 'PANDA-' + require('node:crypto').randomUUID();

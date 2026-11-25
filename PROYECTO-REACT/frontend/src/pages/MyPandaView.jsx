@@ -1,8 +1,8 @@
-import {canAccess} from '../utils/access'
 import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { canAccess } from '../utils/access'
 import usePandaAccount from '../hooks/usePandaAccount'
-import PandaCharacter3D from '../components/PandaCharacter3D'
+import PandaCharacterSVG from '../components/PandaCharacterSVG'
 
 const PANDA_QUOTES = [
   '¡A entrenar duro hoy! Sin excusas.',
@@ -15,107 +15,174 @@ const PANDA_QUOTES = [
   '¡Constancia diaria, resultados reales!',
 ]
 
+const PANDA_SNACKS = [
+  {
+    id: 'bambu',
+    name: 'Brote de Bambú',
+    shortName: 'Bambú',
+    hint: 'Snack favorito',
+    emoji: '🎋',
+    energy: 25,
+    quote: '¡Mmm, qué fresco este bambú! ¡Energía al máximo!',
+    popText: '+Energía Bambú',
+    accentBg: '#f0fdf4',
+    accentBorder: '#86efac',
+  },
+  {
+    id: 'batido',
+    name: 'Batido Proteico',
+    shortName: 'Batido',
+    hint: 'Recuperación',
+    emoji: '🥤',
+    energy: 30,
+    quote: '¡Pura proteína para seguir levantando fuerte!',
+    popText: '+Fuerza Pro',
+    accentBg: '#fefce8',
+    accentBorder: '#fde047',
+  },
+  {
+    id: 'agua',
+    name: 'Agua Mineral',
+    shortName: 'Agua',
+    hint: 'Hidratación',
+    emoji: '💧',
+    energy: 20,
+    quote: '¡Bien hidratado para romper récords hoy!',
+    popText: '+Hidratación',
+    accentBg: '#f0f9ff',
+    accentBorder: '#7dd3fc',
+  },
+]
+
 const STAGES = [
   {
     index: 0,
     key: 'bebe',
     name: '01 · Panda Bebé',
-    collectionName: '01 · PANDA BEBÉ',
+    shortName: 'Bebé',
     levelLabel: 'Niveles 1-2 · 0 a 299 XP',
     desc: 'Cuerpo pequeño y redondeado, etapa inicial de aprendizaje y técnica.',
     reqXp: 0,
-    nextThreshold: 300,
     iconClass: 'bi-egg-fill',
-    modelUrl: '/models/panda_bebe.glb',
   },
   {
     index: 1,
     key: 'intermedio',
     name: '02 · Panda Intermedio',
-    collectionName: '02 · PANDA INTERMEDIO',
+    shortName: 'Intermedio',
     levelLabel: 'Niveles 3-4 · 300 a 999 XP',
     desc: 'Postura atlética, mayor tono muscular en pecho, hombros y brazos.',
     reqXp: 300,
-    nextThreshold: 1000,
     iconClass: 'bi-lightning-fill',
-    modelUrl: '/models/panda_intermedio.glb',
   },
   {
     index: 2,
     key: 'musculoso',
     name: '03 · Panda Musculoso',
-    collectionName: '03 · PANDA MUSCULOSO',
+    shortName: 'Musculoso',
     levelLabel: 'Nivel Avanzado 5+ · 1,000+ XP',
-    desc: 'Físico imponente, deltoides hipertrofiados, espalda ancha y fuerza máxima.',
+    desc: 'Físico imponente, músculos marcados y fuerza máxima.',
     reqXp: 1000,
-    nextThreshold: 2000,
     iconClass: 'bi-shield-shaded',
-    modelUrl: '/models/panda_musculoso.glb',
   },
 ]
 
 export default function MyPandaView({ token, user }) {
   const navigate = useNavigate()
-  const modelViewerRef = useRef(null)
+  const { data: pandaData, error, refresh } = usePandaAccount(token)
 
-  // Datos de evolución y asistencia
-  const {data:pandaData,error,refresh}=usePandaAccount(token)
-
-  // Etapa seleccionada en el carrusel (0: bebe, 1: intermedio, 2: musculoso)
+  // Etapa visible en pantalla (por defecto coincide con la etapa real del socio)
   const [activeStageIndex, setActiveStageIndex] = useState(0)
 
-  // Estados interactivos
+  // Interacción con el Panda 2D
   const [isTraining, setIsTraining] = useState(false)
   const [repCount, setRepCount] = useState(0)
+  const [sessionEnergy, setSessionEnergy] = useState(40)
+  const [draggingSnack, setDraggingSnack] = useState(null)
+  const [isDragOverPanda, setIsDragOverPanda] = useState(false)
   const [speechBubble, setSpeechBubble] = useState('¡A entrenar duro hoy! Sin excusas.')
   const [floatingXp, setFloatingXp] = useState([])
-  const [autoRotate, setAutoRotate] = useState(false)
-  const [notification, setNotification] = useState('')
+  const speechTimerRef = useRef(null)
 
-  // Estados para modales informativos
+  // Modales informativos conectados a datos reales
   const [showProgressModal, setShowProgressModal] = useState(false)
   const [showEvolutionModal, setShowEvolutionModal] = useState(false)
   const [showStreakModal, setShowStreakModal] = useState(false)
   const [showBambusModal, setShowBambusModal] = useState(false)
   const [showGuideModal, setShowGuideModal] = useState(false)
 
-  useEffect(()=>{
-    if(pandaData) setActiveStageIndex({bebe:0,intermedio:1,musculoso:2}[pandaData.etapaKey] ?? 0)
-  },[pandaData?.etapaKey])
+  function showTimedSpeech(message) {
+    setSpeechBubble(message)
+    if (speechTimerRef.current) {
+      clearTimeout(speechTimerRef.current)
+    }
+    speechTimerRef.current = setTimeout(() => {
+      setSpeechBubble('')
+    }, 10000)
+  }
 
-  // Tocar al Panda para entrenar
+  useEffect(() => {
+    speechTimerRef.current = setTimeout(() => {
+      setSpeechBubble('')
+    }, 10000)
+    return () => {
+      if (speechTimerRef.current) clearTimeout(speechTimerRef.current)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (pandaData) {
+      setActiveStageIndex({ bebe: 0, intermedio: 1, musculoso: 2 }[pandaData.etapaKey] ?? 0)
+    }
+  }, [pandaData?.etapaKey])
+
+  function triggerFloatingPop(text) {
+    const newId = Date.now() + Math.random()
+    const offsetX = (Math.random() - 0.5) * 90
+    setFloatingXp((prev) => [...prev, { id: newId, text, offsetX }])
+
+    setTimeout(() => {
+      setFloatingXp((prev) => prev.filter((item) => item.id !== newId))
+    }, 1050)
+  }
+
   function handlePandaTap(e) {
     if (e && e.stopPropagation) e.stopPropagation()
     setIsTraining(true)
     setRepCount((prev) => prev + 1)
+    setSessionEnergy((prev) => Math.min(100, prev + 8))
 
-    // Cambiar frase aleatoria
     const randomQuote = PANDA_QUOTES[Math.floor(Math.random() * PANDA_QUOTES.length)]
-    setSpeechBubble(randomQuote)
+    showTimedSpeech(randomQuote)
 
     if (navigator?.vibrate) {
       navigator.vibrate(35)
     }
 
-    // Efecto flotante de XP
-    const newId = Date.now() + Math.random()
-    const offsetX = (Math.random() - 0.5) * 80
-    setFloatingXp((prev) => [...prev, { id: newId, text: '¡Vamos!', offsetX }])
-
-    setTimeout(() => {
-      setFloatingXp((prev) => prev.filter((item) => item.id !== newId))
-    }, 1100)
+    triggerFloatingPop('¡Vamos!')
 
     setTimeout(() => {
       setIsTraining(false)
-    }, 450)
+    }, 520)
   }
 
-  // Alimentar al Panda
+  function handleFeedPanda(snack) {
+    if (!snack) return
+    setIsTraining(true)
+    setRepCount((prev) => prev + 1)
+    setSessionEnergy((prev) => Math.min(100, prev + snack.energy))
+    showTimedSpeech(snack.quote)
+    triggerFloatingPop(`${snack.emoji} ${snack.popText}`)
 
-  function handleToggleCheckIn() { navigate('/app/asistencias') }
+    if (navigator?.vibrate) {
+      navigator.vibrate([30, 20, 30])
+    }
 
-  // Navegación de etapas
+    setTimeout(() => {
+      setIsTraining(false)
+    }, 620)
+  }
+
   function handlePrevStage() {
     setActiveStageIndex((prev) => (prev > 0 ? prev - 1 : STAGES.length - 1))
   }
@@ -124,17 +191,31 @@ export default function MyPandaView({ token, user }) {
     setActiveStageIndex((prev) => (prev < STAGES.length - 1 ? prev + 1 : 0))
   }
 
-  // Recentrar cámara frontal
-  function handleResetCamera() {
-    const viewer = modelViewerRef.current
-    if (viewer) {
-      viewer.cameraOrbit = '0deg 82deg auto'
-      viewer.jumpCameraToGoal()
-    }
+  if (!pandaData) {
+    return (
+      <div
+        className="panda-view-wrapper"
+        style={{ display: 'grid', placeItems: 'center', color: '#111d15', minHeight: '420px' }}
+      >
+        <div style={{ textAlign: 'center', padding: '24px' }}>
+          <p role="status" style={{ fontWeight: 600, color: '#5f7165', marginBottom: '12px' }}>
+            {error || 'Cargando tu pandita…'}
+          </p>
+          {error && (
+            <button type="button" className="btn btn-outline-success btn-sm fw-bold" onClick={refresh}>
+              Volver a consultar
+            </button>
+          )}
+        </div>
+      </div>
+    )
   }
 
-  if(!pandaData) return <div className="panda-view-wrapper" style={{display:'grid',placeItems:'center',color:'#dce8cd',minHeight:500}}><div><p role="status">{error || 'Cargando tu pandita…'}</p>{error&&<button className="btn btn-light" onClick={refresh}>Volver a consultar</button>}</div></div>
+  const realStageIndex = { bebe: 0, intermedio: 1, musculoso: 2 }[pandaData.etapaKey] ?? 0
   const currentStage = STAGES[activeStageIndex]
+  const isCurrentUserStage = activeStageIndex === realStageIndex
+  const isStageUnlocked = Number(pandaData.xp || 0) >= currentStage.reqXp
+
   const progressPercent = Math.min(
     100,
     Math.round(
@@ -144,244 +225,508 @@ export default function MyPandaView({ token, user }) {
     )
   )
 
+  const canGoRewards = canAccess(user, 'recompensas') || canAccess(user, 'mis-recompensas')
+  const rewardsRoute = canAccess(user, 'recompensas') ? '/app/recompensas' : '/app/mis-recompensas'
+  const canGoAttendance = canAccess(user, 'asistencias')
+
   return (
     <div className="panda-view-wrapper">
-      {/* Toast de notificación temporal */}
-      {notification && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '16px',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 1050,
-            background: 'rgba(17, 29, 21, 0.95)',
-            border: '1px solid #c4f039',
-            color: '#c4f039',
-            padding: '8px 20px',
-            borderRadius: '9999px',
-            fontSize: '0.84rem',
-            fontWeight: 800,
-            boxShadow: '0 8px 24px rgba(0,0,0,0.5)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '8px',
-            animation: 'fadeIn 0.25s ease-out',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          <i className="bi bi-check-circle-fill"></i>
-          <span>{notification}</span>
-        </div>
-      )}
-
       {/* ======================================================== */}
-      {/* HUD SUPERIOR: Selector de Etapa Central                  */}
+      {/* FILA SUPERIOR: SELECTOR DE ETAPA Y ACCESOS DE INFO       */}
       {/* ======================================================== */}
       <div
         style={{
-          position: 'absolute',
-          top: '12px',
-          left: '12px',
-          right: '12px',
-          zIndex: 30,
           display: 'flex',
-          justifyContent: 'center',
-          pointerEvents: 'none',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: '12px',
+          width: '100%',
         }}
       >
-        <div
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: '8px',
-            background: 'rgba(11, 20, 14, 0.92)',
-            backdropFilter: 'blur(14px)',
-            border: '1.5px solid rgba(196, 240, 57, 0.45)',
-            borderRadius: '9999px',
-            padding: '5px 12px',
-            boxShadow: '0 4px 20px rgba(0,0,0,0.5)',
-            pointerEvents: 'auto',
-          }}
-        >
-          <button
-            type="button"
-            onClick={handlePrevStage}
-            aria-label="Etapa anterior"
-            style={{
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: 'none',
-              color: '#c4f039',
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              transition: 'all 0.2s',
-            }}
-          >
-            <i className="bi bi-chevron-left"></i>
-          </button>
-
+        {/* Selector de etapa + estado real de desbloqueo */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flexWrap: 'wrap' }}>
           <div
-            onClick={() => setShowEvolutionModal(true)}
             style={{
-              padding: '2px 8px',
-              fontSize: '0.92rem',
-              fontWeight: 900,
-              color: '#ffffff',
-              letterSpacing: '-0.01em',
-              display: 'flex',
+              display: 'inline-flex',
               alignItems: 'center',
-              gap: '8px',
-              cursor: 'pointer',
+              gap: '6px',
+              background: '#f8faf7',
+              border: '1px solid #d9e4d7',
+              borderRadius: '999px',
+              padding: '4px 10px',
             }}
-            title="Ver información de etapas"
           >
-            <i className={`bi ${currentStage.iconClass} text-warning`}></i>
-            <span>{currentStage.name}</span>
-            <i className="bi bi-info-circle text-muted" style={{ fontSize: '0.8rem' }}></i>
+            <button
+              type="button"
+              onClick={handlePrevStage}
+              aria-label="Etapa anterior"
+              style={{
+                background: '#ffffff',
+                border: '1px solid #dbe4da',
+                color: '#166534',
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <i className="bi bi-chevron-left"></i>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setShowEvolutionModal(true)}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: '2px 8px',
+                fontSize: '0.9rem',
+                fontWeight: 800,
+                color: '#111d15',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '6px',
+                cursor: 'pointer',
+              }}
+              title="Ver etapas de evolución"
+            >
+              <i className={`bi ${currentStage.iconClass}`} style={{ color: '#166534' }}></i>
+              <span>{currentStage.name}</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleNextStage}
+              aria-label="Etapa siguiente"
+              style={{
+                background: '#ffffff',
+                border: '1px solid #dbe4da',
+                color: '#166534',
+                width: '30px',
+                height: '30px',
+                borderRadius: '50%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <i className="bi bi-chevron-right"></i>
+            </button>
           </div>
 
-          <button
-            type="button"
-            onClick={handleNextStage}
-            aria-label="Etapa siguiente"
+          <span
             style={{
-              background: 'rgba(255, 255, 255, 0.08)',
-              border: 'none',
-              color: '#c4f039',
-              width: '32px',
-              height: '32px',
-              borderRadius: '50%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              fontSize: '1rem',
-              transition: 'all 0.2s',
+              padding: '5px 12px',
+              borderRadius: '999px',
+              fontSize: '0.75rem',
+              fontWeight: 800,
+              background: isCurrentUserStage ? '#ecfccb' : isStageUnlocked ? '#f0fdf4' : '#f1f5f9',
+              color: isCurrentUserStage ? '#166534' : isStageUnlocked ? '#15803d' : '#475569',
+              border: `1px solid ${isCurrentUserStage ? '#bef264' : '#dbe4da'}`,
             }}
           >
-            <i className="bi bi-chevron-right"></i>
+            {isCurrentUserStage
+              ? 'Tu etapa actual'
+              : isStageUnlocked
+              ? 'Etapa desbloqueada'
+              : `Requiere ${currentStage.reqXp} XP`}
+          </span>
+        </div>
+
+        {/* Botones de información alineados a la derecha */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            type="button"
+            onClick={() => setShowEvolutionModal(true)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '12px',
+              background: '#f8faf7',
+              border: '1px solid #d9e4d7',
+              color: '#111d15',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <i className="bi bi-award-fill" style={{ color: '#166534' }}></i>
+            <span>Evolución</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => setShowGuideModal(true)}
+            style={{
+              padding: '8px 14px',
+              borderRadius: '12px',
+              background: '#f8faf7',
+              border: '1px solid #d9e4d7',
+              color: '#111d15',
+              fontSize: '0.8rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '6px',
+            }}
+          >
+            <i className="bi bi-question-circle-fill" style={{ color: '#5f7165' }}></i>
+            <span>Guía</span>
           </button>
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* BURBUJA DE DIÁLOGO FLOTANTE CENTRADA SOBRE EL PANDA      */}
+      {/* ESCENARIO PRINCIPAL: SNACKS + PANDA + META EVOLUCIÓN     */}
       {/* ======================================================== */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '54px',
-          left: '50%',
-          transform: 'translateX(-50%)',
-          zIndex: 25,
-          width: 'calc(100% - 130px)',
-          maxWidth: '360px',
-          pointerEvents: 'auto',
-        }}
-      >
-        <div
-          onClick={handlePandaTap}
-          style={{
-            background: 'rgba(11, 20, 14, 0.92)',
-            backdropFilter: 'blur(12px)',
-            border: '1.5px solid rgba(196, 240, 57, 0.45)',
-            color: '#c4f039',
-            padding: '7px 16px',
-            borderRadius: '9999px',
-            fontSize: '0.8rem',
-            fontWeight: 800,
-            lineHeight: 1.25,
-            boxShadow: '0 6px 20px rgba(0,0,0,0.5)',
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: '8px',
-            textAlign: 'center',
-            animation: 'floatBubble 3s ease-in-out infinite',
-          }}
-          title="Toca al panda para motivarlo"
-        >
-          <i className="bi bi-chat-quote-fill" style={{ fontSize: '0.9rem', color: '#c4f039', flexShrink: 0 }}></i>
-          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{speechBubble}</span>
+      <div className="panda-stage-canvas">
+        <div className="panda-stage-arena">
+          {/* Columna Izquierda: Comida / Snacks arrastrables tipo Pou */}
+          <aside className="panda-side-card panda-arena-snacks" aria-label="Alimentos para tu panda">
+            <div>
+              <h6 style={{ margin: 0, fontSize: '0.88rem', fontWeight: 800, color: '#111d15' }}>
+                Alimenta a tu panda
+              </h6>
+              <p style={{ margin: '2px 0 0', fontSize: '0.74rem', color: '#5f7165' }}>
+                Arrastra hacia el panda o toca para darle
+              </p>
+            </div>
+
+            <div className="panda-snacks-list">
+              {PANDA_SNACKS.map((snack) => (
+                <button
+                  key={snack.id}
+                  type="button"
+                  draggable
+                  onDragStart={(e) => {
+                    setDraggingSnack(snack)
+                    if (e.dataTransfer) {
+                      e.dataTransfer.setData('text/plain', snack.id)
+                      e.dataTransfer.effectAllowed = 'move'
+                    }
+                  }}
+                  onDragEnd={() => {
+                    setDraggingSnack(null)
+                    setIsDragOverPanda(false)
+                  }}
+                  onClick={() => handleFeedPanda(snack)}
+                  title={`Arrastra o toca para darle ${snack.name}`}
+                  style={{
+                    background: snack.accentBg,
+                    border: `1.5px solid ${snack.accentBorder}`,
+                    borderRadius: '14px',
+                    padding: '10px 12px',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '10px',
+                    cursor: 'grab',
+                    textAlign: 'left',
+                    transition: 'transform 0.15s ease',
+                  }}
+                >
+                  <span style={{ fontSize: '1.5rem', lineHeight: 1, flexShrink: 0 }} aria-hidden="true">
+                    {snack.emoji}
+                  </span>
+                  <div style={{ minWidth: 0, flex: 1 }}>
+                    <div style={{ fontSize: '0.8rem', fontWeight: 800, color: '#111d15', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {snack.shortName}
+                    </div>
+                    <div style={{ fontSize: '0.68rem', fontWeight: 600, color: '#5f7165' }}>
+                      {snack.hint}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </aside>
+
+          {/* Columna Central: Burbuja grande arriba + Panda 2D interactivo */}
+          <div
+            className="panda-arena-center"
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              position: 'relative',
+              padding: '6px 0',
+            }}
+          >
+            {/* Burbuja de diálogo grande sobre el panda (dura 10s y desaparece sin mover al panda) */}
+            <div style={{ minHeight: '86px', display: 'flex', alignItems: 'center', justifyContent: 'center', width: '100%' }}>
+              {speechBubble && (
+                <button
+                  type="button"
+                  onClick={handlePandaTap}
+                  title="Toca para motivar a tu panda"
+                  className="panda-speech-bubble"
+                >
+                  <i className="bi bi-chat-quote-fill" style={{ color: '#166534', fontSize: '1.2rem', flexShrink: 0 }}></i>
+                  <span>{speechBubble}</span>
+                </button>
+              )}
+            </div>
+
+            {/* Zona de Drop + Halo circular centrado sin bordes rectangulares */}
+            <div
+              onDragOver={(e) => {
+                e.preventDefault()
+                if (!isDragOverPanda) setIsDragOverPanda(true)
+              }}
+              onDragLeave={() => setIsDragOverPanda(false)}
+              onDrop={(e) => {
+                e.preventDefault()
+                setIsDragOverPanda(false)
+                const snackId = e.dataTransfer?.getData('text/plain')
+                const found = draggingSnack || PANDA_SNACKS.find((s) => s.id === snackId)
+                if (found) handleFeedPanda(found)
+                setDraggingSnack(null)
+              }}
+              style={{
+                position: 'relative',
+                width: '100%',
+                maxWidth: '380px',
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                borderRadius: '999px',
+                outline: isDragOverPanda ? '3px dashed #84cc16' : '3px dashed transparent',
+                outlineOffset: '6px',
+                background: isDragOverPanda ? 'rgba(196, 240, 57, 0.14)' : 'transparent',
+                transition: 'all 0.2s ease',
+              }}
+            >
+              {/* Halo circular puro que muere antes de los bordes */}
+              <div
+                aria-hidden="true"
+                style={{
+                  position: 'absolute',
+                  width: 'min(70vw, 310px)',
+                  height: 'min(70vw, 310px)',
+                  borderRadius: '50%',
+                  background: 'radial-gradient(circle, rgba(196, 240, 57, 0.24) 0%, rgba(196, 240, 57, 0) 70%)',
+                  pointerEvents: 'none',
+                }}
+              />
+
+              <PandaCharacterSVG
+                stage={currentStage.key}
+                isTraining={isTraining}
+                onPandaTap={handlePandaTap}
+                showAura={isCurrentUserStage && currentStage.key === 'musculoso'}
+              />
+
+              {isDragOverPanda && (
+                <div
+                  style={{
+                    position: 'absolute',
+                    bottom: '14%',
+                    background: '#111d15',
+                    color: '#c4f039',
+                    padding: '5px 14px',
+                    borderRadius: '999px',
+                    fontSize: '0.78rem',
+                    fontWeight: 800,
+                    pointerEvents: 'none',
+                    zIndex: 25,
+                  }}
+                >
+                  ¡Suelta aquí para alimentar!
+                </div>
+              )}
+
+              {/* Partículas flotantes al tocar o alimentar */}
+              {floatingXp.map((item) => (
+                <div
+                  key={item.id}
+                  style={{
+                    position: 'absolute',
+                    top: '38%',
+                    left: `calc(50% + ${item.offsetX}px)`,
+                    transform: 'translate(-50%, -50%)',
+                    background: '#c4f039',
+                    color: '#111d15',
+                    padding: '6px 14px',
+                    borderRadius: '9999px',
+                    fontSize: '0.86rem',
+                    fontWeight: 900,
+                    pointerEvents: 'none',
+                    animation: 'floatUp 1.05s forwards',
+                    boxShadow: '0 6px 16px rgba(132, 204, 22, 0.45)',
+                    zIndex: 20,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    whiteSpace: 'nowrap',
+                  }}
+                >
+                  <i className="bi bi-lightning-charge-fill"></i>
+                  <span>{item.text}</span>
+                </div>
+              ))}
+            </div>
+
+            {/* Estado de sesión + asistencia del día */}
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '8px', flexWrap: 'wrap', marginTop: '8px' }}>
+              <span
+                style={{
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: '#5f7165',
+                  background: '#ffffff',
+                  border: '1px solid #e3e8e2',
+                  padding: '4px 12px',
+                  borderRadius: '999px',
+                }}
+              >
+                {repCount} {repCount === 1 ? 'ánimo' : 'ánimos'} en esta sesión
+              </span>
+              <span
+                style={{
+                  fontSize: '0.76rem',
+                  fontWeight: 700,
+                  color: pandaData.hasCheckedInToday ? '#166534' : '#64748b',
+                  background: pandaData.hasCheckedInToday ? '#ecfccb' : '#ffffff',
+                  border: `1px solid ${pandaData.hasCheckedInToday ? '#bef264' : '#e3e8e2'}`,
+                  padding: '4px 12px',
+                  borderRadius: '999px',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '5px',
+                }}
+              >
+                <i className={pandaData.hasCheckedInToday ? 'bi bi-check-circle-fill' : 'bi bi-clock'}></i>
+                <span>{pandaData.hasCheckedInToday ? 'Asistencia registrada hoy' : 'Sin check-in hoy'}</span>
+              </span>
+            </div>
+          </div>
+
+          {/* Columna Derecha: Energía de sesión + Meta real de evolución */}
+          <aside className="panda-side-card panda-arena-meta" aria-label="Estado y meta de evolución">
+            <div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                <span style={{ fontSize: '0.8rem', fontWeight: 800, color: '#111d15' }}>Energía de sesión</span>
+                <span style={{ fontSize: '0.78rem', fontWeight: 800, color: '#166534' }}>{sessionEnergy}%</span>
+              </div>
+              <div style={{ background: '#edf2ec', borderRadius: '999px', height: '8px', overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${sessionEnergy}%`,
+                    height: '100%',
+                    background: 'linear-gradient(90deg, #a3e635 0%, #166534 100%)',
+                    borderRadius: '999px',
+                    transition: 'width 0.3s ease',
+                  }}
+                />
+              </div>
+              <p style={{ margin: '5px 0 0', fontSize: '0.7rem', color: '#5f7165' }}>
+                Sube animando o alimentando a tu panda
+              </p>
+            </div>
+
+            <div style={{ borderTop: '1px solid #eef2ec', paddingTop: '10px' }}>
+              <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#5f7165', display: 'block' }}>
+                Meta de evolución
+              </span>
+              {(() => {
+                const nextStage = STAGES[realStageIndex + 1]
+                if (!nextStage) {
+                  return (
+                    <div style={{ marginTop: '4px', fontSize: '0.82rem', fontWeight: 800, color: '#166534' }}>
+                      ¡Etapa máxima alcanzada!
+                    </div>
+                  )
+                }
+                const remaining = Math.max(0, nextStage.reqXp - Number(pandaData.xp || 0))
+                return (
+                  <>
+                    <div style={{ marginTop: '4px', fontSize: '0.82rem', fontWeight: 800, color: '#111d15' }}>
+                      {nextStage.shortName} ({nextStage.reqXp} XP)
+                    </div>
+                    <div style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700, marginTop: '2px' }}>
+                      Faltan {remaining} XP reales
+                    </div>
+                  </>
+                )
+              })()}
+            </div>
+
+            <div style={{ background: '#f8faf7', borderRadius: '12px', padding: '8px 10px', border: '1px solid #e3e8e2', fontSize: '0.72rem', color: '#5f7165' }}>
+              Cada día en el club suma <strong style={{ color: '#111d15' }}>+{pandaData.baseXp || 25} XP</strong> y{' '}
+              <strong style={{ color: '#166534' }}>+{pandaData.baseBambus ?? 10} bambús</strong>.
+            </div>
+          </aside>
         </div>
       </div>
 
       {/* ======================================================== */}
-      {/* COLUMNA IZQUIERDA: BOTONES VERTICALES DE INFORMACIÓN     */}
+      {/* TARJETAS DE ESTADO ALINEADAS (PC Y CELULAR)              */}
       {/* ======================================================== */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '110px',
-          left: '12px',
-          zIndex: 35,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-        }}
-      >
+      <div className="panda-kpi-grid">
         {/* Nivel y XP */}
         <button
           type="button"
           onClick={() => setShowProgressModal(true)}
-          title="Nivel y Progreso XP"
           style={{
-            width: '50px',
-            height: '50px',
+            background: '#ffffff',
+            border: '1px solid #e3e8e2',
             borderRadius: '16px',
-            background: 'rgba(15, 26, 19, 0.92)',
-            backdropFilter: 'blur(12px)',
-            border: '1.5px solid rgba(250, 204, 21, 0.55)',
-            color: '#facc15',
+            padding: '12px 14px',
+            textAlign: 'left',
+            cursor: 'pointer',
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '1.15rem',
-            boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-            transition: 'all 0.2s ease',
+            justifyContent: 'space-between',
+            gap: '6px',
+            transition: 'border-color 0.2s, box-shadow 0.2s',
           }}
         >
-          <i className="bi bi-trophy-fill"></i>
-          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#f8fafc', marginTop: '-2px' }}>
-            N{pandaData.nivel}
-          </span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#5f7165' }}>Nivel</span>
+            <i className="bi bi-trophy-fill" style={{ color: '#eab308', fontSize: '1rem' }}></i>
+          </div>
+          <strong style={{ fontSize: '1.15rem', fontWeight: 900, color: '#111d15' }}>
+            N{pandaData.nivel} · {pandaData.xp} XP
+          </strong>
+          <div style={{ background: '#edf2ec', borderRadius: '999px', height: '6px', overflow: 'hidden', width: '100%' }}>
+            <div style={{ width: `${progressPercent}%`, height: '100%', background: '#84cc16', borderRadius: '999px' }} />
+          </div>
         </button>
 
         {/* Racha */}
         <button
           type="button"
           onClick={() => setShowStreakModal(true)}
-          title="Racha de Asistencias"
           style={{
-            width: '50px',
-            height: '50px',
+            background: '#ffffff',
+            border: '1px solid #e3e8e2',
             borderRadius: '16px',
-            background: 'rgba(15, 26, 19, 0.92)',
-            backdropFilter: 'blur(12px)',
-            border: '1.5px solid rgba(248, 113, 113, 0.55)',
-            color: '#f87171',
+            padding: '12px 14px',
+            textAlign: 'left',
+            cursor: 'pointer',
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '1.15rem',
-            boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-            transition: 'all 0.2s ease',
+            justifyContent: 'space-between',
+            gap: '6px',
           }}
         >
-          <i className="bi bi-fire"></i>
-          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#f8fafc', marginTop: '-2px' }}>
-            {pandaData.racha}d
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#5f7165' }}>Racha</span>
+            <i className="bi bi-fire" style={{ color: '#ef4444', fontSize: '1rem' }}></i>
+          </div>
+          <strong style={{ fontSize: '1.15rem', fontWeight: 900, color: '#111d15' }}>
+            {pandaData.racha} {pandaData.racha === 1 ? 'día' : 'días'}
+          </strong>
+          <span style={{ fontSize: '0.72rem', color: '#5f7165', fontWeight: 600 }}>
+            {pandaData.asistenciasMes} asist. este mes
           </span>
         </button>
 
@@ -389,313 +734,169 @@ export default function MyPandaView({ token, user }) {
         <button
           type="button"
           onClick={() => setShowBambusModal(true)}
-          title="Bambús Disponibles"
           style={{
-            width: '50px',
-            height: '50px',
+            background: '#ffffff',
+            border: '1px solid #e3e8e2',
             borderRadius: '16px',
-            background: 'rgba(15, 26, 19, 0.92)',
-            backdropFilter: 'blur(12px)',
-            border: '1.5px solid rgba(196, 240, 57, 0.55)',
-            color: '#c4f039',
+            padding: '12px 14px',
+            textAlign: 'left',
+            cursor: 'pointer',
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '1.15rem',
-            boxShadow: '0 6px 18px rgba(0,0,0,0.45)',
-            transition: 'all 0.2s ease',
+            justifyContent: 'space-between',
+            gap: '6px',
           }}
         >
-          <i className="bi bi-gem"></i>
-          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#c4f039', marginTop: '-2px' }}>
-            {pandaData.bambusDisponibles}
-          </span>
-        </button>
-      </div>
-
-      {/* ======================================================== */}
-      {/* COLUMNA DERECHA: BOTONES VERTICALES DE CONTROL Y ACCIÓN  */}
-      {/* ======================================================== */}
-      <div
-        style={{
-          position: 'absolute',
-          top: '110px',
-          right: '12px',
-          zIndex: 35,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: '10px',
-        }}
-      >
-        {/* Etapas de evolución */}
-        <button
-          type="button"
-          onClick={() => setShowEvolutionModal(true)}
-          title="Etapas de Evolución"
-          style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '16px',
-            background: 'rgba(15, 26, 19, 0.92)',
-            backdropFilter: 'blur(12px)',
-            border: '1.5px solid rgba(196, 240, 57, 0.45)',
-            color: '#c4f039',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '1.15rem',
-            boxShadow: '0 6px 18px rgba(0,0,0,0.4)',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <i className="bi bi-award-fill"></i>
-          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#c4f039', marginTop: '-2px' }}>
-            Evo
-          </span>
-        </button>
-
-        {/* Guía informativa */}
-        <button
-          type="button"
-          onClick={() => setShowGuideModal(true)}
-          title="Guía de Mi Pandita"
-          style={{
-            width: '50px',
-            height: '50px',
-            borderRadius: '16px',
-            background: 'rgba(15, 26, 19, 0.92)',
-            backdropFilter: 'blur(12px)',
-            border: '1.5px solid rgba(255, 255, 255, 0.18)',
-            color: '#94a3b8',
-            display: 'flex',
-            flexDirection: 'column',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            fontSize: '1.15rem',
-            boxShadow: '0 6px 18px rgba(0,0,0,0.4)',
-            transition: 'all 0.2s ease',
-          }}
-        >
-          <i className="bi bi-question-circle-fill"></i>
-          <span style={{ fontSize: '0.62rem', fontWeight: 900, color: '#94a3b8', marginTop: '-2px' }}>
-            Guía
-          </span>
-        </button>
-      </div>
-
-      {/* ======================================================== */}
-      {/* ESCENARIO 3D HERO PRINCIPAL (OCUPA TODA LA PANTALLA)    */}
-      {/* ======================================================== */}
-      <div
-        style={{
-          flex: 1,
-          width: '100%',
-          height: '100%',
-          position: 'relative',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          zIndex: 10,
-          paddingTop: '24px',
-        }}
-      >
-        <PandaCharacter3D
-          stage={currentStage.key}
-          isTraining={isTraining}
-          onPandaTap={handlePandaTap}
-          autoRotate={autoRotate}
-          modelViewerRef={modelViewerRef}
-        />
-
-        {/* Partículas flotantes de XP */}
-        {floatingXp.map((item) => (
-          <div
-            key={item.id}
-            style={{
-              position: 'absolute',
-              top: '45%',
-              left: `calc(50% + ${item.offsetX}px)`,
-              transform: 'translate(-50%, -50%)',
-              background: '#c4f039',
-              color: '#111d15',
-              padding: '6px 16px',
-              borderRadius: '9999px',
-              fontSize: '0.9rem',
-              fontWeight: 900,
-              pointerEvents: 'none',
-              animation: 'floatUp 1.1s forwards',
-              boxShadow: '0 4px 18px rgba(196, 240, 57, 0.7)',
-              zIndex: 30,
-              display: 'flex',
-              alignItems: 'center',
-              gap: '4px',
-            }}
-          >
-            <i className="bi bi-lightning-charge-fill"></i>
-            <span>{item.text}</span>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', width: '100%' }}>
+            <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#5f7165' }}>Bambús</span>
+            <i className="bi bi-gem" style={{ color: '#166534', fontSize: '1rem' }}></i>
           </div>
-        ))}
+          <strong style={{ fontSize: '1.15rem', fontWeight: 900, color: '#111d15' }}>
+            {pandaData.bambusDisponibles}
+          </strong>
+          <span style={{ fontSize: '0.72rem', color: '#166534', fontWeight: 700 }}>
+            Ver saldo y canjes
+          </span>
+        </button>
       </div>
 
       {/* ======================================================== */}
-      {/* BARRA INFERIOR DE ACCIÓN ERGONÓMICA PARA CELULAR         */}
+      {/* BOTONES DE ACCIÓN PRINCIPALES ALINEADOS                  */}
       {/* ======================================================== */}
-      <div
-        style={{
-          position: 'relative',
-          zIndex: 30,
-          padding: '12px 16px 16px 16px',
-          background: 'linear-gradient(to top, rgba(7, 13, 9, 0.95) 0%, rgba(7, 13, 9, 0.7) 70%, transparent 100%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: '8px',
-        }}
-      >
-        <div style={{ display: 'flex', width: '100%', maxWidth: '420px', gap: '8px' }}>
-          {/* Botón Principal: Entrenar */}
+      <div className="panda-actions-row">
+        <button
+          type="button"
+          onClick={handlePandaTap}
+          style={{
+            background: '#c4f039',
+            color: '#111d15',
+            border: '1px solid #a3e635',
+            borderRadius: '14px',
+            padding: '12px 16px',
+            fontSize: '0.88rem',
+            fontWeight: 800,
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: '8px',
+            boxShadow: '0 4px 14px rgba(196, 240, 57, 0.35)',
+          }}
+        >
+          <i className="bi bi-heart-pulse-fill"></i>
+          <span>Animar panda</span>
+        </button>
+
+        {canGoRewards && (
           <button
             type="button"
-            onClick={handlePandaTap}
+            onClick={() => navigate(rewardsRoute)}
             style={{
-              flex: 1.2,
-              background: '#c4f039',
-              color: '#111d15',
-              border: 'none',
-              borderRadius: '16px',
-              padding: '11px 12px',
-              fontSize: '0.84rem',
-              fontWeight: 900,
+              background: '#111d15',
+              color: '#ffffff',
+              border: '1px solid #111d15',
+              borderRadius: '14px',
+              padding: '12px 16px',
+              fontSize: '0.88rem',
+              fontWeight: 800,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px',
-              boxShadow: '0 6px 20px rgba(196, 240, 57, 0.35)',
-              transition: 'transform 0.15s',
-              whiteSpace: 'nowrap',
+              gap: '8px',
             }}
           >
-            <i className="bi bi-heart-pulse-fill" style={{ fontSize: '1rem' }}></i>
-            <span>Animar panda</span>
+            <i className="bi bi-gift-fill" style={{ color: '#c4f039' }}></i>
+            <span>Canjear puntos</span>
           </button>
+        )}
 
-          {/* Botón Nuevo: Canjear Puntos */}
-          {canAccess(user,user?.rol==='cliente'?'recompensas':'mis-recompensas') && (<button
+        {canGoAttendance && (
+          <button
             type="button"
-            onClick={() => navigate(user?.rol==='cliente'?'/app/recompensas':'/app/mis-recompensas')}
+            onClick={() => navigate('/app/asistencias')}
             style={{
-              flex: 1.1,
-              background: 'rgba(196, 240, 57, 0.18)',
-              border: '1.5px solid #c4f039',
-              color: '#c4f039',
-              borderRadius: '16px',
-              padding: '11px 10px',
-              fontSize: '0.8rem',
-              fontWeight: 900,
+              background: '#f8faf7',
+              color: '#111d15',
+              border: '1px solid #d9e4d7',
+              borderRadius: '14px',
+              padding: '12px 16px',
+              fontSize: '0.88rem',
+              fontWeight: 700,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              gap: '6px',
-              boxShadow: '0 4px 16px rgba(196, 240, 57, 0.2)',
-              transition: 'all 0.2s',
-              whiteSpace: 'nowrap',
+              gap: '8px',
+              gridColumn: !canGoRewards ? 'auto' : undefined,
             }}
-            title="Ir a Recompensas y Canjes"
           >
-            <i className="bi bi-gift-fill" style={{ fontSize: '0.9rem' }}></i>
-            <span>Canjear Puntos</span>
-          </button>)}
-        </div>
-
-        {/* Botón de Asistencia / Simulación */}
-        <button
-          type="button"
-          onClick={handleToggleCheckIn}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: pandaData.hasCheckedInToday ? '#84cc16' : '#94a3b8',
-            fontSize: '0.74rem',
-            fontWeight: 700,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            gap: '6px',
-            padding: '4px',
-          }}
-        >
-          <i className={pandaData.hasCheckedInToday ? 'bi bi-check-circle-fill text-success' : 'bi bi-circle'}></i>
-          <span>{pandaData.hasCheckedInToday ? 'Asistencia registrada hoy' : 'Ver mis asistencias'}</span>
-        </button>
+            <i className="bi bi-calendar-check" style={{ color: '#166534' }}></i>
+            <span>Mis asistencias</span>
+          </button>
+        )}
       </div>
 
       {/* ======================================================== */}
       {/* MODAL 1: PROGRESO DE NIVEL & XP                         */}
       {/* ======================================================== */}
       {showProgressModal && (
-        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
-          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom">
+        <div
+          className="panda-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowProgressModal(false)}
+        >
+          <div className="panda-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="panda-modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="bi bi-trophy-fill text-warning" style={{ fontSize: '1.2rem' }}></i>
-                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Progreso de Nivel</h5>
+                <i className="bi bi-trophy-fill" style={{ color: '#eab308', fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 800, color: '#111d15' }}>Progreso de Nivel</h5>
               </div>
-              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowProgressModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="panda-modal-close" onClick={() => setShowProgressModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
 
             <div style={{ padding: '16px 0' }}>
               <div style={{ textAlign: 'center', marginBottom: '16px' }}>
-                <span style={{ fontSize: '2rem', fontWeight: 900, color: '#c4f039' }}>{pandaData.xp} XP</span>
-                <p style={{ margin: '4px 0 0 0', color: '#94a3b8', fontSize: '0.85rem' }}>
-                  Nivel {pandaData.nivel} · {currentStage.name}
+                <span style={{ fontSize: '2rem', fontWeight: 900, color: '#166534' }}>{pandaData.xp} XP</span>
+                <p style={{ margin: '4px 0 0', color: '#5f7165', fontSize: '0.86rem' }}>
+                  Nivel {pandaData.nivel} · {pandaData.etapa}
                 </p>
               </div>
 
-              {/* Barra de progreso */}
-              <div style={{ background: 'rgba(255,255,255,0.08)', borderRadius: '9999px', height: '14px', overflow: 'hidden', marginBottom: '8px' }}>
+              <div style={{ background: '#edf2ec', borderRadius: '9999px', height: '12px', overflow: 'hidden', marginBottom: '8px' }}>
                 <div
                   style={{
                     width: `${progressPercent}%`,
                     height: '100%',
-                    background: 'linear-gradient(90deg, #84cc16 0%, #c4f039 100%)',
+                    background: 'linear-gradient(90deg, #84cc16 0%, #235833 100%)',
                     borderRadius: '9999px',
                     transition: 'width 0.4s ease',
                   }}
                 />
               </div>
 
-              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#94a3b8', marginBottom: '18px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.78rem', color: '#5f7165', marginBottom: '16px' }}>
                 <span>Nivel {pandaData.nivel} ({pandaData.currentLevelBaseXp} XP)</span>
-                <span>{progressPercent}%</span>
+                <span style={{ fontWeight: 700, color: '#111d15' }}>{progressPercent}%</span>
                 <span>Nivel {pandaData.nivel + 1} ({pandaData.nextNivelXp} XP)</span>
               </div>
 
-              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '14px', padding: '12px', border: '1px solid rgba(255,255,255,0.08)', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.82rem' }}>
+              <div style={{ background: '#f8faf7', borderRadius: '14px', padding: '12px', border: '1px solid #e3e8e2', display: 'flex', flexDirection: 'column', gap: '8px', fontSize: '0.84rem' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>XP faltante para siguiente nivel:</span>
-                  <span style={{ fontWeight: 800, color: '#c4f039' }}>{Math.max(0, pandaData.nextNivelXp - pandaData.xp)} XP</span>
+                  <span style={{ color: '#5f7165' }}>XP faltante para siguiente nivel:</span>
+                  <span style={{ fontWeight: 800, color: '#166534' }}>{Math.max(0, pandaData.xpFaltante ?? (pandaData.nextNivelXp - pandaData.xp))} XP</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Visitas al club estimadas:</span>
-                  <span style={{ fontWeight: 800, color: '#ffffff' }}>{Math.max(1, Math.ceil((pandaData.nextNivelXp - pandaData.xp) / 25))} visitas</span>
+                  <span style={{ color: '#5f7165' }}>Visitas estimadas (+{pandaData.baseXp || 25} XP/día):</span>
+                  <span style={{ fontWeight: 800, color: '#111d15' }}>{Math.max(1, pandaData.visitasParaSiguiente || 1)} visitas</span>
                 </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowProgressModal(false)}
-              className="btn-modal-action"
-            >
+            <button type="button" onClick={() => setShowProgressModal(false)} className="panda-modal-btn">
               Entendido
             </button>
           </div>
@@ -703,17 +904,22 @@ export default function MyPandaView({ token, user }) {
       )}
 
       {/* ======================================================== */}
-      {/* MODAL 2: ETAPAS DE EVOLUCIÓN (BLENDER)                  */}
+      {/* MODAL 2: ETAPAS DE EVOLUCIÓN                             */}
       {/* ======================================================== */}
       {showEvolutionModal && (
-        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
-          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom">
+        <div
+          className="panda-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowEvolutionModal(false)}
+        >
+          <div className="panda-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="panda-modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="bi bi-award-fill text-lime" style={{ fontSize: '1.2rem' }}></i>
-                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Etapas de Evolución</h5>
+                <i className="bi bi-award-fill" style={{ color: '#166534', fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 800, color: '#111d15' }}>Etapas de Evolución</h5>
               </div>
-              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowEvolutionModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="panda-modal-close" onClick={() => setShowEvolutionModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
@@ -721,36 +927,39 @@ export default function MyPandaView({ token, user }) {
             <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 0' }}>
               {STAGES.map((s, idx) => {
                 const isSelected = activeStageIndex === idx
+                const unlocked = Number(pandaData.xp || 0) >= s.reqXp
                 return (
-                  <div
+                  <button
                     key={s.key}
+                    type="button"
                     onClick={() => {
                       setActiveStageIndex(idx)
                       setShowEvolutionModal(false)
                     }}
                     style={{
-                      background: isSelected ? 'rgba(196, 240, 57, 0.12)' : 'rgba(255, 255, 255, 0.04)',
-                      border: `1.5px solid ${isSelected ? '#c4f039' : 'rgba(255, 255, 255, 0.1)'}`,
-                      borderRadius: '16px',
+                      background: isSelected ? '#f4fce3' : '#f8faf7',
+                      border: `1.5px solid ${isSelected ? '#84cc16' : '#e3e8e2'}`,
+                      borderRadius: '14px',
                       padding: '12px 14px',
                       cursor: 'pointer',
                       display: 'flex',
                       alignItems: 'center',
                       gap: '12px',
-                      transition: 'all 0.2s',
+                      textAlign: 'left',
                     }}
                   >
                     <div
                       style={{
-                        width: '42px',
-                        height: '42px',
+                        width: '40px',
+                        height: '40px',
                         borderRadius: '12px',
-                        background: isSelected ? '#c4f039' : 'rgba(255, 255, 255, 0.08)',
-                        color: isSelected ? '#111d15' : '#ffffff',
+                        background: isSelected ? '#c4f039' : '#ffffff',
+                        border: '1px solid #d9e4d7',
+                        color: '#111d15',
                         display: 'flex',
                         alignItems: 'center',
                         justifyContent: 'center',
-                        fontSize: '1.25rem',
+                        fontSize: '1.15rem',
                         flexShrink: 0,
                       }}
                     >
@@ -758,29 +967,23 @@ export default function MyPandaView({ token, user }) {
                     </div>
 
                     <div style={{ flex: 1, minWidth: 0 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                        <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#ffffff' }}>{s.name}</span>
-                        {isSelected && (
-                          <span style={{ fontSize: '0.7rem', color: '#c4f039', fontWeight: 800, textTransform: 'uppercase' }}>
-                            En Pantalla
-                          </span>
-                        )}
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: '8px' }}>
+                        <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#111d15' }}>{s.name}</span>
+                        <span style={{ fontSize: '0.7rem', color: unlocked ? '#166534' : '#64748b', fontWeight: 800 }}>
+                          {idx === realStageIndex ? 'Tu etapa' : unlocked ? 'Desbloqueada' : 'Bloqueada'}
+                        </span>
                       </div>
-                      <div style={{ fontSize: '0.74rem', color: '#84cc16', fontWeight: 700 }}>{s.levelLabel}</div>
-                      <p style={{ margin: '2px 0 0 0', fontSize: '0.74rem', color: '#94a3b8', lineHeight: 1.25 }}>
+                      <div style={{ fontSize: '0.74rem', color: '#166534', fontWeight: 700 }}>{s.levelLabel}</div>
+                      <p style={{ margin: '2px 0 0', fontSize: '0.76rem', color: '#5f7165', lineHeight: 1.3 }}>
                         {s.desc}
                       </p>
                     </div>
-                  </div>
+                  </button>
                 )
               })}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowEvolutionModal(false)}
-              className="btn-modal-action"
-            >
+            <button type="button" onClick={() => setShowEvolutionModal(false)} className="panda-modal-btn">
               Cerrar
             </button>
           </div>
@@ -791,45 +994,50 @@ export default function MyPandaView({ token, user }) {
       {/* MODAL 3: RACHA & HÁBITOS                                */}
       {/* ======================================================== */}
       {showStreakModal && (
-        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
-          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom">
+        <div
+          className="panda-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowStreakModal(false)}
+        >
+          <div className="panda-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="panda-modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="bi bi-fire text-danger" style={{ fontSize: '1.2rem' }}></i>
-                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Racha de Entrenamientos</h5>
+                <i className="bi bi-fire" style={{ color: '#ef4444', fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 800, color: '#111d15' }}>Racha de Entrenamientos</h5>
               </div>
-              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowStreakModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="panda-modal-close" onClick={() => setShowStreakModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
 
             <div style={{ textAlign: 'center', padding: '16px 0' }}>
-              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#f87171' }}>
-                {pandaData.racha} DÍAS
+              <div style={{ fontSize: '2.3rem', fontWeight: 900, color: '#dc2626' }}>
+                {pandaData.racha} {pandaData.racha === 1 ? 'DÍA' : 'DÍAS'}
               </div>
-              <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '4px 0 16px 0' }}>
+              <p style={{ color: '#5f7165', fontSize: '0.84rem', margin: '4px 0 16px' }}>
                 {pandaData.racha >= 3
-                  ? '¡Excelente constancia! Tu panda mantiene su masa muscular activa.'
-                  : 'Entrena 3 o más días consecutivos para alcanzar el estado de máxima energía.'}
+                  ? '¡Excelente constancia! Mantienes tu ritmo semanal activo.'
+                  : 'Cumple tus días objetivo para fortalecer tu racha.'}
               </p>
 
-              <div style={{ background: 'rgba(255, 255, 255, 0.04)', borderRadius: '14px', padding: '12px', border: '1px solid rgba(255,255,255,0.08)', textAlign: 'left', fontSize: '0.82rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+              <div style={{ background: '#f8faf7', borderRadius: '14px', padding: '12px', border: '1px solid #e3e8e2', textAlign: 'left', fontSize: '0.84rem', display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Asistencias este mes:</span>
-                  <span style={{ fontWeight: 800, color: '#ffffff' }}>{pandaData.asistenciasMes} días</span>
+                  <span style={{ color: '#5f7165' }}>Asistencias este mes:</span>
+                  <span style={{ fontWeight: 800, color: '#111d15' }}>{pandaData.asistenciasMes} días</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-                  <span style={{ color: '#94a3b8' }}>Estado físico del avatar:</span>
-                  <span style={{ fontWeight: 800, color: '#c4f039' }}>{pandaData.etapa}</span>
+                  <span style={{ color: '#5f7165' }}>Total histórico:</span>
+                  <span style={{ fontWeight: 800, color: '#111d15' }}>{pandaData.totalAsistencias} asistencias</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#5f7165' }}>Etapa actual:</span>
+                  <span style={{ fontWeight: 800, color: '#166534' }}>{pandaData.etapa}</span>
                 </div>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowStreakModal(false)}
-              className="btn-modal-action"
-            >
+            <button type="button" onClick={() => setShowStreakModal(false)} className="panda-modal-btn">
               ¡Seguir Entrenando!
             </button>
           </div>
@@ -840,58 +1048,72 @@ export default function MyPandaView({ token, user }) {
       {/* MODAL 4: BAMBÚS & CANJES                                */}
       {/* ======================================================== */}
       {showBambusModal && (
-        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
-          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom">
+        <div
+          className="panda-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowBambusModal(false)}
+        >
+          <div className="panda-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="panda-modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="bi bi-gem text-lime" style={{ fontSize: '1.2rem' }}></i>
-                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>Bambús Acumulados</h5>
+                <i className="bi bi-gem" style={{ color: '#166534', fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 800, color: '#111d15' }}>Bambús Acumulados</h5>
               </div>
-              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowBambusModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="panda-modal-close" onClick={() => setShowBambusModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
 
             <div style={{ textAlign: 'center', padding: '16px 0' }}>
-              <div style={{ fontSize: '2.5rem', fontWeight: 900, color: '#c4f039' }}>
-                {pandaData.bambusDisponibles} 
+              <div style={{ fontSize: '2.4rem', fontWeight: 900, color: '#166534' }}>
+                {pandaData.bambusDisponibles}
               </div>
-              <p style={{ color: '#94a3b8', fontSize: '0.84rem', margin: '4px 0 16px 0' }}>
-                Puntos canjeables por suplementos, bebidas y pases en recepción.
+              <p style={{ color: '#5f7165', fontSize: '0.84rem', margin: '4px 0 14px' }}>
+                Puntos canjeables por recompensas del club.
               </p>
 
-              <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
-                {canAccess(user,user?.rol==='cliente'?'recompensas':'mis-recompensas') && (<button
+              <div style={{ background: '#f8faf7', borderRadius: '14px', padding: '12px', border: '1px solid #e3e8e2', textAlign: 'left', fontSize: '0.84rem', display: 'flex', flexDirection: 'column', gap: '8px', marginBottom: '14px' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#5f7165' }}>Bambús ganados:</span>
+                  <span style={{ fontWeight: 800, color: '#111d15' }}>{pandaData.bambusGanados}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                  <span style={{ color: '#5f7165' }}>Bambús canjeados:</span>
+                  <span style={{ fontWeight: 800, color: '#111d15' }}>{pandaData.bambusCanjeados}</span>
+                </div>
+              </div>
+
+              {canGoRewards && (
+                <button
                   type="button"
                   onClick={() => {
                     setShowBambusModal(false)
-                    navigate(user?.rol==='cliente'?'/app/recompensas':'/app/mis-recompensas')
+                    navigate(rewardsRoute)
                   }}
                   style={{
-                    background: '#c4f039',
-                    color: '#111d15',
+                    width: '100%',
+                    background: '#111d15',
+                    color: '#ffffff',
                     border: 'none',
                     borderRadius: '12px',
                     padding: '10px 18px',
-                    fontWeight: 900,
-                    fontSize: '0.82rem',
+                    fontWeight: 800,
+                    fontSize: '0.84rem',
                     cursor: 'pointer',
-                    display: 'flex',
+                    display: 'inline-flex',
                     alignItems: 'center',
+                    justifyContent: 'center',
                     gap: '6px',
                   }}
                 >
-                  <i className="bi bi-gift-fill"></i>
-                  <span>Ver Tienda de Canjes</span>
-                </button>)}
-              </div>
+                  <i className="bi bi-gift-fill" style={{ color: '#c4f039' }}></i>
+                  <span>Ir a Canjear Puntos</span>
+                </button>
+              )}
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowBambusModal(false)}
-              className="btn-modal-action"
-            >
+            <button type="button" onClick={() => setShowBambusModal(false)} className="panda-modal-btn">
               Cerrar
             </button>
           </div>
@@ -899,96 +1121,97 @@ export default function MyPandaView({ token, user }) {
       )}
 
       {/* ======================================================== */}
-      {/* MODAL 5: GUÍA & REGLAS DEL JUEGO                        */}
+      {/* MODAL 5: GUÍA & REGLAS REALES                            */}
       {/* ======================================================== */}
       {showGuideModal && (
-        <div className="modal-backdrop-custom" role="dialog" aria-modal="true">
-          <div className="modal-content-custom" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-header-custom">
+        <div
+          className="panda-modal-backdrop"
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setShowGuideModal(false)}
+        >
+          <div className="panda-modal-card" onClick={(e) => e.stopPropagation()}>
+            <div className="panda-modal-header">
               <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <i className="bi bi-question-circle-fill text-warning" style={{ fontSize: '1.2rem' }}></i>
-                <h5 style={{ margin: 0, fontWeight: 900, color: '#ffffff' }}>¿Cómo Funciona Mi Pandita?</h5>
+                <i className="bi bi-question-circle-fill" style={{ color: '#166534', fontSize: '1.2rem' }}></i>
+                <h5 style={{ margin: 0, fontWeight: 800, color: '#111d15' }}>¿Cómo Funciona Mi Pandita?</h5>
               </div>
-              <button type="button" aria-label="Cerrar modal" className="btn-close-custom" onClick={() => setShowGuideModal(false)}>
+              <button type="button" aria-label="Cerrar modal" className="panda-modal-close" onClick={() => setShowGuideModal(false)}>
                 <i className="bi bi-x-lg"></i>
               </button>
             </div>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 0', fontSize: '0.82rem', color: '#94a3b8' }}>
-              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '12px', padding: '10px 12px' }}>
-                <span style={{ fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <i className="bi bi-qr-code-scan text-lime"></i> Asistencia al Gimnasio
+            <div style={{ display: 'flex', flexDirection: 'column', gap: '10px', padding: '14px 0', fontSize: '0.84rem', color: '#5f7165' }}>
+              <div style={{ background: '#f8faf7', border: '1px solid #e3e8e2', borderRadius: '12px', padding: '12px' }}>
+                <span style={{ fontWeight: 800, color: '#111d15', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="bi bi-qr-code-scan" style={{ color: '#166534' }}></i> Asistencia al Gimnasio
                 </span>
-                <p style={{ margin: '4px 0 0 0' }}>Cada día con asistencia registrada suma 25 XP y 10 bambús. Las entradas repetidas el mismo día no duplican puntos.</p>
+                <p style={{ margin: '4px 0 0' }}>
+                  Cada día con asistencia registrada suma {pandaData.baseXp || 25} XP y {pandaData.baseBambus ?? 10} bambús. Las entradas repetidas el mismo día no duplican puntos.
+                </p>
               </div>
 
-              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '12px', padding: '10px 12px' }}>
-                <span style={{ fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <i className="bi bi-award-fill text-warning"></i> Evolución en 3 Etapas
+              <div style={{ background: '#f8faf7', border: '1px solid #e3e8e2', borderRadius: '12px', padding: '12px' }}>
+                <span style={{ fontWeight: 800, color: '#111d15', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="bi bi-award-fill" style={{ color: '#166534' }}></i> Evolución en 3 Etapas
                 </span>
-                <p style={{ margin: '4px 0 0 0' }}>El modelo 3D evoluciona de Bebé a Intermedio y Musculoso a medida que acumulas experiencia.</p>
+                <p style={{ margin: '4px 0 0' }}>
+                  Tu pandita 2D evoluciona de Bebé (0 XP) a Intermedio (300 XP) y Musculoso (1,000 XP) conforme acumulas experiencia.
+                </p>
               </div>
 
-              <div style={{ background: 'rgba(255,255,255,0.04)', borderRadius: '12px', padding: '10px 12px' }}>
-                <span style={{ fontWeight: 800, color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <i className="bi bi-hand-index-thumb-fill text-lime"></i> Giro 360° en Celular
+              <div style={{ background: '#f8faf7', border: '1px solid #e3e8e2', borderRadius: '12px', padding: '12px' }}>
+                <span style={{ fontWeight: 800, color: '#111d15', display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <i className="bi bi-gift-fill" style={{ color: '#166534' }}></i> Canje de Recompensas
                 </span>
-                <p style={{ margin: '4px 0 0 0' }}>Arrastra horizontalmente para girar al modelo hacia la izquierda o derecha en ángulo fijo.</p>
+                <p style={{ margin: '4px 0 0' }}>
+                  Usa tus bambús acumulados desde el botón Canjear puntos para obtener premios y promociones vigentes.
+                </p>
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={() => setShowGuideModal(false)}
-              className="btn-modal-action"
-            >
+            <button type="button" onClick={() => setShowGuideModal(false)} className="panda-modal-btn">
               ¡Entendido!
             </button>
           </div>
         </div>
       )}
 
-      {/* ======================================================== */}
-      {/* ESTILOS CSS INCRUSTADOS PARA MODALES Y ANIMACIONES       */}
-      {/* ======================================================== */}
       <style>{`
-        .modal-backdrop-custom {
+        .panda-modal-backdrop {
           position: fixed;
           inset: 0;
           z-index: 2000;
-          background: rgba(0, 0, 0, 0.75);
-          backdrop-filter: blur(8px);
+          background: rgba(17, 29, 21, 0.55);
+          backdrop-filter: blur(6px);
           display: flex;
           align-items: center;
           justify-content: center;
           padding: 16px;
-          animation: fadeIn 0.2s ease-out;
+          animation: pandaFadeIn 0.18s ease-out;
         }
-
-        .modal-content-custom {
-          background: #111d15;
-          border: 1px solid rgba(196, 240, 57, 0.3);
-          border-radius: 24px;
+        .panda-modal-card {
+          background: #ffffff;
+          border: 1px solid #e3e8e2;
+          border-radius: 22px;
           width: 100%;
-          max-width: 420px;
+          max-width: 430px;
           padding: 20px;
-          box-shadow: 0 20px 40px rgba(0,0,0,0.6);
-          animation: scaleUp 0.2s ease-out;
+          box-shadow: 0 20px 44px rgba(17, 29, 21, 0.18);
+          animation: pandaScaleUp 0.18s ease-out;
         }
-
-        .modal-header-custom {
+        .panda-modal-header {
           display: flex;
           align-items: center;
           justify-content: space-between;
-          border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+          border-bottom: 1px solid #eef2ec;
           padding-bottom: 12px;
         }
-
-        .btn-close-custom {
-          background: transparent;
-          border: none;
-          color: #94a3b8;
-          font-size: 1.1rem;
+        .panda-modal-close {
+          background: #f8faf7;
+          border: 1px solid #e3e8e2;
+          color: #5f7165;
+          font-size: 0.95rem;
           cursor: pointer;
           width: 32px;
           height: 32px;
@@ -996,50 +1219,31 @@ export default function MyPandaView({ token, user }) {
           display: flex;
           align-items: center;
           justify-content: center;
-          transition: all 0.2s;
         }
-        .btn-close-custom:hover {
-          color: #ffffff;
-          background: rgba(255, 255, 255, 0.1);
-        }
-
-        .btn-modal-action {
+        .panda-modal-btn {
           width: 100%;
           background: #c4f039;
           color: #111d15;
-          border: none;
-          border-radius: 14px;
-          padding: 12px;
-          font-weight: 900;
+          border: 1px solid #a3e635;
+          border-radius: 12px;
+          padding: 11px;
+          font-weight: 800;
           font-size: 0.88rem;
           cursor: pointer;
-          margin-top: 8px;
-          transition: all 0.2s;
+          margin-top: 6px;
         }
-
-        .text-lime {
-          color: #c4f039 !important;
-        }
-
-        @keyframes fadeIn {
+        @keyframes pandaFadeIn {
           from { opacity: 0; }
           to { opacity: 1; }
         }
-
-        @keyframes scaleUp {
-          from { transform: scale(0.95); opacity: 0; }
+        @keyframes pandaScaleUp {
+          from { transform: scale(0.96); opacity: 0; }
           to { transform: scale(1); opacity: 1; }
         }
-
         @keyframes floatUp {
-          0% { opacity: 0; transform: translate(-50%, -20%) scale(0.8); }
-          30% { opacity: 1; transform: translate(-50%, -70%) scale(1.1); }
-          100% { opacity: 0; transform: translate(-50%, -130%) scale(0.9); }
-        }
-
-        @keyframes floatBubble {
-          0%, 100% { transform: translateY(0); }
-          50% { transform: translateY(-4px); }
+          0% { opacity: 0; transform: translate(-50%, -20%) scale(0.85); }
+          30% { opacity: 1; transform: translate(-50%, -70%) scale(1.08); }
+          100% { opacity: 0; transform: translate(-50%, -125%) scale(0.92); }
         }
       `}</style>
     </div>

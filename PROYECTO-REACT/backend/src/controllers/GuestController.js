@@ -1,4 +1,5 @@
 const GuestModel = require("../models/GuestModel");
+const { isValidConfiguredSchedule } = require("../utils/reservationHelpers");
 
 function parseLocalDateTime(value) {
     if (!value) {
@@ -30,36 +31,14 @@ function normalizeDateTime(value) {
     return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())} ${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
-function isWithinOpeningHours(date) {
-    const day = date.getDay();
-    const hours = date.getHours();
-    const minutes = date.getMinutes();
-    const time = hours * 100 + minutes;
-
-    const inRange = (startH, startM, endH, endM) => {
-        const start = startH * 100 + startM;
-        const end = endH * 100 + endM;
-        return time >= start && time <= end;
-    };
-
-    if (day >= 1 && day <= 5) {
-        return inRange(6, 30, 11, 0) || inRange(16, 0, 22, 0);
-    }
-
-    if (day === 6) {
-        return inRange(7, 0, 12, 0);
-    }
-
-    return false;
-}
-
-function validateGuestSchedule(startDate, endDate, bypassSchedule = false) {
+async function validateGuestSchedule(startDate, endDate, bypassSchedule = false) {
     if (startDate.getTime() >= endDate.getTime()) {
         return "La fecha de fin debe ser posterior a la fecha de inicio";
     }
 
     const now = new Date();
-    if (startDate.getTime() < now.getTime()) {
+    // Permitir margen de 5 minutos desde que se abrió el modal hasta pulsar Registrar
+    if (startDate.getTime() < now.getTime() - 5 * 60 * 1000) {
         return "La fecha de inicio debe ser actual o futura";
     }
 
@@ -68,12 +47,9 @@ function validateGuestSchedule(startDate, endDate, bypassSchedule = false) {
     }
 
     if (!bypassSchedule) {
-        if (!isWithinOpeningHours(startDate)) {
-            return "La hora de inicio debe estar dentro del horario de atención del gimnasio";
-        }
-
-        if (!isWithinOpeningHours(endDate)) {
-            return "La hora de salida debe estar dentro del horario de atención del gimnasio";
+        const diffMins = Math.max(1, Math.round((endDate.getTime() - startDate.getTime()) / 60000));
+        if (!(await isValidConfiguredSchedule(startDate, diffMins))) {
+            return "El horario de inicio y salida debe estar dentro del horario de atención del gimnasio";
         }
     }
 
@@ -96,7 +72,7 @@ class GuestController {
                 return res.status(400).json({ message: "Fechas inválidas" });
             }
             const bypass = !!req.body.bypassSchedule;
-            const validationMessage = validateGuestSchedule(startDate, endDate, bypass);
+            const validationMessage = await validateGuestSchedule(startDate, endDate, bypass);
             if (validationMessage) {
                 return res.status(400).json({ message: validationMessage });
             }
@@ -124,6 +100,23 @@ class GuestController {
             return res.json({ guests });
         } catch (error) {
             console.error("Error obteniendo invitados:", error);
+            return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async checkoutNow(req, res) {
+        try {
+            const id = Number(req.params.id);
+            if (!id) {
+                return res.status(400).json({ message: "ID de pase diario inválido" });
+            }
+            const ok = await GuestModel.checkoutGuestNow(id);
+            if (!ok) {
+                return res.status(404).json({ message: "El pase diario ya estaba finalizado o no existe" });
+            }
+            return res.json({ message: "Salida registrada y cupo liberado del aforo" });
+        } catch (error) {
+            console.error("Error finalizando cliente diario:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
         }
     }

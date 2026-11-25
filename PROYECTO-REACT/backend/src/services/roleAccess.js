@@ -1,10 +1,8 @@
 const db = require('../config/database');
 const MODULES = [
     {key:'inicio',label:'Inicio',icon:'bi-grid',group:'ADMINISTRACIÓN & RECEPCIÓN'},
-    {key:'check-in',label:'Control de acceso (check-in)',icon:'bi-fingerprint',group:'ADMINISTRACIÓN & RECEPCIÓN'},
     {key:'socios',label:'Gestión de socios & membresías',icon:'bi-people',group:'ADMINISTRACIÓN & RECEPCIÓN'},
     {key:'invitados',label:'Clientes diarios',icon:'bi-ticket-perforated',group:'ADMINISTRACIÓN & RECEPCIÓN'},
-    {key:'aforo',label:'Control de aforo',icon:'bi-bar-chart',group:'ADMINISTRACIÓN & RECEPCIÓN'},
     {key:'recompensas',label:'Recompensas y promociones',icon:'bi-gift',group:'GESTIÓN COMERCIAL & BENEFICIOS'},
     {key:'mi-pandita',label:'Mi pandita (Socio)',icon:'bi-stars',group:'EXPERIENCIA DEL SOCIO (VISTA)'},
     {key:'asistencias',label:'Asistencias (Socio)',icon:'bi-calendar-check',group:'EXPERIENCIA DEL SOCIO (VISTA)'},
@@ -13,7 +11,7 @@ const MODULES = [
     {key:'usuarios',label:'Usuarios y roles',icon:'bi-person-lock',group:'CONFIGURACIÓN DEL SISTEMA'},
 ];
 const KEYS = MODULES.map(m=>m.key);
-const CLIENT = ['inicio','aforo','recompensas','mi-pandita','asistencias','mi-membresia'];
+const CLIENT = ['inicio','recompensas','mi-pandita','asistencias','mi-membresia'];
 let ready;
 async function init() {
     if (ready) return ready;
@@ -30,13 +28,13 @@ async function init() {
                 nombre: 'recepcion',
                 etiqueta: 'Recepción / Counter',
                 descripcion: 'Control de accesos, check-in, registro de socios, clientes diarios y canje de premios.',
-                permisos: ['inicio', 'check-in', 'socios', 'invitados', 'aforo', 'recompensas'],
+                permisos: ['inicio', 'socios', 'invitados', 'recompensas'],
             },
             {
                 nombre: 'entrenador',
                 etiqueta: 'Entrenador / Trainer',
                 descripcion: 'Supervisión de sala, aforo en tiempo real, asistencias y acompañamiento.',
-                permisos: ['inicio', 'check-in', 'aforo', 'recompensas'],
+                permisos: ['inicio'],
             },
         ];
 
@@ -84,26 +82,33 @@ function requestModules(req) {
     if(path.startsWith('/api/auth/'))return [];
     if(path.startsWith('/api/admin/usuarios'))return ['usuarios'];
     if(path.startsWith('/api/admin/dashboard'))return ['inicio'];
-    if(path.startsWith('/api/admin/checkin'))return ['check-in'];
+    if(path.startsWith('/api/admin/checkin'))return ['inicio'];
     if(path.startsWith('/api/admin/socios'))return ['socios'];
     if(path.startsWith('/api/admin/planes'))return ['socios'];
-    if(path.startsWith('/api/dni'))return ['socios','check-in'];
+    if(path.startsWith('/api/dni'))return ['socios','inicio'];
     if(path.startsWith('/api/admin/dispositivos')){
         if(path.includes('/register/') || path.endsWith('/simulate/register') || /\/dispositivos\/\d+\/status$/.test(path))return ['socios'];
         if(path.endsWith('/remote-session/create')&&req.body?.action==='register')return ['socios'];
-        return ['check-in','socios'];
+        return ['inicio','socios'];
     }
     if(path.startsWith('/api/invitados'))return ['invitados'];
     if(path.startsWith('/api/configuracion'))return ['configuracion'];
-    if(path.startsWith('/api/recompensas'))return ['recompensas'];
+    if(path.startsWith('/api/zk/token'))return ['configuracion'];
+    if(path.startsWith('/api/zk'))return ['inicio'];
+    if(path.startsWith('/api/recompensas')){
+        const method = (req.method || 'GET').toUpperCase();
+        if(method !== 'GET' && !path.startsWith('/api/recompensas/admin/canjes/'))return ['__admin_only__'];
+        return ['recompensas'];
+    }
     if(path.startsWith('/api/membresias/admin'))return ['socios'];
     if(path.startsWith('/api/membresias'))return ['mi-membresia','asistencias','inicio'];
-    if(path.includes('/asistencias/activos'))return ['check-in','inicio'];
-    if(path.includes('/asistencias/buscar'))return ['check-in','socios'];
+    if(path.includes('/asistencias/activos') || path.includes('/asistencias/hoy'))return ['inicio'];
+    if(path.includes('/asistencias/buscar'))return ['inicio','socios'];
     if(path.includes('/asistencias/canjear-recompensa'))return ['recompensas'];
+    if(path.includes('/asistencias/reglas-puntos'))return ['__admin_only__'];
     if(path.includes('/asistencias/mi-objetivo'))return ['asistencias'];
     if(path.includes('/asistencias/'))return ['asistencias','mi-pandita','recompensas','inicio'];
-    if(path.startsWith('/api/aforo'))return ['aforo','inicio'];
+    if(path.startsWith('/api/aforo'))return ['inicio'];
     return null; // Unknown staff endpoints fail closed.
 }
 function canRequest(auth,req) {

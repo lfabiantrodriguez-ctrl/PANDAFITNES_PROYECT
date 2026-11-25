@@ -7,7 +7,7 @@ export default function CapacityView() {
     <>
       <ViewTitle
         title={moduleLabel('aforo')}
-        text="Métricas en tiempo real y permanencias de socios en sala."
+        text="Aforo actual en sala."
       />
       <div className="internal-grid">
         <CapacityPanel />

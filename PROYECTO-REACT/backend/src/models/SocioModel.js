@@ -147,7 +147,12 @@ class SocioModel {
         const [asistencias] = await db.execute(
             `SELECT id, hora_entrada AS horaEntrada, hora_salida AS horaSalida,
                     COALESCE(metodo_registro, 'manual') AS metodoRegistro,
-                    CASE WHEN hora_salida IS NULL THEN 'activo' ELSE 'finalizada' END AS estado
+                    observacion_salida AS observacionSalida,
+                    CASE
+                        WHEN hora_salida IS NULL THEN 'activo'
+                        WHEN observacion_salida = 'no_marco_salida' THEN 'no_marco_salida'
+                        ELSE 'finalizada'
+                    END AS estado
              FROM asistencias
              WHERE usuario_id = ?
              ORDER BY hora_entrada DESC

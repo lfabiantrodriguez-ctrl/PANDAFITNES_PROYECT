@@ -31,4 +31,18 @@ export class GuestService {
 
     return response.json()
   }
+
+  static async checkoutGuest(token, id) {
+    const response = await fetch(`/api/invitados/${id}/salida`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+      },
+    })
+    const data = await response.json().catch(() => ({}))
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudo registrar la salida del cliente diario')
+    }
+    return data
+  }
 }
