@@ -201,7 +201,7 @@ class AttendanceModel {
     static async findActiveByUser(usuarioId) {
         await this.closeOverdueAttendances(4);
         const [rows] = await db.execute(
-            `SELECT id, usuario_id AS usuarioId, hora_entrada AS horaEntrada
+            `SELECT id, reserva_id AS reservaId, usuario_id AS usuarioId, hora_entrada AS horaEntrada
              FROM asistencias
              WHERE usuario_id = ? AND hora_salida IS NULL
              ORDER BY hora_entrada DESC

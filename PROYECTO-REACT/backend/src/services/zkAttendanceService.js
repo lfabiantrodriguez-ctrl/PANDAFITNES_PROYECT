@@ -27,9 +27,19 @@ function normalizeFechaHora(raw) {
     return formatMysqlDatetime(d);
 }
 
-function parseFechaHoraDate(mysqlStr) {
-    if (!mysqlStr) return null;
-    const d = new Date(String(mysqlStr).replace(" ", "T"));
+const MIN_EXIT_MINUTES = 1;
+
+function parseFechaHoraDate(mysqlVal) {
+    if (!mysqlVal) return null;
+    if (mysqlVal instanceof Date) {
+        return Number.isNaN(mysqlVal.getTime()) ? null : mysqlVal;
+    }
+    const str = String(mysqlVal).trim();
+    if (/^\d{4}-\d{2}-\d{2}[ T]\d{2}:\d{2}(:\d{2})?$/.test(str)) {
+        const d = new Date(str.replace(" ", "T"));
+        return Number.isNaN(d.getTime()) ? null : d;
+    }
+    const d = new Date(str);
     return Number.isNaN(d.getTime()) ? null : d;
 }
 
@@ -158,17 +168,23 @@ async function processSingleMarcacion(item, defaultOrigen = "ZK_LIVE", defaultDi
             ? Math.floor((markDate.getTime() - entradaDate.getTime()) / 60000)
             : 0;
 
-        // Filtro anti-rebote (5 minutos) para evitar que un doble toque cierre la sesión de inmediato
-        if (diffMin >= 0 && diffMin < 5) {
+        if (diffMin < 0) {
+            await updateMark(user.id, "IGNORADO_REBOTE", `Marca anterior al ingreso activo (${diffMin} min)`);
+            return { status: "rebote", dni, fechaHora };
+        }
+
+        // Filtro anti-rebote (1 minuto) para evitar que un doble toque inmediato cierre la sesión
+        if (diffMin < MIN_EXIT_MINUTES) {
             await updateMark(user.id, "IGNORADO_REBOTE", `Rebote ignorado (${diffMin} min desde ingreso)`);
             return { status: "rebote", dni, fechaHora };
         }
 
-        if (diffMin >= 5) {
-            await AttendanceModel.setExitById(active.id, fechaHora);
-            await updateMark(user.id, "SALIDA", `Salida registrada (${diffMin} min en sala)`);
-            return { status: "salida", dni, fechaHora, nombre: `${user.nombre} ${user.apellido}` };
+        await AttendanceModel.setExitById(active.id, fechaHora);
+        if (active.reservaId) {
+            await ReservationModel.updateStatus(active.reservaId, "finalizada").catch(() => {});
         }
+        await updateMark(user.id, "SALIDA", `Salida registrada (${diffMin} min en sala)`);
+        return { status: "salida", dni, fechaHora, nombre: `${user.nombre} ${user.apellido}` };
     }
 
     // Para fechas pasadas (sincronización histórica / archivo USB), buscar si ya existe entrada sin salida ese día
@@ -184,7 +200,7 @@ async function processSingleMarcacion(item, defaultOrigen = "ZK_LIVE", defaultDi
         if (sameDay && !sameDay.horaSalida) {
             const entDate = parseFechaHoraDate(sameDay.horaEntrada);
             const diffMin = entDate && markDate ? Math.floor((markDate.getTime() - entDate.getTime()) / 60000) : 0;
-            if (diffMin >= 5) {
+            if (diffMin >= MIN_EXIT_MINUTES) {
                 await AttendanceModel.setExitById(sameDay.id, fechaHora);
                 await updateMark(user.id, "SALIDA", `Salida histórica registrada (${diffMin} min)`);
                 return { status: "salida", dni, fechaHora, nombre: `${user.nombre} ${user.apellido}` };
