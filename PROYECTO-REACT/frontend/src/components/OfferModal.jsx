@@ -9,6 +9,8 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
   const [valor, setValor] = useState('15')
   const [codigoCupon, setCodigoCupon] = useState('')
   const [diasVigencia, setDiasVigencia] = useState(30)
+  const [limitMode, setLimitMode] = useState('ilimitado') // 'ilimitado' | 'limitado'
+  const [cuposMaximos, setCuposMaximos] = useState('5')
   const [loading, setLoading] = useState(false)
   const [fieldErrors, setFieldErrors] = useState({})
   const [successMsg, setSuccessMsg] = useState('')
@@ -16,6 +18,7 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
   if (!isOpen) return null
 
   const isIndividual = Boolean(targetSocio)
+  const isFriendPass = tipo === 'pase_amigo'
 
   async function handleSubmit(e) {
     e.preventDefault()
@@ -26,11 +29,25 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
       errors.titulo = 'El título debe tener al menos 4 caracteres'
     }
 
-    const numValor = Number(valor)
-    if (!valor || isNaN(numValor) || numValor <= 0) {
-      errors.valor = 'El valor del beneficio debe ser mayor a 0'
-    } else if (tipo === 'descuento_porcentaje' && numValor > 100) {
-      errors.valor = 'El porcentaje no puede ser superior a 100%'
+    if (!isFriendPass) {
+      const numValor = Number(valor)
+      if (!valor || isNaN(numValor) || numValor <= 0) {
+        errors.valor = 'El valor del beneficio debe ser mayor a 0'
+      } else if (tipo === 'descuento_porcentaje' && numValor > 100) {
+        errors.valor = 'El porcentaje no puede ser superior a 100%'
+      }
+    } else {
+      const numInv = Number(valor)
+      if (!valor || isNaN(numInv) || !Number.isInteger(numInv) || numInv < 1 || numInv > 10) {
+        errors.valor = 'Indica entre 1 y 10 invitados permitidos'
+      }
+    }
+
+    if (!isIndividual && limitMode === 'limitado') {
+      const numCupos = Number(cuposMaximos)
+      if (!cuposMaximos || isNaN(numCupos) || !Number.isInteger(numCupos) || numCupos < 1) {
+        errors.cuposMaximos = 'Ingresa una cantidad entera de cupos mayor a 0'
+      }
     }
 
     if (Object.keys(errors).length > 0) {
@@ -43,24 +60,32 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
     setSuccessMsg('')
 
     try {
-      const generatedCode = codigoCupon.trim()
-        ? codigoCupon.trim().toUpperCase()
-        : isIndividual
-          ? `PROMO${targetSocio.id}-${Math.floor(100 + Math.random() * 900)}`
-          : `PANDA${Math.floor(10 + Math.random() * 90)}`
+      const generatedCode = isFriendPass
+        ? null
+        : codigoCupon.trim()
+          ? codigoCupon.trim().toUpperCase()
+          : isIndividual
+            ? `PROMO${targetSocio.id}-${Math.floor(100 + Math.random() * 900)}`
+            : `PANDA${Math.floor(100 + Math.random() * 900)}`
 
       const payload = {
         usuarioId: isIndividual ? targetSocio.id : null,
         titulo: titulo.trim(),
-        descripcion: descripcion.trim() || `Beneficio exclusivo: ${valor}${tipo === 'descuento_porcentaje' ? '%' : tipo === 'descuento_fijo' ? ' soles' : ' días'} aplicable en tu plan.`,
+        descripcion:
+          descripcion.trim() ||
+          (isFriendPass
+            ? 'Pase libre para ingresar con un amigo acompañado en recepción (Control de acceso). Ambos entran y salen juntos.'
+            : `Beneficio exclusivo: ${valor}${tipo === 'descuento_porcentaje' ? '%' : tipo === 'descuento_fijo' ? ' soles' : ' días'} aplicable en tu plan.`),
         tipo,
-        valor: Number(valor || 0),
+        valor: Number(valor || 1),
         codigoCupon: generatedCode,
         diasVigencia: Number(diasVigencia || 30),
+        cuposMaximos: !isIndividual && limitMode === 'limitado' ? Number(cuposMaximos) : null,
       }
 
       const res = await SocioService.createOffer(token, payload)
       setSuccessMsg(res.message || 'Oferta creada y enviada con éxito')
+      window.dispatchEvent(new Event('panda_notifications_updated'))
 
       setTimeout(() => {
         onSuccess?.()
@@ -69,8 +94,10 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
         setTitulo('')
         setDescripcion('')
         setCodigoCupon('')
+        setLimitMode('ilimitado')
+        setCuposMaximos('5')
         setFieldErrors({})
-      }, 1000)
+      }, 900)
     } catch (err) {
       setFieldErrors({ general: err.message || 'Error al guardar la oferta' })
     } finally {
@@ -83,7 +110,7 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
       isOpen={isOpen}
       onClose={onClose}
       title={isIndividual ? `Oferta Personalizada para ${targetSocio.nombre} ${targetSocio.apellido}` : 'Lanzar Promoción General para Socios'}
-      subtitle={isIndividual ? `DNI: ${targetSocio.dni} · La promoción se notificará y registrará en su ficha` : 'Visible para todos los socios activos en el catálogo de beneficios'}
+      subtitle={isIndividual ? `DNI: ${targetSocio.dni} · Se notificará por campana, correo y en Mi membresía` : 'Visible para los socios en Mi membresía y notificada en la campana'}
       badge={isIndividual ? 'Beneficio Individual' : 'Campaña General'}
       size="md"
     >
@@ -98,7 +125,7 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
           <input
             type="text"
             className={`form-control ${fieldErrors.titulo ? 'is-invalid' : ''}`}
-            placeholder={isIndividual ? "Ej. 20% OFF en Renovación VIP para ti" : "Ej. Promo Primavera: 15% Descuento en Plan Trimestral"}
+            placeholder={isIndividual ? "Ej. 20% OFF en Renovación VIP para ti" : "Ej. Promo Verano: 15% Descuento (Solo 5 cupos)"}
             value={titulo}
             onChange={(e) => {
               setTitulo(e.target.value)
@@ -121,25 +148,30 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
               className="form-select"
               value={tipo}
               onChange={(e) => {
-                setTipo(e.target.value)
+                const nextType = e.target.value
+                setTipo(nextType)
+                if (nextType === 'pase_amigo') setValor('1')
+                else if (tipo === 'pase_amigo') setValor('15')
                 if (fieldErrors.valor) setFieldErrors((prev) => ({ ...prev, valor: '' }))
               }}
             >
               <option value="descuento_porcentaje">Descuento Porcentual (%)</option>
               <option value="descuento_fijo">Descuento Monto Fijo (S/.)</option>
               <option value="dias_gratis">Días de Entrenamiento Gratis</option>
-              <option value="pase_amigo">Pase Libre para Amigo</option>
+              <option value="pase_amigo">Pase Libre para Amigo (Invitados)</option>
             </select>
           </div>
 
           <div className="col-12 col-md-6">
             <label className="form-label fw-bold small text-dark">
-              Valor del Beneficio {tipo === 'descuento_porcentaje' ? '(%)' : tipo === 'descuento_fijo' ? '(S/.)' : '(Días)'}
+              {isFriendPass
+                ? 'Invitados permitidos por socio'
+                : `Valor del Beneficio ${tipo === 'descuento_porcentaje' ? '(%)' : tipo === 'descuento_fijo' ? '(S/.)' : '(Días)'}`}
             </label>
             <input
               type="number"
               min="1"
-              max={tipo === 'descuento_porcentaje' ? '100' : '500'}
+              max={isFriendPass ? '10' : tipo === 'descuento_porcentaje' ? '100' : '500'}
               className={`form-control ${fieldErrors.valor ? 'is-invalid' : ''}`}
               value={valor}
               onChange={(e) => {
@@ -158,21 +190,23 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
         </div>
 
         <div className="row g-3 mb-3">
-          <div className="col-12 col-md-6">
-            <label className="form-label fw-bold small text-dark">Código de Cupón (Opcional)</label>
-            <input
-              type="text"
-              className="form-control text-uppercase"
-              placeholder="Ej. VIP20PANDA"
-              value={codigoCupon}
-              onChange={(e) => setCodigoCupon(e.target.value)}
-            />
-            <span className="text-muted" style={{ fontSize: '0.72rem' }}>
-              Si lo dejas en blanco, se generará automáticamente.
-            </span>
-          </div>
+          {!isFriendPass && (
+            <div className="col-12 col-md-6">
+              <label className="form-label fw-bold small text-dark">Código de Cupón (Opcional)</label>
+              <input
+                type="text"
+                className="form-control text-uppercase"
+                placeholder="Ej. PANDA20"
+                value={codigoCupon}
+                onChange={(e) => setCodigoCupon(e.target.value)}
+              />
+              <span className="text-muted" style={{ fontSize: '0.72rem' }}>
+                Si lo dejas en blanco, se generará automáticamente.
+              </span>
+            </div>
+          )}
 
-          <div className="col-12 col-md-6">
+          <div className={isFriendPass ? 'col-12' : 'col-12 col-md-6'}>
             <label className="form-label fw-bold small text-dark">Vigencia de la Oferta</label>
             <select
               className="form-select"
@@ -184,15 +218,77 @@ export default function OfferModal({ isOpen, onClose, targetSocio, token, onSucc
               <option value={30}>30 días (1 mes)</option>
               <option value={60}>60 días (2 meses)</option>
             </select>
+            {isFriendPass && (
+              <span className="text-muted d-block mt-1" style={{ fontSize: '0.72rem' }}>
+                Sin código requerido: se valida automáticamente en Control de acceso según la cantidad asignada.
+              </span>
+            )}
           </div>
         </div>
+
+        {!isIndividual && (
+          <div className="p-3 rounded-3 border bg-light mb-3">
+            <label className="form-label fw-bold small text-dark mb-2 d-block">
+              Disponibilidad / Cantidad de Cupones
+            </label>
+            <div className="row g-2 align-items-center">
+              <div className="col-12 col-md-7">
+                <select
+                  className="form-select"
+                  value={limitMode}
+                  onChange={(e) => {
+                    setLimitMode(e.target.value)
+                    setFieldErrors((prev) => ({ ...prev, cuposMaximos: '' }))
+                  }}
+                >
+                  <option value="ilimitado">Ilimitado (para todos los socios durante la vigencia)</option>
+                  <option value="limitado">Cantidad limitada (primeros N socios en usar)</option>
+                </select>
+              </div>
+              {limitMode === 'limitado' && (
+                <div className="col-12 col-md-5">
+                  <div className="input-group">
+                    <input
+                      type="number"
+                      min="1"
+                      max="10000"
+                      className={`form-control ${fieldErrors.cuposMaximos ? 'is-invalid' : ''}`}
+                      value={cuposMaximos}
+                      onChange={(e) => {
+                        setCuposMaximos(e.target.value)
+                        setFieldErrors((prev) => ({ ...prev, cuposMaximos: '' }))
+                      }}
+                      placeholder="Ej. 5"
+                    />
+                    <span className="input-group-text small">cupos</span>
+                  </div>
+                </div>
+              )}
+            </div>
+            {fieldErrors.cuposMaximos && (
+              <div className="text-danger small mt-1 d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
+                <i className="bi bi-exclamation-circle-fill"></i>
+                <span>{fieldErrors.cuposMaximos}</span>
+              </div>
+            )}
+            <small className="text-muted d-block mt-2" style={{ fontSize: '0.73rem' }}>
+              {limitMode === 'ilimitado'
+                ? 'Cada socio podrá usarlo 1 vez mientras dure la campaña.'
+                : `Solo los primeros ${Number(cuposMaximos) || 0} socios que canjeen el código podrán aprovecharlo; luego se agotará automáticamente.`}
+            </small>
+          </div>
+        )}
 
         <div className="mb-3">
           <label className="form-label fw-bold small text-dark">Descripción o Condiciones</label>
           <textarea
             className="form-control"
             rows={2}
-            placeholder="Ej. Válido al renovar antes de la fecha de vencimiento. Canjeable en recepción."
+            placeholder={
+              isFriendPass
+                ? 'Ej. Válido para traer 1 invitado acompañado en tu mismo horario (entran y salen juntos).'
+                : 'Ej. Válido para renovaciones o matrículas nuevas durante la vigencia.'
+            }
             value={descripcion}
             onChange={(e) => setDescripcion(e.target.value)}
           />

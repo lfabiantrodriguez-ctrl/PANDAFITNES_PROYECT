@@ -1,9 +1,10 @@
 import UserAvatar from './UserAvatar'
+import NotificationBell from './NotificationBell'
 import { useState } from 'react'
 import { NavLink, useNavigate } from 'react-router-dom'
 import '../styles/HamburgerMenu.css'
 
-export default function HamburgerMenu({ items, sections, user, onLogout, onNavigate, homeRoute, companyInfo }) {
+export default function HamburgerMenu({ items, sections, user, token, onLogout, onNavigate, homeRoute, companyInfo }) {
   const [isOpen, setIsOpen] = useState(false)
   const navigate = useNavigate()
 
@@ -73,27 +74,7 @@ export default function HamburgerMenu({ items, sections, user, onLogout, onNavig
 
       {/* Lado Derecho: Campana + Foto/Avatar del Perfil (Al tocar va directo a /app/perfil) */}
       <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
-        <div
-          style={{
-            width: '32px',
-            height: '32px',
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.08)',
-            border: '1px solid rgba(255,255,255,0.15)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-            position: 'relative',
-          }}
-          title="Notificaciones"
-        >
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ffffff" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-            <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-          </svg>
-          <span style={{ position: 'absolute', top: '6px', right: '6px', width: '6px', height: '6px', borderRadius: '50%', background: '#c4f039' }}></span>
-        </div>
+        <NotificationBell token={token} variant="mobile" />
 
         <div
           style={{

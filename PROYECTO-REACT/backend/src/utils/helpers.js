@@ -65,6 +65,10 @@ function isValidDni(dni) {
 
 function toDateOnly(date) {
     if (!date) return "";
+    if (typeof date === "string") {
+        const trimmed = date.trim();
+        if (/^\d{4}-\d{2}-\d{2}$/.test(trimmed)) return trimmed;
+    }
     const d = date instanceof Date ? date : new Date(date);
     if (isNaN(d.getTime())) return "";
     return new Intl.DateTimeFormat("en-CA", {

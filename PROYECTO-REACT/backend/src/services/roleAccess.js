@@ -80,6 +80,7 @@ async function decorate(user) { const access=await identity(user.id);if(!access)
 function requestModules(req) {
     const path=(req.originalUrl || '').split('?')[0];
     if(path.startsWith('/api/auth/'))return [];
+    if(path.startsWith('/api/notificaciones'))return [];
     if(path.startsWith('/api/admin/usuarios'))return ['usuarios'];
     if(path.startsWith('/api/admin/dashboard'))return ['inicio'];
     if(path.startsWith('/api/admin/checkin'))return ['inicio'];

@@ -87,7 +87,7 @@ class DashboardController {
             }
 
             const [asistenciasRangoRows] = await db.execute(`
-                SELECT DATE(hora_entrada) AS fecha, COUNT(*) AS total
+                SELECT DATE(hora_entrada) AS fecha, COALESCE(SUM(1 + COALESCE(invitados_count, 0)), 0) AS total
                 FROM asistencias
                 WHERE DATE(hora_entrada) BETWEEN ? AND ?
                 GROUP BY DATE(hora_entrada)
@@ -176,6 +176,7 @@ class DashboardController {
                     a.hora_entrada,
                     a.hora_salida,
                     a.metodo_registro,
+                    a.invitados_count,
                     a.observacion_salida,
                     u.nombre,
                     u.apellido,
@@ -221,15 +222,16 @@ class DashboardController {
                 const isExit = Boolean(att.hora_salida);
                 const isNoCheckout = att.observacion_salida === 'no_marco_salida';
                 const timestamp = att.hora_salida || att.hora_entrada;
+                const guestNote = Number(att.invitados_count) > 0 ? ` · +${att.invitados_count} invitado(s)` : '';
                 rawActivities.push({
                     name: `${att.nombre} ${att.apellido || ''}`.trim(),
                     timestamp: new Date(timestamp).getTime(),
                     time: formatTimePeru(timestamp),
                     detail: isNoCheckout
-                        ? `Cierre automático tras 4h sin marcar salida (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})`
+                        ? `Cierre automático tras 4h sin marcar salida (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})${guestNote}`
                         : isExit
-                        ? `Salida registrada · Sesión finalizada (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})`
-                        : `Check-in ingreso · +25 XP Bambús (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})`,
+                        ? `Salida registrada · Sesión finalizada (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})${guestNote}`
+                        : `Check-in ingreso · +25 XP Bambús (${att.metodo_registro === 'huella' ? 'Huella' : 'Manual'})${guestNote}`,
                     badge: isNoCheckout ? 'Sin salida (+4h)' : isExit ? 'Salida' : 'Autorizado',
                     bg: isNoCheckout ? '#fef3c7' : isExit ? '#e0f2fe' : '#ecfccb',
                     col: isNoCheckout ? '#92400e' : isExit ? '#0369a1' : '#1b4d24',

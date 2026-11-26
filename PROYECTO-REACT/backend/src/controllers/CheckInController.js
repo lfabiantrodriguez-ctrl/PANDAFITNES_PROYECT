@@ -94,6 +94,12 @@ class CheckInController {
             const history = await AttendanceModel.getByUser(user.id);
             const membership = await MembershipModel.getClientMembership(user.id);
             const activeAttendance = await AttendanceModel.findActiveByUser(user.id);
+            const OfferService = require("../services/offerService");
+            const friendPasses = await OfferService.getAvailableFriendPassesForUser(user.id).catch(() => ({
+                totalDisponibles: 0,
+                invitadosHistorico: 0,
+                ofertas: [],
+            }));
 
             const isValidMembership = membership &&
                 membership.estado === 'activo' &&
@@ -107,6 +113,7 @@ class CheckInController {
                 membershipStatus: isValidMembership ? 'activa' : (membership ? 'vencida' : 'sin_membresia'),
                 history: history ? history.slice(0, 5) : [],
                 activeAttendance,
+                friendPasses,
                 canDirectCheckIn: isValidMembership && !activeAttendance,
                 isInside: !!activeAttendance,
                 currentTime: now.toISOString(),
@@ -184,8 +191,9 @@ class CheckInController {
 
     static async confirmDirectEntry(req, res) {
         try {
-            const { userId, durationMinutes } = req.body;
+            const { userId, durationMinutes, invitadosCount = 0, invitadoNombres = "", paseOfertaId = null } = req.body;
             const MembershipModel = require("../models/MembershipModel");
+            const OfferService = require("../services/offerService");
 
             if (!userId) {
                 return res.status(400).json({ message: "Falta userId" });
@@ -208,6 +216,18 @@ class CheckInController {
             const activeAttendance = await AttendanceModel.findActiveByUser(userId);
             if (activeAttendance) {
                 return res.status(400).json({ message: "El socio ya tiene un ingreso activo en sala" });
+            }
+
+            const numGuests = Math.max(0, parseInt(invitadosCount, 10) || 0);
+            if (numGuests > 0) {
+                const avail = await OfferService.getAvailableFriendPassesForUser(userId);
+                if (avail.totalDisponibles < numGuests) {
+                    return res.status(400).json({
+                        message: avail.totalDisponibles > 0
+                            ? `El socio solo tiene ${avail.totalDisponibles} pase(s) de amigo disponible(s).`
+                            : "El socio no tiene pases libres para amigo disponibles.",
+                    });
+                }
             }
 
             const now = new Date();
@@ -247,6 +267,26 @@ class CheckInController {
                 metodoRegistro: req.body.metodoRegistro || 'manual',
             });
 
+            if (numGuests > 0) {
+                const connection = await db.getConnection();
+                try {
+                    await connection.beginTransaction();
+                    await OfferService.consumeFriendPassAttendance(connection, {
+                        userId,
+                        ofertaId: paseOfertaId ? Number(paseOfertaId) : null,
+                        cantidad: numGuests,
+                        asistenciaId: attendance.id,
+                        invitadoNombres,
+                    });
+                    await connection.commit();
+                } catch (err) {
+                    await connection.rollback();
+                    return res.status(400).json({ message: err.message || "No se pudo validar el pase de invitado" });
+                } finally {
+                    connection.release();
+                }
+            }
+
             if (user.email) {
                 const localTimeStr = now.toLocaleTimeString("es-ES", {
                     hour: "2-digit",
@@ -264,7 +304,7 @@ class CheckInController {
                     html: `
                         <div style="font-family: sans-serif; padding: 20px; color: #333;">
                             <h2 style="color: #16a34a;">¡Hola ${user.nombre}!</h2>
-                            <p>Tu ingreso directo al gimnasio ha sido registrado el <strong>${localDateStr}</strong> a las <strong>${localTimeStr}</strong>.</p>
+                            <p>Tu ingreso directo al gimnasio ha sido registrado el <strong>${localDateStr}</strong> a las <strong>${localTimeStr}</strong>${numGuests > 0 ? ` junto con <strong>${numGuests} invitado(s)</strong>` : ""}.</p>
                             <p>Plan activo: <strong>${membership.planNombre}</strong></p>
                             <p>¡Disfruta tu entrenamiento!</p>
                             <br/>
@@ -275,7 +315,9 @@ class CheckInController {
             }
 
             return res.json({
-                message: "Check-in directo confirmado",
+                message: numGuests > 0
+                    ? `Check-in confirmado (socio + ${numGuests} invitado${numGuests > 1 ? 's' : ''})`
+                    : "Check-in directo confirmado",
                 reservation: {
                     id: reservation.id,
                     horaEntrada: reservation.horaEntrada,
@@ -287,11 +329,65 @@ class CheckInController {
                     usuarioId: attendance.usuarioId,
                     horaEntrada: attendance.horaEntrada,
                     metodoRegistro: attendance.metodoRegistro,
+                    invitadosCount: numGuests,
                 },
             });
         } catch (error) {
             console.error("Error en check-in directo:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async attachFriendGuest(req, res) {
+        const OfferService = require("../services/offerService");
+        const connection = await db.getConnection();
+        try {
+            const { attendanceId, cantidad = 1, ofertaId = null, invitadoNombres = "" } = req.body || {};
+            const id = Number(attendanceId);
+            const qty = Math.max(1, parseInt(cantidad, 10) || 1);
+
+            if (!id) {
+                return res.status(400).json({ message: "Asistencia inválida" });
+            }
+
+            await connection.beginTransaction();
+            const [rows] = await connection.execute(
+                `SELECT a.id, a.usuario_id AS usuarioId, a.hora_salida AS horaSalida,
+                        u.nombre, u.apellido
+                 FROM asistencias a
+                 INNER JOIN usuarios u ON u.id = a.usuario_id
+                 WHERE a.id = ?
+                 FOR UPDATE`,
+                [id],
+            );
+            const att = rows[0];
+            if (!att) {
+                await connection.rollback();
+                return res.status(404).json({ message: "Registro de asistencia no encontrado" });
+            }
+            if (att.horaSalida) {
+                await connection.rollback();
+                return res.status(400).json({ message: "El socio ya registró su salida" });
+            }
+
+            const result = await OfferService.consumeFriendPassAttendance(connection, {
+                userId: att.usuarioId,
+                ofertaId: ofertaId ? Number(ofertaId) : null,
+                cantidad: qty,
+                asistenciaId: id,
+                invitadoNombres,
+            });
+
+            await connection.commit();
+            return res.json({
+                message: `Se validó ${qty} invitado${qty > 1 ? 's' : ''} para ${att.nombre} ${att.apellido}. El aforo y salida quedaron vinculados automáticamente.`,
+                ...result,
+            });
+        } catch (error) {
+            await connection.rollback();
+            return res.status(400).json({ message: error.message || "No se pudo validar el invitado" });
+        } finally {
+            connection.release();
         }
     }
 

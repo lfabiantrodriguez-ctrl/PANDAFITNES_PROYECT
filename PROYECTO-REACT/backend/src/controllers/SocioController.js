@@ -1,4 +1,6 @@
 const SocioModel = require("../models/SocioModel");
+const PlanModel = require("../models/PlanModel");
+const OfferService = require("../services/offerService");
 const { isValidDni, toDateOnly } = require("../utils/helpers");
 const { sendEmail } = require("../utils/email");
 
@@ -24,6 +26,7 @@ class SocioController {
                 planId,
                 fechaInicio,
                 metodoPago = "efectivo",
+                codigoCupon,
             } = req.body;
 
             const cleanDni = String(dni || "").trim();
@@ -64,9 +67,9 @@ class SocioController {
                 planId,
                 fechaInicio: startDate,
                 metodoPago,
+                codigoCupon: codigoCupon || null,
             });
 
-            // El correo de bienvenida no incluye contraseñas.
             const planRow = await (async () => {
                 const db = require("../config/database");
                 const [rows] = await db.execute("SELECT nombre FROM planes_membresia WHERE id = ?", [planId]);
@@ -112,11 +115,10 @@ class SocioController {
             });
         } catch (error) {
             console.error("Error creando socio:", error);
-            if (error.message.includes("No existe el rol cliente") || error.message.includes("El plan seleccionado no existe")) {
+            if (error.message.includes("No existe el rol cliente") || error.message.includes("El plan seleccionado no existe") || error.message.includes("código") || error.message.includes("cupón") || error.message.includes("promoción")) {
                 return res.status(400).json({ message: error.message });
             }
 
-            // Handle MySQL duplicate entry errors to return a clear 409 response
             if (error.code === 'ER_DUP_ENTRY' || error.errno === 1062) {
                 return res.status(409).json({ message: 'Ya existe un usuario con ese DNI o email' });
             }
@@ -197,13 +199,13 @@ class SocioController {
 
     static async createOffer(req, res) {
         try {
-            const { usuarioId, titulo, descripcion, tipo, valor, codigoCupon, diasVigencia } = req.body;
+            const { usuarioId, titulo, descripcion, tipo, valor, codigoCupon, diasVigencia, cuposMaximos } = req.body;
 
-            if (!titulo) {
+            if (!titulo || !String(titulo).trim()) {
                 return res.status(400).json({ message: "El título de la oferta es obligatorio" });
             }
 
-            const offer = await SocioModel.createOffer({
+            const offer = await OfferService.createOffer({
                 usuarioId: usuarioId ? Number(usuarioId) : null,
                 titulo,
                 descripcion,
@@ -211,10 +213,11 @@ class SocioController {
                 valor: Number(valor || 0),
                 codigoCupon: codigoCupon ? String(codigoCupon).trim().toUpperCase() : null,
                 diasVigencia: diasVigencia ? Number(diasVigencia) : 30,
+                cuposMaximos: cuposMaximos !== undefined && cuposMaximos !== null && cuposMaximos !== '' ? Number(cuposMaximos) : null,
             });
 
             return res.status(201).json({
-                message: usuarioId ? "Oferta personalizada asignada y notificada al socio" : "Oferta general creada exitosamente",
+                message: usuarioId ? "Oferta personalizada asignada y notificada al socio" : "Promoción general publicada y notificada a los socios",
                 offer,
             });
         } catch (error) {
@@ -225,17 +228,33 @@ class SocioController {
 
     static async getOffers(req, res) {
         try {
-            const db = require("../config/database");
-            const [rows] = await db.execute(
-                `SELECT o.*, u.nombre AS usuarioNombre, u.apellido AS usuarioApellido, u.dni AS usuarioDni
-                 FROM ofertas_socios o
-                 LEFT JOIN usuarios u ON u.id = o.usuario_id
-                 ORDER BY o.id DESC`,
-            );
-            return res.json({ ofertas: rows });
+            const ofertas = await OfferService.getAllOffersWithStats();
+            return res.json({ ofertas });
         } catch (error) {
             console.error("Error consultando ofertas:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
+        }
+    }
+
+    static async validateCouponAdmin(req, res) {
+        try {
+            const { codigoCupon, planId, userId, context = "renovacion" } = req.body || {};
+            let planPrecio = 0;
+            if (planId) {
+                const plan = await PlanModel.findById(Number(planId));
+                if (!plan) return res.status(404).json({ message: "Plan no encontrado" });
+                planPrecio = Number(plan.precio);
+            }
+            const result = await OfferService.validateOfferCode({
+                code: codigoCupon,
+                userId: userId ? Number(userId) : null,
+                planPrecio,
+                context,
+                checkPendingRequest: false,
+            });
+            return res.json(result);
+        } catch (error) {
+            return res.status(400).json({ message: error.message || "Código promocional no válido" });
         }
     }
 }

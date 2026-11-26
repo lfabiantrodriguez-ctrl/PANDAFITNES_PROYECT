@@ -76,14 +76,14 @@ export default function ModalDialog({
         >
           {/* Header con estilo atlético Verde Bosque y Lima */}
           <div
-            className="modal-header py-3 px-4 d-flex justify-content-between align-items-center"
+            className="modal-header py-3 px-3 px-sm-4 d-flex justify-content-between align-items-start align-items-sm-center gap-2"
             style={{
               background: 'linear-gradient(135deg, #121e17 0%, #16241c 100%)',
               color: '#ffffff',
               borderBottom: '2px solid #c4f039',
             }}
           >
-            <div>
+            <div style={{ minWidth: 0, flex: 1 }}>
               {badge && (
                 <span
                   className="badge mb-1 text-uppercase fw-bold"
@@ -102,12 +102,12 @@ export default function ModalDialog({
               )}
               <h5
                 className="modal-title fw-bold m-0 text-white"
-                style={{ fontSize: '1.2rem', letterSpacing: '-0.02em' }}
+                style={{ fontSize: '1.15rem', letterSpacing: '-0.02em', overflowWrap: 'break-word' }}
               >
                 {title}
               </h5>
               {subtitle && (
-                <p className="m-0 text-white-50 small mt-1" style={{ fontSize: '0.85rem' }}>
+                <p className="m-0 text-white-50 small mt-1" style={{ fontSize: '0.82rem', overflowWrap: 'break-word' }}>
                   {subtitle}
                 </p>
               )}
@@ -116,7 +116,7 @@ export default function ModalDialog({
             <button
               ref={closeBtnRef}
               type="button"
-              className="btn text-white p-1 d-flex align-items-center justify-content-center"
+              className="btn text-white p-1 d-flex align-items-center justify-content-center flex-shrink-0"
               onClick={onClose}
               aria-label="Cerrar modal"
               style={{
@@ -140,9 +140,9 @@ export default function ModalDialog({
 
           {/* Body */}
           <div
-            className="modal-body p-4"
+            className="modal-body p-3 p-sm-4"
             style={{
-              maxHeight: 'calc(85vh - 130px)',
+              maxHeight: 'calc(92dvh - 120px)',
               overflowY: 'auto',
               overflowX: 'hidden',
               width: '100%',
@@ -155,7 +155,7 @@ export default function ModalDialog({
           {/* Footer opcional */}
           {footer && (
             <div
-              className="modal-footer py-3 px-4 d-flex justify-content-end gap-2"
+              className="modal-footer py-3 px-3 px-sm-4 d-flex flex-wrap justify-content-end gap-2"
               style={{
                 background: '#f8fafc',
                 borderTop: '1px solid #e2e8f0',

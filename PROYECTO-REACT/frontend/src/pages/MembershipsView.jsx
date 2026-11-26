@@ -3,6 +3,9 @@ import ViewTitle from '../components/ViewTitle'
 import ModalDialog from '../components/ModalDialog'
 import MemberProfileModal from '../components/MemberProfileModal'
 import OfferModal from '../components/OfferModal'
+import RenewalRequestsPanel from '../components/RenewalRequestsPanel'
+import PlansAndOffersModal from '../components/PlansAndOffersModal'
+import CouponCodeField from '../components/CouponCodeField'
 import { MembershipService } from '../services/MembershipService'
 import { PlanService } from '../services/PlanService'
 import { formatDate, getTodayPeru } from '../utils/formatters'
@@ -11,12 +14,14 @@ export default function MembershipsView({ token }) {
   const today = useMemo(() => getTodayPeru(), [])
   const [socios, setSocios] = useState([])
   const [plans, setPlans] = useState([])
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
+  const [showPlansModal, setShowPlansModal] = useState(false)
   const [search, setSearch] = useState('')
   const [loading, setLoading] = useState(true)
   const [message, setMessage] = useState('')
 
   // Segmentación inteligente de membresías
-  // 'todos' | 'activos' | 'por_vencer' | 'inactivos' | 'vip'
+  // 'todos' | 'solicitudes' | 'activos' | 'por_vencer' | 'inactivos' | 'vip'
   const [segmentFilter, setSegmentFilter] = useState('todos')
 
   // Modales interactivos
@@ -36,14 +41,20 @@ export default function MembershipsView({ token }) {
     isReincorporacion: false,
     fechaFinActual: null,
   })
+  const [renewCoupon, setRenewCoupon] = useState('')
+  const [appliedRenewCoupon, setAppliedRenewCoupon] = useState(null)
   const [showRenewModal, setShowRenewModal] = useState(false)
   const [renewLoading, setRenewLoading] = useState(false)
   const [renewErrors, setRenewErrors] = useState({})
 
   const loadData = useCallback(async (searchTerm) => {
     try {
-      const data = await MembershipService.getMembershipsList(token, searchTerm)
+      const [data, reqData] = await Promise.all([
+        MembershipService.getMembershipsList(token, searchTerm),
+        MembershipService.getAdminRenewalRequests(token, 'pendiente').catch(() => ({ solicitudes: [] })),
+      ])
       setSocios(data.socios || [])
+      setPendingRequestsCount((reqData.solicitudes || []).length)
     } catch (err) {
       setMessage(err.message)
     }
@@ -86,6 +97,8 @@ export default function MembershipsView({ token }) {
       ? socio.fechaFin.slice(0, 10)
       : today
 
+    setRenewCoupon('')
+    setAppliedRenewCoupon(null)
     setRenewForm({
       socioId: socio.id,
       socioNombre: socio.nombre,
@@ -124,9 +137,11 @@ export default function MembershipsView({ token }) {
         planId: renewForm.planId,
         fechaInicio: renewForm.fechaInicio,
         metodoPago: renewForm.metodoPago,
+        codigoCupon: appliedRenewCoupon?.oferta?.codigoCupon || null,
       })
       setMessage(`Membresía renovada exitosamente para ${renewForm.socioNombre} ${renewForm.socioApellido}.`)
       setShowRenewModal(false)
+      window.dispatchEvent(new Event('panda_notifications_updated'))
       loadData(search)
       if (profileModalSocioId) {
         setProfileModalSocioId(renewForm.socioId) // recargar ficha si estaba abierta
@@ -172,6 +187,15 @@ export default function MembershipsView({ token }) {
           text="Control de renovaciones, seguimiento de vigencias, alertas de vencimiento y fidelización."
         />
         <div className="d-flex align-items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-outline-dark fw-bold px-3 py-2 d-flex align-items-center gap-2 shadow-sm"
+            style={{ borderRadius: '12px', fontSize: '0.88rem' }}
+            onClick={() => setShowPlansModal(true)}
+          >
+            <i className="bi bi-tags text-success" />
+            <span>Planes y Campañas</span>
+          </button>
           <button
             type="button"
             className="btn btn-dark fw-bold px-3 py-2 d-flex align-items-center gap-2 shadow-sm"
@@ -279,6 +303,25 @@ export default function MembershipsView({ token }) {
         <button
           type="button"
           className={`btn btn-sm d-flex align-items-center gap-2 px-3 py-2 fw-semibold ${
+            segmentFilter === 'solicitudes' ? 'btn-dark' : 'btn-outline-secondary'
+          }`}
+          style={{
+            borderRadius: '10px',
+            background: segmentFilter === 'solicitudes' ? '#121e17' : '#ffffff',
+            color: segmentFilter === 'solicitudes' ? '#c4f039' : '#b45309',
+            borderColor: segmentFilter === 'solicitudes' ? '#121e17' : '#fde68a',
+          }}
+          onClick={() => setSegmentFilter('solicitudes')}
+        >
+          <span>📩 Solicitudes</span>
+          <span className="badge rounded-pill" style={{ background: '#fef3c7', color: '#b45309' }}>
+            {pendingRequestsCount}
+          </span>
+        </button>
+
+        <button
+          type="button"
+          className={`btn btn-sm d-flex align-items-center gap-2 px-3 py-2 fw-semibold ${
             segmentFilter === 'vip' ? 'btn-dark' : 'btn-outline-secondary'
           }`}
           style={{
@@ -296,6 +339,10 @@ export default function MembershipsView({ token }) {
         </button>
       </div>
 
+      {segmentFilter === 'solicitudes' ? (
+        <RenewalRequestsPanel token={token} plans={plans} onProcessed={() => loadData(search)} />
+      ) : (
+      <>
       {/* Buscador */}
       <div className="mb-4">
         <input
@@ -659,6 +706,8 @@ export default function MembershipsView({ token }) {
           </div>
         )}
       </div>
+      </>
+      )}
 
       {/* MODAL 1: RENOVAR MEMBRESÍA */}
       <ModalDialog
@@ -746,15 +795,30 @@ export default function MembershipsView({ token }) {
             </div>
 
             {selectedPlan && (
-              <div className="p-3 rounded-3 border bg-light d-flex justify-content-between align-items-center">
-                <div>
-                  <strong className="text-dark">{selectedPlan.nombre}</strong>
-                  <div className="text-muted small">{selectedPlan.duracionDias} días de suscripción (domingos no hábiles)</div>
+              <>
+                <CouponCodeField
+                  token={token}
+                  plan={selectedPlan}
+                  userId={renewForm.socioId}
+                  context="renovacion"
+                  value={renewCoupon}
+                  onChange={setRenewCoupon}
+                  appliedCoupon={appliedRenewCoupon}
+                  onApplied={setAppliedRenewCoupon}
+                />
+                <div className="p-3 rounded-3 border bg-light d-flex justify-content-between align-items-center">
+                  <div>
+                    <strong className="text-dark">{selectedPlan.nombre}</strong>
+                    <div className="text-muted small">
+                      {selectedPlan.duracionDias} días de suscripción (domingos no hábiles)
+                      {appliedRenewCoupon?.diasExtra ? ` + ${appliedRenewCoupon.diasExtra} días gratis` : ''}
+                    </div>
+                  </div>
+                  <span className="badge bg-dark text-white fs-6 px-3 py-2">
+                    S/. {(appliedRenewCoupon ? Number(appliedRenewCoupon.montoFinal) : Number(selectedPlan.precio)).toFixed(2)}
+                  </span>
                 </div>
-                <span className="badge bg-dark text-white fs-6 px-3 py-2">
-                  S/. {Number(selectedPlan.precio).toFixed(2)}
-                </span>
-              </div>
+              </>
             )}
           </div>
 
@@ -805,6 +869,17 @@ export default function MembershipsView({ token }) {
         onSuccess={() => {
           setMessage('¡Promoción registrada y enviada exitosamente!')
           loadData(search)
+        }}
+      />
+
+      <PlansAndOffersModal
+        isOpen={showPlansModal}
+        onClose={() => setShowPlansModal(false)}
+        token={token}
+        plans={plans}
+        onPlansUpdated={(updatedPlans) => {
+          setPlans(updatedPlans)
+          setMessage('Precios y configuración del plan actualizados.')
         }}
       />
     </>

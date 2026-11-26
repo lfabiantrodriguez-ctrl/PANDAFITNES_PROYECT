@@ -34,5 +34,6 @@ router.use("/admin/dashboard", require("./dashboardRoutes"));
 router.use("/configuracion", configRoutes);
 router.use("/recompensas", rewardRoutes);
 router.use("/zk", zkRoutes);
+router.use("/notificaciones", require("./notificationRoutes"));
 
 module.exports = router;

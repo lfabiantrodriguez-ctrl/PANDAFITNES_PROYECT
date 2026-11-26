@@ -186,27 +186,27 @@ export default function MemberProfileModal({
           </div>
 
           {/* NAVEGACIÓN POR PESTAÑAS DENTRO DE LA FICHA */}
-          <div className="d-flex border-bottom gap-2 pt-2">
+          <div className="d-flex flex-nowrap border-bottom gap-2 pt-2 overflow-auto" style={{ scrollbarWidth: 'none' }}>
             <button
               type="button"
-              className={`btn btn-sm ${activeTab === 'matriculas' ? 'btn-dark fw-bold' : 'btn-light text-muted'}`}
-              style={{ borderRadius: '8px 8px 0 0', fontSize: '0.82rem' }}
+              className={`btn btn-sm flex-shrink-0 ${activeTab === 'matriculas' ? 'btn-dark fw-bold' : 'btn-light text-muted'}`}
+              style={{ borderRadius: '8px 8px 0 0', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
               onClick={() => setActiveTab('matriculas')}
             >
               Historial de Matrículas ({membresias.length})
             </button>
             <button
               type="button"
-              className={`btn btn-sm ${activeTab === 'asistencias' ? 'btn-dark fw-bold' : 'btn-light text-muted'}`}
-              style={{ borderRadius: '8px 8px 0 0', fontSize: '0.82rem' }}
+              className={`btn btn-sm flex-shrink-0 ${activeTab === 'asistencias' ? 'btn-dark fw-bold' : 'btn-light text-muted'}`}
+              style={{ borderRadius: '8px 8px 0 0', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
               onClick={() => setActiveTab('asistencias')}
             >
               Asistencias Reales ({asistencias.length})
             </button>
             <button
               type="button"
-              className={`btn btn-sm ${activeTab === 'ofertas' ? 'btn-dark fw-bold' : 'btn-light text-muted'}`}
-              style={{ borderRadius: '8px 8px 0 0', fontSize: '0.82rem' }}
+              className={`btn btn-sm flex-shrink-0 ${activeTab === 'ofertas' ? 'btn-dark fw-bold' : 'btn-light text-muted'}`}
+              style={{ borderRadius: '8px 8px 0 0', fontSize: '0.82rem', whiteSpace: 'nowrap' }}
               onClick={() => setActiveTab('ofertas')}
             >
               Ofertas Asignadas ({ofertas.length})
@@ -342,12 +342,17 @@ export default function MemberProfileModal({
                       className="p-3 border rounded-3 bg-white d-flex justify-content-between align-items-center"
                     >
                       <div>
-                        <div className="d-flex align-items-center gap-2">
+                        <div className="d-flex align-items-center gap-2 flex-wrap">
                           <strong className="text-dark small">{o.titulo}</strong>
                           {o.usuarioId ? (
                             <span className="badge bg-warning text-dark" style={{ fontSize: '0.65rem' }}>Exclusiva</span>
                           ) : (
-                            <span className="badge bg-secondary text-white" style={{ fontSize: '0.65rem' }}>General</span>
+                            <span className="badge bg-secondary text-white" style={{ fontSize: '0.65rem' }}>
+                              General{o.cuposMaximos ? ` (${o.cuposRestantes}/${o.cuposMaximos} cupos)` : ''}
+                            </span>
+                          )}
+                          {o.yaUsadaPorMi && (
+                            <span className="badge bg-success text-white" style={{ fontSize: '0.65rem' }}>Canjeado</span>
                           )}
                         </div>
                         <p className="text-muted small m-0 mt-1">{o.descripcion}</p>

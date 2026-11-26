@@ -59,11 +59,21 @@ async function validateGuestSchedule(startDate, endDate, bypassSchedule = false)
 class GuestController {
     static async createGuest(req, res) {
         try {
-            const { nombre, telefono, fechaInicio, fechaFin, monto, duracionHoras } = req.body;
+            const { nombre, telefono, fechaInicio, fechaFin, monto, duracionHoras, codigoPase } = req.body;
             const adminId = req.auth?.id || req.user?.id;
 
-            if (!nombre || !telefono || !fechaInicio || !fechaFin) {
-                return res.status(400).json({ message: "Nombre, teléfono, fecha de inicio y fecha de fin son requeridos" });
+            if (codigoPase && String(codigoPase).trim()) {
+                return res.status(400).json({
+                    message: "Los Pases Libres para Amigo solo se validan acompañados del socio en Inicio (Control de acceso).",
+                });
+            }
+
+            if (!nombre || !fechaInicio || !fechaFin) {
+                return res.status(400).json({ message: "Nombre, fecha de inicio y fecha de fin son requeridos" });
+            }
+
+            if (!telefono) {
+                return res.status(400).json({ message: "El teléfono es requerido para pase diario regular" });
             }
 
             const startDate = parseLocalDateTime(fechaInicio);
@@ -79,7 +89,7 @@ class GuestController {
 
             const guest = await GuestModel.createGuest({
                 nombre,
-                telefono,
+                telefono: telefono || null,
                 fechaInicio: normalizeDateTime(startDate),
                 fechaFin: normalizeDateTime(endDate),
                 duracionHoras: duracionHoras != null ? Number(duracionHoras) : null,
@@ -90,8 +100,17 @@ class GuestController {
             return res.status(201).json({ guest });
         } catch (error) {
             console.error("Error creando invitado:", error);
+            if (error.message && (error.message.includes("Pase") || error.message.includes("Acompañado") || error.message.includes("acompañado"))) {
+                return res.status(400).json({ message: error.message });
+            }
             return res.status(500).json({ message: "Error interno del servidor" });
         }
+    }
+
+    static async validateFriendPass(_req, res) {
+        return res.status(400).json({
+            message: "Los Pases Libres para Amigo solo se validan acompañados del socio en Inicio (Control de acceso).",
+        });
     }
 
     static async listGuests(req, res) {

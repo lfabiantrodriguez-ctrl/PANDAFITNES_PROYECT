@@ -80,4 +80,20 @@ export class SocioService {
     }
     return data
   }
+
+  static async validateCouponAdmin(token, { codigoCupon, planId, userId, context }) {
+    const response = await fetch('/api/admin/socios/validar-codigo', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ codigoCupon, planId, userId, context }),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'Código promocional no válido')
+    }
+    return data
+  }
 }

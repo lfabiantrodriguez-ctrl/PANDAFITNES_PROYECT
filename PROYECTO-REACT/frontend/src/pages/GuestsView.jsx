@@ -302,7 +302,14 @@ export default function GuestsView({ token }) {
                     <td className="px-3 text-muted">{guest.telefono || 'Sin teléfono'}</td>
                     <td className="px-3">{guest.fechaInicio ? new Date(guest.fechaInicio).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
                     <td className="px-3">{guest.fechaFin ? new Date(guest.fechaFin).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '-'}</td>
-                    <td className="px-3 fw-bold">S/. {Number(guest.monto || calculateFee(guest.duracionHoras)).toFixed(2)}</td>
+                    <td className="px-3 fw-bold">
+                      S/. {Number(guest.monto ?? calculateFee(guest.duracionHoras)).toFixed(2)}
+                      {guest.codigoPase && (
+                        <div className="text-success" style={{ fontSize: '0.72rem' }}>
+                          Pase {guest.codigoPase}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3">
                       <span
                         className="badge px-2 py-1 text-uppercase"
@@ -405,7 +412,7 @@ export default function GuestsView({ token }) {
                   <div className="mobile-card-field">
                     <div className="mobile-card-label">Tarifa Abonada</div>
                     <div className="mobile-card-value text-success fw-bold">
-                      S/. {Number(guest.monto || calculateFee(guest.duracionHoras)).toFixed(2)}
+                      S/. {Number(guest.monto ?? calculateFee(guest.duracionHoras)).toFixed(2)}
                     </div>
                   </div>
                 </div>
@@ -590,7 +597,7 @@ export default function GuestsView({ token }) {
             </div>
           </div>
 
-          <div className="p-3 mt-4 rounded-3 border bg-light d-flex justify-content-between align-items-center">
+          <div className="p-3 mt-3 rounded-3 border bg-light d-flex justify-content-between align-items-center">
             <div>
               <strong className="text-dark">Total a Cobrar</strong>
               <div className="text-muted small">
@@ -635,7 +642,7 @@ export default function GuestsView({ token }) {
                 </strong>
               </div>
               <span className="badge bg-success text-white px-3 py-2 text-uppercase" style={{ background: '#ecfccb !important', color: '#1b4d24 !important' }}>
-                S/. {Number(selectedGuest.monto || calculateFee(selectedGuest.duracionHoras)).toFixed(2)}
+                S/. {Number(selectedGuest.monto ?? calculateFee(selectedGuest.duracionHoras)).toFixed(2)}
               </span>
             </div>
 
@@ -671,7 +678,7 @@ export default function GuestsView({ token }) {
       <div
         className="d-md-none position-fixed"
         style={{
-          bottom: '76px',
+          bottom: 'calc(92px + env(safe-area-inset-bottom, 0px))',
           right: '16px',
           zIndex: 1035,
         }}

@@ -17,6 +17,7 @@ import RewardsView from '../pages/RewardsView'
 import MemberMembershipView from '../pages/MemberMembershipView'
 import HamburgerMenu from '../components/HamburgerMenu'
 import MobileBottomNav from '../components/MobileBottomNav'
+import NotificationBell from '../components/NotificationBell'
 import { ConfigService } from '../services/ConfigService'
 
 export const ROLE_HOME = {
@@ -318,6 +319,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
         items={items} 
         sections={sections}
         user={user} 
+        token={token}
         onLogout={onLogout}
         homeRoute={homeFor(user)}
         companyInfo={companyInfo}
@@ -340,39 +342,7 @@ export default function AppLayout({ token, user, onLogout, setUser }) {
             </span>
 
             {/* Notification Bell */}
-            <div
-              style={{
-                position: 'relative',
-                width: '36px',
-                height: '36px',
-                borderRadius: '50%',
-                background: '#ffffff',
-                border: '1px solid #e3e8e2',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: '0 2px 6px rgba(18, 31, 23, 0.04)',
-              }}
-              title="Notificaciones"
-            >
-              <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="#5f7165" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                <path d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"></path>
-                <path d="M13.73 21a2 2 0 0 1-3.46 0"></path>
-              </svg>
-              <span
-                style={{
-                  position: 'absolute',
-                  top: '8px',
-                  right: '8px',
-                  width: '7px',
-                  height: '7px',
-                  borderRadius: '50%',
-                  background: '#c4f039',
-                  border: '1.5px solid #ffffff',
-                }}
-              ></span>
-            </div>
+            <NotificationBell token={token} variant="desktop" />
 
             {/* User Avatar, Name, Role & Logout */}
             <div

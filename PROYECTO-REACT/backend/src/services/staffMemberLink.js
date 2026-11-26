@@ -38,9 +38,12 @@ async function requireMember(req,res,next) {
 }
 const PERSONAL_REQUESTS = {
     GET:['/api/asistencias/usuario','/api/asistencias/mi-historial','/api/asistencias/pandita-estado',
-        '/api/membresias/mi-membresia','/api/membresias/mis-pagos',
+        '/api/membresias/mi-membresia','/api/membresias/mi-resumen','/api/membresias/mis-pagos',
+        '/api/membresias/planes','/api/membresias/mis-ofertas','/api/membresias/mis-solicitudes',
         '/api/recompensas/catalogo','/api/recompensas/convenios','/api/recompensas/mis-canjes'],
-    PUT:['/api/asistencias/mi-objetivo'],POST:['/api/asistencias/canjear-recompensa'],
+    PUT:['/api/asistencias/mi-objetivo'],
+    POST:['/api/asistencias/canjear-recompensa','/api/membresias/validar-codigo',
+        '/api/membresias/solicitar-renovacion','/api/membresias/cancelar-solicitud'],
 };
 function personalRequest(req) {
     const url=(req.originalUrl||'').split('?')[0].replace(/\/$/,'');

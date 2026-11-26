@@ -66,12 +66,16 @@ class AttendanceModel {
         const [rows] = await db.execute(
             `SELECT
                 a.id,
+                a.usuario_id AS usuarioId,
                 u.nombre,
                 u.apellido,
                 u.dni,
                 a.hora_entrada AS horaEntrada,
                 a.hora_salida AS horaSalida,
                 COALESCE(a.metodo_registro, 'manual') AS metodoRegistro,
+                COALESCE(a.invitados_count, 0) AS invitadosCount,
+                a.invitado_nombres AS invitadoNombres,
+                a.pase_oferta_id AS paseOfertaId,
                 a.observacion_salida AS observacionSalida
              FROM asistencias a
              INNER JOIN usuarios u ON u.id = a.usuario_id
@@ -81,12 +85,16 @@ class AttendanceModel {
 
         return rows.map((row) => ({
             id: row.id,
+            usuarioId: row.usuarioId,
             nombre: row.nombre,
             apellido: row.apellido,
             dni: row.dni,
             horaEntrada: row.horaEntrada,
             horaSalida: row.horaSalida,
             metodoRegistro: row.metodoRegistro,
+            invitadosCount: Number(row.invitadosCount || 0),
+            invitadoNombres: row.invitadoNombres || null,
+            paseOfertaId: row.paseOfertaId || null,
             observacionSalida: row.observacionSalida || null,
         }));
     }
@@ -96,12 +104,16 @@ class AttendanceModel {
         const [rows] = await db.execute(
             `SELECT
                 a.id,
+                a.usuario_id AS usuarioId,
                 u.nombre,
                 u.apellido,
                 u.dni,
                 a.hora_entrada AS horaEntrada,
                 a.hora_salida AS horaSalida,
                 COALESCE(a.metodo_registro, 'manual') AS metodoRegistro,
+                COALESCE(a.invitados_count, 0) AS invitadosCount,
+                a.invitado_nombres AS invitadoNombres,
+                a.pase_oferta_id AS paseOfertaId,
                 a.observacion_salida AS observacionSalida,
                 CASE
                     WHEN a.hora_salida IS NULL THEN 'en_sala'
@@ -116,12 +128,16 @@ class AttendanceModel {
 
         return rows.map((row) => ({
             id: row.id,
+            usuarioId: row.usuarioId,
             nombre: row.nombre,
             apellido: row.apellido,
             dni: row.dni,
             horaEntrada: row.horaEntrada,
             horaSalida: row.horaSalida,
             metodoRegistro: row.metodoRegistro,
+            invitadosCount: Number(row.invitadosCount || 0),
+            invitadoNombres: row.invitadoNombres || null,
+            paseOfertaId: row.paseOfertaId || null,
             observacionSalida: row.observacionSalida || null,
             estado: row.estado,
         }));

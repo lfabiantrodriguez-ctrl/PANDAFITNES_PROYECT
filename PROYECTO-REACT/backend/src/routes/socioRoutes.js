@@ -12,6 +12,7 @@ router.patch('/:id/estado', authenticateToken, requireRole('admin'), SocioContro
 // Ficha 360 y ofertas personalizadas / generales
 router.get("/ofertas", authenticateToken, requireRole("admin"), SocioController.getOffers);
 router.post("/ofertas", authenticateToken, requireRole("admin"), SocioController.createOffer);
+router.post("/validar-codigo", authenticateToken, requireRole("admin"), SocioController.validateCouponAdmin);
 router.get("/:id/ficha", authenticateToken, requireRole("admin"), SocioController.getSocioFicha);
 
 module.exports = router;

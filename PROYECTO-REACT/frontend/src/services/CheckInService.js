@@ -31,18 +31,40 @@ export class CheckInService {
     return data
   }
 
-  static async confirmDirectEntry(token, userId, durationMinutes = 60) {
+  static async confirmDirectEntry(token, userId, durationMinutes = 60, guestOptions = {}) {
     const response = await fetch('/api/admin/checkin/confirm-direct', {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
         Authorization: `Bearer ${token}`,
       },
-      body: JSON.stringify({ userId, durationMinutes }),
+      body: JSON.stringify({
+        userId,
+        durationMinutes,
+        invitadosCount: Number(guestOptions?.invitadosCount || 0),
+        invitadoNombres: guestOptions?.invitadoNombres || '',
+        paseOfertaId: guestOptions?.paseOfertaId || null,
+      }),
     })
     const data = await response.json()
     if (!response.ok) {
       throw new Error(data.message || 'No se pudo registrar el check-in directo')
+    }
+    return data
+  }
+
+  static async attachFriendGuest(token, { attendanceId, cantidad = 1, ofertaId = null, invitadoNombres = '' }) {
+    const response = await fetch('/api/admin/checkin/validar-invitado', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify({ attendanceId, cantidad, ofertaId, invitadoNombres }),
+    })
+    const data = await response.json()
+    if (!response.ok) {
+      throw new Error(data.message || 'No se pudo validar el invitado')
     }
     return data
   }

@@ -345,12 +345,98 @@ async function runSchemaMigrations() {
                 fecha_inicio DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
                 fecha_fin DATETIME NULL,
                 estado ENUM('activo', 'canjeado', 'expirado') DEFAULT 'activo',
+                cupos_maximos INT NULL DEFAULT NULL,
+                cupos_usados INT NOT NULL DEFAULT 0,
                 creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
         `);
 
-        // Las ofertas se registran desde el sistema; no insertar ejemplos.
-        const [ofertasExist] = await db.execute("SELECT COUNT(*) AS total FROM ofertas_socios");
+        await ensureColumnExists("ofertas_socios", "cupos_maximos", "INT NULL DEFAULT NULL AFTER estado");
+        await ensureColumnExists("ofertas_socios", "cupos_usados", "INT NOT NULL DEFAULT 0 AFTER cupos_maximos");
+
+        // Historial de uso de ofertas / cupones por socio
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS ofertas_usos (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                oferta_id INT NOT NULL,
+                usuario_id INT NOT NULL,
+                membresia_id INT NULL,
+                invitado_id INT NULL,
+                descuento_aplicado DECIMAL(10,2) DEFAULT 0.00,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                UNIQUE KEY uk_oferta_usuario (oferta_id, usuario_id),
+                INDEX idx_oferta_uso_oferta (oferta_id),
+                INDEX idx_oferta_uso_usuario (usuario_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // Solicitudes de renovación enviadas por socios con comprobante/validación
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS solicitudes_renovacion (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT NOT NULL,
+                plan_id INT NOT NULL,
+                oferta_id INT NULL,
+                codigo_cupon VARCHAR(50) NULL,
+                monto_base DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                descuento_aplicado DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                dias_extra INT NOT NULL DEFAULT 0,
+                monto_final DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+                metodo_pago VARCHAR(40) NOT NULL DEFAULT 'yape',
+                numero_operacion VARCHAR(60) NULL,
+                comprobante_url LONGTEXT NULL,
+                telefono_contacto VARCHAR(20) NULL,
+                comentario_socio VARCHAR(300) NULL,
+                estado ENUM('pendiente', 'aprobada', 'rechazada', 'cancelada') NOT NULL DEFAULT 'pendiente',
+                motivo_rechazo VARCHAR(300) NULL,
+                fecha_inicio_sugerida DATE NULL,
+                membresia_id INT NULL,
+                revisado_por INT NULL,
+                revisado_en DATETIME NULL,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                actualizado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+                INDEX idx_solicitud_usuario (usuario_id, estado),
+                INDEX idx_solicitud_estado (estado, creado_en)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // Sistema centralizado de notificaciones y lecturas por usuario
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS notificaciones (
+                id INT AUTO_INCREMENT PRIMARY KEY,
+                usuario_id INT NULL,
+                rol_destino VARCHAR(20) NOT NULL DEFAULT 'cliente',
+                tipo VARCHAR(40) NOT NULL DEFAULT 'sistema',
+                titulo VARCHAR(160) NOT NULL,
+                mensaje TEXT NOT NULL,
+                enlace VARCHAR(160) NULL,
+                referencia_id INT NULL,
+                creado_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                INDEX idx_notif_destino (rol_destino, usuario_id, creado_en)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        await db.execute(`
+            CREATE TABLE IF NOT EXISTS notificaciones_leidas (
+                notificacion_id INT NOT NULL,
+                usuario_id INT NOT NULL,
+                leido_en TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                PRIMARY KEY (notificacion_id, usuario_id)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
+        `);
+
+        // Campos de trazabilidad para Pase Amigo, días gratis y cupones
+        await ensureColumnExists("usuarios_invitados", "oferta_id", "INT NULL DEFAULT NULL AFTER creado_por_admin_id");
+        await ensureColumnExists("usuarios_invitados", "invitado_por_usuario_id", "INT NULL DEFAULT NULL AFTER oferta_id");
+        await ensureColumnExists("usuarios_invitados", "codigo_pase", "VARCHAR(50) NULL DEFAULT NULL AFTER invitado_por_usuario_id");
+        await ensureColumnExists("ofertas_usos", "cantidad_invitados", "INT NOT NULL DEFAULT 1 AFTER descuento_aplicado");
+        await ensureColumnExists("asistencias", "invitados_count", "INT NOT NULL DEFAULT 0 AFTER metodo_registro");
+        await ensureColumnExists("asistencias", "invitado_nombres", "VARCHAR(255) NULL DEFAULT NULL AFTER invitados_count");
+        await ensureColumnExists("asistencias", "pase_oferta_id", "INT NULL DEFAULT NULL AFTER invitado_nombres");
+        await ensureColumnExists("membresias", "oferta_id", "INT NULL DEFAULT NULL AFTER estado");
+        await ensureColumnExists("membresias", "dias_extra", "INT NOT NULL DEFAULT 0 AFTER oferta_id");
+        await ensureColumnExists("pagos", "descuento_aplicado", "DECIMAL(10,2) NOT NULL DEFAULT 0.00 AFTER metodo_pago");
+        await ensureColumnExists("pagos", "codigo_cupon", "VARCHAR(50) NULL DEFAULT NULL AFTER descuento_aplicado");
 
         // Tablas para huellero ZKTeco (LAN / USB pendrive / Cable USB) y lector USB de escritorio
         await db.execute(`
@@ -391,6 +477,22 @@ async function runSchemaMigrations() {
                 [crypto.randomUUID()],
             );
         }
+
+        // Normalizar descripciones de planes con caracteres dañados (?) en importaciones previas
+        await db.execute(`
+            UPDATE planes_membresia
+            SET descripcion = REPLACE(
+                REPLACE(
+                    REPLACE(
+                        REPLACE(descripcion, 'Promoci?n', 'Promoción'),
+                        'promoci?n', 'promoción'
+                    ),
+                    'd?as', 'días'
+                ),
+                'a?o', 'año'
+            )
+            WHERE descripcion LIKE '%?%'
+        `);
         
     } catch (error) {
         console.error("Error ejecutando migraciones de esquema:", error);

@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(verifyToken);
 router.get("/", requireRole(["admin"]), GuestController.listGuests);
 router.post("/", requireRole(["admin"]), GuestController.createGuest);
+router.post("/validar-pase", requireRole(["admin"]), GuestController.validateFriendPass);
 router.post("/:id/salida", requireRole(["admin"]), GuestController.checkoutNow);
 
 module.exports = router;

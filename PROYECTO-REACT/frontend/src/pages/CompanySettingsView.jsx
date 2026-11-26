@@ -71,6 +71,11 @@ export default function CompanySettingsView({ token }) {
     landing_redes_instagram: 'pandafitness_oficial',
     landing_redes_tiktok: '@pandafitness_gym',
     landing_redes_whatsapp: '+51 987 654 321',
+    pago_yape_numero: '987654321',
+    pago_plin_numero: '987654321',
+    pago_titular: 'Panda Fitness Club',
+    pago_transferencia_cuenta: '',
+    pago_instrucciones: 'Realiza el Yape o Plin y adjunta tu pantallazo al solicitar la renovación para validarlo rápido.',
   })
 
   const [logoPreview, setLogoPreview] = useState('/logo-panda.png')
@@ -115,6 +120,11 @@ export default function CompanySettingsView({ token }) {
           landing_redes_instagram: data.landing_redes_instagram || prev.landing_redes_instagram,
           landing_redes_tiktok: data.landing_redes_tiktok || prev.landing_redes_tiktok,
           landing_redes_whatsapp: data.landing_redes_whatsapp || prev.landing_redes_whatsapp,
+          pago_yape_numero: data.pago_yape_numero ?? prev.pago_yape_numero,
+          pago_plin_numero: data.pago_plin_numero ?? prev.pago_plin_numero,
+          pago_titular: data.pago_titular ?? prev.pago_titular,
+          pago_transferencia_cuenta: data.pago_transferencia_cuenta ?? prev.pago_transferencia_cuenta,
+          pago_instrucciones: data.pago_instrucciones ?? prev.pago_instrucciones,
         }))
         setLogoPreview(data.empresa_logo || '/logo-panda.png')
       })
@@ -309,6 +319,7 @@ export default function CompanySettingsView({ token }) {
       setMessageType('success')
       ConfigService.applyBranding(formData)
       window.dispatchEvent(new CustomEvent('panda_config_updated', { detail: formData }))
+      window.dispatchEvent(new Event('panda_notifications_updated'))
     } catch (err) {
       setMessage(err.message || 'Error al guardar.')
       setMessageType('error')
@@ -1082,6 +1093,72 @@ export default function CompanySettingsView({ token }) {
                 </div>
               </div>
             </div>
+
+            <div className="cs-box">
+              <strong style={{ fontSize: '0.9rem', color: '#111d15', display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+                <i className="bi bi-wallet2" aria-hidden="true" /> Pagos digitales para renovaciones (Yape / Plin / Cuenta)
+              </strong>
+              <p className="cs-subtext" style={{ marginBottom: '12px' }}>
+                Estos datos se muestran al socio dentro de <strong>Mi membresía</strong> cuando elige renovar con comprobante.
+              </p>
+              <div className="cs-grid-2">
+                <div className="form-element">
+                  <label className="element-label" htmlFor="pago-yape">Número Yape</label>
+                  <input
+                    id="pago-yape"
+                    type="text"
+                    className="input-field"
+                    value={formData.pago_yape_numero}
+                    onChange={(e) => setFormData({ ...formData, pago_yape_numero: e.target.value })}
+                    placeholder="987654321"
+                  />
+                </div>
+                <div className="form-element">
+                  <label className="element-label" htmlFor="pago-plin">Número Plin</label>
+                  <input
+                    id="pago-plin"
+                    type="text"
+                    className="input-field"
+                    value={formData.pago_plin_numero}
+                    onChange={(e) => setFormData({ ...formData, pago_plin_numero: e.target.value })}
+                    placeholder="987654321"
+                  />
+                </div>
+                <div className="form-element">
+                  <label className="element-label" htmlFor="pago-titular">Titular de la cuenta</label>
+                  <input
+                    id="pago-titular"
+                    type="text"
+                    className="input-field"
+                    value={formData.pago_titular}
+                    onChange={(e) => setFormData({ ...formData, pago_titular: e.target.value })}
+                    placeholder="Panda Fitness Club"
+                  />
+                </div>
+                <div className="form-element">
+                  <label className="element-label" htmlFor="pago-cuenta">Cuenta bancaria / CCI (opcional)</label>
+                  <input
+                    id="pago-cuenta"
+                    type="text"
+                    className="input-field"
+                    value={formData.pago_transferencia_cuenta}
+                    onChange={(e) => setFormData({ ...formData, pago_transferencia_cuenta: e.target.value })}
+                    placeholder="BCP / Interbank / CCI"
+                  />
+                </div>
+              </div>
+              <div className="form-element" style={{ marginTop: '10px' }}>
+                <label className="element-label" htmlFor="pago-instrucciones">Indicaciones para el socio</label>
+                <input
+                  id="pago-instrucciones"
+                  type="text"
+                  className="input-field"
+                  value={formData.pago_instrucciones}
+                  onChange={(e) => setFormData({ ...formData, pago_instrucciones: e.target.value })}
+                  placeholder="Realiza el pago y sube tu captura para aprobar tu renovación."
+                />
+              </div>
+            </div>
           </div>
         )}
 
@@ -1314,7 +1391,7 @@ export default function CompanySettingsView({ token }) {
               </button>
             </div>
 
-            <div className="d-md-none position-fixed" style={{ bottom: '76px', right: '16px', zIndex: 1035 }}>
+            <div className="d-md-none position-fixed" style={{ bottom: 'calc(92px + env(safe-area-inset-bottom, 0px))', right: '16px', zIndex: 1035 }}>
               <button
                 type="submit"
                 className="btn btn-dark shadow-lg d-flex align-items-center gap-2 px-4 py-3 fw-bold rounded-pill"

@@ -14,14 +14,42 @@ class AttendanceController {
 
     static async getTodayAttendances(req, res) {
         try {
+            const OfferService = require("../services/offerService");
             const records = await AttendanceModel.getTodayRecords();
+            const activeUserIds = [...new Set(records.filter((r) => r.estado === "en_sala" && r.usuarioId).map((r) => r.usuarioId))];
+            const passMap = new Map();
+            await Promise.all(
+                activeUserIds.map(async (uid) => {
+                    try {
+                        const info = await OfferService.getAvailableFriendPassesForUser(uid);
+                        passMap.set(uid, info);
+                    } catch {
+                        passMap.set(uid, { totalDisponibles: 0, invitadosHistorico: 0, ofertas: [] });
+                    }
+                }),
+            );
+
+            const enrichedRecords = records.map((r) => {
+                const passInfo = passMap.get(r.usuarioId) || null;
+                return {
+                    ...r,
+                    pasesAmigoDisponibles: passInfo ? passInfo.totalDisponibles : 0,
+                    pasesAmigoOfertas: passInfo ? passInfo.ofertas : [],
+                    invitadosHistorico: passInfo ? passInfo.invitadosHistorico : 0,
+                };
+            });
+
+            const enSalaRows = enrichedRecords.filter((r) => r.estado === "en_sala");
+            const invitadosEnSala = enSalaRows.reduce((acc, r) => acc + Number(r.invitadosCount || 0), 0);
             const summary = {
-                enSala: records.filter((r) => r.estado === "en_sala").length,
-                salieron: records.filter((r) => r.estado === "finalizada").length,
-                noMarcaronSalida: records.filter((r) => r.estado === "no_marco_salida").length,
-                totalHoy: records.length,
+                enSala: enSalaRows.length,
+                invitadosEnSala,
+                totalPersonasEnSala: enSalaRows.length + invitadosEnSala,
+                salieron: enrichedRecords.filter((r) => r.estado === "finalizada").length,
+                noMarcaronSalida: enrichedRecords.filter((r) => r.estado === "no_marco_salida").length,
+                totalHoy: enrichedRecords.length,
             };
-            return res.json({ records, summary });
+            return res.json({ records: enrichedRecords, summary });
         } catch (error) {
             console.error("Error consultando asistencias de hoy:", error);
             return res.status(500).json({ message: "Error interno del servidor" });
@@ -111,6 +139,21 @@ class AttendanceController {
     static async redeemReward(req, res) {
         try {
             const result = await AttendanceModel.redeemReward(req.memberId, {recompensaId:req.body.recompensaId});
+            try {
+                const user = await UserModel.findActiveById(req.memberId);
+                if (user) {
+                    const NotificationService = require("../services/notificationService");
+                    await NotificationService.create({
+                        usuarioId: null,
+                        rolDestino: "admin",
+                        tipo: "recompensa",
+                        titulo: "Nuevo canje de recompensa",
+                        mensaje: `${user.nombre} ${user.apellido} canjeó "${result.redemption?.recompensaNombre}" (Código: ${result.redemption?.codigoCanje}).`,
+                        enlace: "/app/recompensas",
+                        referenciaId: result.redemption?.id || null,
+                    });
+                }
+            } catch {}
             return res.json({...result, message:'Canje registrado. Presenta tu código en recepción.'});
         } catch (error) {
             console.error("Error canjeando recompensa:", error);

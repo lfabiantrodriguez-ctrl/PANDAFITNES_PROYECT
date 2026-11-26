@@ -17,10 +17,22 @@ export default function CheckInView({ token, embedded = false }) {
   const [manualUser, setManualUser] = useState(null)
   const [manualMembership, setManualMembership] = useState(null)
   const [manualActiveAttendance, setManualActiveAttendance] = useState(null)
+  const [manualFriendPasses, setManualFriendPasses] = useState(null)
+  const [manualGuestsCount, setManualGuestsCount] = useState(0)
+  const [manualGuestNames, setManualGuestNames] = useState('')
+  const [manualPassOfferId, setManualPassOfferId] = useState('')
   const [manualHistory, setManualHistory] = useState([])
   const [directDuration, setDirectDuration] = useState(60)
   const [manualError, setManualError] = useState('')
   const [manualLoading, setManualLoading] = useState(false)
+
+  // Modal rápido para validar invitado en una asistencia ya en sala
+  const [guestModalRow, setGuestModalRow] = useState(null)
+  const [guestModalQty, setGuestModalQty] = useState(1)
+  const [guestModalOfferId, setGuestModalOfferId] = useState('')
+  const [guestModalNames, setGuestModalNames] = useState('')
+  const [guestModalBusy, setGuestModalBusy] = useState(false)
+  const [guestModalError, setGuestModalError] = useState('')
 
   // Modo Simulación (oculto por defecto cuando opera con huellero físico; se activa en la esquina)
   const [simulationMode, setSimulationMode] = useState(false)
@@ -85,6 +97,10 @@ export default function CheckInView({ token, embedded = false }) {
     setManualUser(null)
     setManualMembership(null)
     setManualActiveAttendance(null)
+    setManualFriendPasses(null)
+    setManualGuestsCount(0)
+    setManualGuestNames('')
+    setManualPassOfferId('')
     setManualHistory([])
     setShowManualModal(true)
   }
@@ -188,11 +204,18 @@ export default function CheckInView({ token, embedded = false }) {
       setManualUser(data.user)
       setManualMembership(data.membership)
       setManualActiveAttendance(data.activeAttendance)
+      setManualFriendPasses(data.friendPasses || null)
+      setManualGuestsCount(0)
+      setManualGuestNames('')
+      setManualPassOfferId(data.friendPasses?.ofertas?.[0]?.id ? String(data.friendPasses.ofertas[0].id) : '')
       setManualHistory(data.history || [])
     } catch (err) {
       setManualUser(null)
       setManualMembership(null)
       setManualActiveAttendance(null)
+      setManualFriendPasses(null)
+      setManualGuestsCount(0)
+      setManualGuestNames('')
       setManualHistory([])
       setManualError(err.message || 'No se encontró al socio.')
     } finally {
@@ -205,18 +228,57 @@ export default function CheckInView({ token, embedded = false }) {
     setManualLoading(true)
     setManualError('')
     try {
-      await CheckInService.confirmDirectEntry(token, manualUser.id, directDuration)
+      const res = await CheckInService.confirmDirectEntry(token, manualUser.id, directDuration, {
+        invitadosCount: manualGuestsCount,
+        invitadoNombres: manualGuestNames,
+        paseOfertaId: manualPassOfferId || null,
+      })
       setShowManualModal(false)
       setStatus({
         loading: false,
         error: '',
-        success: `Entrada manual autorizada para ${manualUser.nombre} ${manualUser.apellido}.`,
+        success: res.message || `Entrada manual autorizada para ${manualUser.nombre} ${manualUser.apellido}.`,
       })
       await loadAttendanceData()
     } catch (err) {
       setManualError(err.message || 'No se pudo autorizar el acceso.')
     } finally {
       setManualLoading(false)
+    }
+  }
+
+  function openGuestValidateModal(row) {
+    setGuestModalRow(row)
+    const firstOffer = row.pasesAmigoOfertas?.[0]
+    setGuestModalOfferId(firstOffer ? String(firstOffer.id) : '')
+    setGuestModalQty(1)
+    setGuestModalNames('')
+    setGuestModalError('')
+  }
+
+  async function handleConfirmAttachGuest(e) {
+    e.preventDefault()
+    if (!guestModalRow) return
+    setGuestModalBusy(true)
+    setGuestModalError('')
+    try {
+      const res = await CheckInService.attachFriendGuest(token, {
+        attendanceId: guestModalRow.id,
+        cantidad: guestModalQty,
+        ofertaId: guestModalOfferId || null,
+        invitadoNombres: guestModalNames,
+      })
+      setGuestModalRow(null)
+      setStatus({
+        loading: false,
+        error: '',
+        success: res.message || 'Invitado validado y agregado al aforo.',
+      })
+      await loadAttendanceData()
+    } catch (err) {
+      setGuestModalError(err.message || 'No se pudo validar el invitado.')
+    } finally {
+      setGuestModalBusy(false)
     }
   }
 
@@ -353,7 +415,7 @@ export default function CheckInView({ token, embedded = false }) {
   }
 
   return (
-    <div className="dashboard-page" style={{ width: '100%', maxWidth: '100%', margin: 0, paddingBottom: '40px' }}>
+    <div className="dashboard-page" style={{ width: '100%', maxWidth: '100%', margin: 0, paddingBottom: '12px' }}>
       {/* Barra superior: descripción + botón compacto en la esquina (Modo Simulación con huella, Importar USB y Registro Manual) */}
       <div
         className="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-3"
@@ -616,7 +678,7 @@ export default function CheckInView({ token, embedded = false }) {
         <div className="d-flex flex-wrap gap-2 mb-3">
           {[
             { id: 'todos', label: `Todos (${summary.totalHoy})` },
-            { id: 'en_sala', label: `En sala (${summary.enSala})` },
+            { id: 'en_sala', label: `En sala (${summary.enSala}${summary.invitadosEnSala > 0 ? ` + ${summary.invitadosEnSala} inv.` : ''})` },
             { id: 'finalizada', label: `Con salida (${summary.salieron})` },
             { id: 'no_marco_salida', label: `No marcó salida +4h (${summary.noMarcaronSalida})` },
           ].map((tab) => (
@@ -657,6 +719,7 @@ export default function CheckInView({ token, embedded = false }) {
                     <th>Hora de Ingreso</th>
                     <th>Hora de Salida</th>
                     <th>Método</th>
+                    <th>Invitado (Pase Amigo)</th>
                     <th>Estado</th>
                     <th className="text-end">Acción</th>
                   </tr>
@@ -701,26 +764,68 @@ export default function CheckInView({ token, embedded = false }) {
                           <span>{row.metodoRegistro === 'huella' ? 'Huella' : 'Manual'}</span>
                         </span>
                       </td>
+                      <td className="px-3">
+                        <div className="d-flex flex-column align-items-start gap-1">
+                          {Number(row.invitadosCount) > 0 && (
+                            <span
+                              className="badge"
+                              style={{ background: '#dcfce7', color: '#166534', border: '1px solid #bbf7d0', fontSize: '0.72rem' }}
+                            >
+                              <i className="bi bi-people-fill me-1" />
+                              +{row.invitadosCount} invitado{row.invitadosCount > 1 ? 's' : ''}
+                              {row.invitadoNombres ? ` (${row.invitadoNombres})` : ''}
+                            </span>
+                          )}
+                          {row.estado === 'en_sala' && Number(row.pasesAmigoDisponibles) > 0 ? (
+                            <span className="text-success fw-semibold" style={{ fontSize: '0.73rem' }}>
+                              <i className="bi bi-ticket-perforated me-1" />
+                              {row.pasesAmigoDisponibles} pase{row.pasesAmigoDisponibles > 1 ? 's' : ''} disp.
+                            </span>
+                          ) : Number(row.invitadosCount) === 0 ? (
+                            <span className="text-muted small">Sin invitado</span>
+                          ) : null}
+                        </div>
+                      </td>
                       <td className="px-3">{renderStatusBadge(row.estado)}</td>
                       <td className="px-3 text-end">
                         {row.estado === 'en_sala' ? (
-                          <button
-                            type="button"
-                            onClick={() => handleQuickCheckout(row)}
-                            disabled={status.loading}
-                            style={{
-                              padding: '6px 14px',
-                              background: '#ffffff',
-                              border: '1px solid #ef4444',
-                              color: '#b91c1c',
-                              borderRadius: '8px',
-                              fontWeight: 700,
-                              fontSize: '0.78rem',
-                              cursor: 'pointer',
-                            }}
-                          >
-                            Registrar Salida
-                          </button>
+                          <div className="d-inline-flex align-items-center gap-1 flex-wrap justify-content-end">
+                            {Number(row.pasesAmigoDisponibles) > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => openGuestValidateModal(row)}
+                                className="btn btn-sm fw-bold px-2 py-1"
+                                style={{
+                                  background: '#ecfccb',
+                                  color: '#166534',
+                                  border: '1px solid #bef264',
+                                  borderRadius: '8px',
+                                  fontSize: '0.76rem',
+                                }}
+                                title="Registrar invitado con pase amigo del socio"
+                              >
+                                <i className="bi bi-person-plus-fill me-1" />
+                                + Invitado
+                              </button>
+                            )}
+                            <button
+                              type="button"
+                              onClick={() => handleQuickCheckout(row)}
+                              disabled={status.loading}
+                              style={{
+                                padding: '6px 14px',
+                                background: '#ffffff',
+                                border: '1px solid #ef4444',
+                                color: '#b91c1c',
+                                borderRadius: '8px',
+                                fontWeight: 700,
+                                fontSize: '0.78rem',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              Registrar Salida
+                            </button>
+                          </div>
                         ) : row.estado === 'no_marco_salida' ? (
                           <span className="text-muted" style={{ fontSize: '0.76rem' }}>
                             Descontado del aforo
@@ -774,12 +879,22 @@ export default function CheckInView({ token, embedded = false }) {
                     </div>
 
                     {row.estado === 'en_sala' && (
-                      <div className="mobile-card-actions">
+                      <div className="mobile-card-actions d-flex gap-2">
+                        {Number(row.pasesAmigoDisponibles) > 0 && (
+                          <button
+                            type="button"
+                            onClick={() => openGuestValidateModal(row)}
+                            className="btn fw-bold py-2 px-3"
+                            style={{ background: '#ecfccb', color: '#166534', border: '1px solid #bef264', borderRadius: '10px', fontSize: '0.82rem' }}
+                          >
+                            + Invitado ({row.pasesAmigoDisponibles})
+                          </button>
+                        )}
                         <button
                           type="button"
                           onClick={() => handleQuickCheckout(row)}
                           disabled={status.loading}
-                          className="btn btn-outline-danger fw-bold w-100 py-2 d-flex align-items-center justify-content-center gap-2"
+                          className="btn btn-outline-danger fw-bold flex-grow-1 py-2 d-flex align-items-center justify-content-center gap-2"
                           style={{ borderRadius: '10px', fontSize: '0.84rem' }}
                         >
                           <i className="bi bi-box-arrow-right" />
@@ -940,23 +1055,73 @@ export default function CheckInView({ token, embedded = false }) {
             )}
 
             {canAuthorizeManual && (
-              <div className="mb-3">
-                <label htmlFor="manual-duration-select" className="form-label fw-bold small text-dark">
-                  Duración estimada de sesión
-                </label>
-                <select
-                  id="manual-duration-select"
-                  value={directDuration}
-                  onChange={(e) => setDirectDuration(Number(e.target.value))}
-                  className="form-select"
-                  style={{ borderRadius: '10px' }}
-                >
-                  <option value={60}>1 hora (60 minutos)</option>
-                  <option value={90}>1 hora y media (90 minutos)</option>
-                  <option value={120}>2 horas (120 minutos)</option>
-                  <option value={180}>3 horas (180 minutos)</option>
-                </select>
-              </div>
+              <>
+                <div className="mb-3">
+                  <label htmlFor="manual-duration-select" className="form-label fw-bold small text-dark">
+                    Duración estimada de sesión
+                  </label>
+                  <select
+                    id="manual-duration-select"
+                    value={directDuration}
+                    onChange={(e) => setDirectDuration(Number(e.target.value))}
+                    className="form-select"
+                    style={{ borderRadius: '10px' }}
+                  >
+                    <option value={60}>1 hora (60 minutos)</option>
+                    <option value={90}>1 hora y media (90 minutos)</option>
+                    <option value={120}>2 horas (120 minutos)</option>
+                    <option value={180}>3 horas (180 minutos)</option>
+                  </select>
+                </div>
+
+                {manualFriendPasses && manualFriendPasses.totalDisponibles > 0 && (() => {
+                  const selectedManualPass =
+                    manualFriendPasses.ofertas?.find((o) => String(o.id) === String(manualPassOfferId)) ||
+                    manualFriendPasses.ofertas?.[0]
+                  const manualMaxInv = Math.min(5, Number(selectedManualPass?.pasesRestantesPorMi || 1))
+                  return (
+                    <div className="p-3 rounded-3 border mb-3" style={{ background: '#f7fee7', borderColor: '#bef264' }}>
+                      <div className="d-flex justify-content-between align-items-center gap-2 mb-2">
+                        <strong className="small text-dark">
+                          <i className="bi bi-people-fill text-success me-1" />
+                          {selectedManualPass?.titulo || 'Pase Amigo disponible'}
+                        </strong>
+                        <span className="badge bg-success" style={{ fontSize: '0.7rem' }}>
+                          {selectedManualPass?.pasesRestantesPorMi ?? manualFriendPasses.totalDisponibles} de{' '}
+                          {selectedManualPass?.maxInvitesForPass ?? manualMaxInv} disp.
+                        </span>
+                      </div>
+                      <div className="row g-2 align-items-center">
+                        <div className="col-12 col-md-6">
+                          <select
+                            className="form-select form-select-sm"
+                            value={manualGuestsCount}
+                            onChange={(e) => setManualGuestsCount(Number(e.target.value))}
+                          >
+                            <option value={0}>Solo el socio (sin invitado)</option>
+                            {Array.from({ length: manualMaxInv }, (_, i) => i + 1).map((n) => (
+                              <option key={n} value={n}>
+                                +{n} {n === 1 ? 'invitado' : 'invitados'} (acompañado)
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                        {manualGuestsCount > 0 && (
+                          <div className="col-12 col-md-6">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              placeholder="Nombre del invitado (opcional)"
+                              value={manualGuestNames}
+                              onChange={(e) => setManualGuestNames(e.target.value)}
+                            />
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  )
+                })()}
+              </>
             )}
 
             {manualHistory.length > 0 && (
@@ -979,6 +1144,145 @@ export default function CheckInView({ token, embedded = false }) {
             )}
           </div>
         )}
+      </ModalDialog>
+
+      <ModalDialog
+        isOpen={Boolean(guestModalRow)}
+        onClose={() => setGuestModalRow(null)}
+        title="Validar Invitado"
+        subtitle={guestModalRow ? `${guestModalRow.nombre} ${guestModalRow.apellido} · DNI ${guestModalRow.dni}` : ''}
+        badge="Pase Amigo"
+        size="md"
+      >
+        {guestModalRow && (() => {
+          const activePasses = guestModalRow.pasesAmigoOfertas || []
+          const selectedOffer = activePasses.find((o) => String(o.id) === String(guestModalOfferId)) || activePasses[0]
+          const passMax = Number(selectedOffer?.maxInvitesForPass || guestModalRow.pasesAmigoDisponibles || 1)
+          const passRemaining = Math.max(
+            1,
+            Math.min(5, Number(selectedOffer?.pasesRestantesPorMi ?? guestModalRow.pasesAmigoDisponibles ?? 1)),
+          )
+
+          return (
+            <form onSubmit={handleConfirmAttachGuest}>
+              {guestModalError && (
+                <div className="alert alert-danger py-2 px-3 small mb-3">{guestModalError}</div>
+              )}
+
+              <div className="p-3 rounded-3 border mb-3" style={{ background: '#f8fafc', borderColor: '#e2e8f0' }}>
+                <div className="d-flex justify-content-between align-items-center gap-3">
+                  <div className="min-w-0 flex-grow-1">
+                    <div className="text-muted" style={{ fontSize: '0.73rem', fontWeight: 600 }}>
+                      Pase asignado
+                    </div>
+                    {activePasses.length > 1 ? (
+                      <select
+                        className="form-select form-select-sm mt-1 fw-semibold"
+                        value={guestModalOfferId}
+                        onChange={(e) => {
+                          setGuestModalOfferId(e.target.value)
+                          setGuestModalQty(1)
+                        }}
+                      >
+                        {activePasses.map((o) => (
+                          <option key={o.id} value={o.id}>
+                            {o.titulo} ({o.pasesRestantesPorMi}/{o.maxInvitesForPass || o.pasesRestantesPorMi} disp.)
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <div className="fw-bold text-dark text-truncate" style={{ fontSize: '0.96rem' }}>
+                        {selectedOffer?.titulo || 'Pase Libre para Amigo'}
+                      </div>
+                    )}
+                  </div>
+                  <span
+                    className="badge rounded-pill px-3 py-2 flex-shrink-0"
+                    style={{ background: '#ecfccb', color: '#166534', border: '1px solid #bef264', fontSize: '0.78rem' }}
+                  >
+                    {selectedOffer?.pasesRestantesPorMi ?? passRemaining} de {passMax} disp.
+                  </span>
+                </div>
+              </div>
+
+              {passRemaining === 1 ? (
+                <div
+                  className="p-3 rounded-3 border mb-3 d-flex justify-content-between align-items-center"
+                  style={{ background: '#f7fee7', borderColor: '#d9f99d' }}
+                >
+                  <span className="small fw-bold text-dark">Invitados en este ingreso</span>
+                  <span className="badge bg-success px-3 py-2" style={{ fontSize: '0.8rem' }}>
+                    +1 invitado
+                  </span>
+                </div>
+              ) : (
+                <div className="mb-3">
+                  <label className="form-label small fw-bold text-dark mb-2">
+                    ¿Cuántos invitados ingresan ahora?
+                  </label>
+                  <div className="d-flex flex-wrap gap-2">
+                    {Array.from({ length: passRemaining }, (_, i) => i + 1).map((n) => {
+                      const active = Number(guestModalQty) === n
+                      return (
+                        <button
+                          key={n}
+                          type="button"
+                          onClick={() => setGuestModalQty(n)}
+                          className="btn btn-sm fw-bold px-3 py-2"
+                          style={{
+                            borderRadius: '10px',
+                            background: active ? '#111d15' : '#ffffff',
+                            color: active ? '#c4f039' : '#334155',
+                            border: active ? '1px solid #111d15' : '1px solid #cbd5e1',
+                          }}
+                        >
+                          +{n} {n === 1 ? 'invitado' : 'invitados'}
+                        </button>
+                      )
+                    })}
+                  </div>
+                </div>
+              )}
+
+              <div className="mb-3">
+                <label className="form-label small fw-bold text-dark">Nombre del invitado (opcional)</label>
+                <input
+                  type="text"
+                  className="form-control"
+                  style={{ borderRadius: '10px' }}
+                  placeholder="Ej. Luis Ramírez"
+                  value={guestModalNames}
+                  onChange={(e) => setGuestModalNames(e.target.value)}
+                />
+              </div>
+
+              <div className="d-flex justify-content-between align-items-center gap-2 pt-3 border-top">
+                <span className="text-muted" style={{ fontSize: '0.75rem' }}>
+                  <i className="bi bi-arrow-left-right me-1" />
+                  Entrada y salida junto con el socio
+                </span>
+                <div className="d-flex gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-light border fw-semibold"
+                    style={{ borderRadius: '10px' }}
+                    onClick={() => setGuestModalRow(null)}
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={guestModalBusy}
+                    className="btn fw-bold px-3"
+                    style={{ background: '#c4f039', color: '#111d15', borderRadius: '10px' }}
+                  >
+                    {guestModalBusy ? 'Confirmando...' : 'Confirmar Ingreso'}
+                  </button>
+                </div>
+              </div>
+            </form>
+          )
+        })()}
       </ModalDialog>
 
       <BiometricModal

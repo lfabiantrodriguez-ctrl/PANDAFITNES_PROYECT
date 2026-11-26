@@ -15,7 +15,7 @@ class CapacityController {
             const maximo = configRows[0] ? Number(configRows[0].valor) : 0;
 
             const [activeRows] = await db.execute(
-                `SELECT COUNT(*) AS total
+                `SELECT COALESCE(SUM(1 + COALESCE(invitados_count, 0)), 0) AS total
                  FROM asistencias
                  WHERE hora_salida IS NULL
                    AND TIMESTAMPDIFF(MINUTE, hora_entrada, NOW()) < 240`,
@@ -56,7 +56,7 @@ class CapacityController {
             const maximo = configRows[0] ? Number(configRows[0].valor) : 0;
 
             const [activeRows] = await db.execute(
-                `SELECT COUNT(*) AS total
+                `SELECT COALESCE(SUM(1 + COALESCE(invitados_count, 0)), 0) AS total
                  FROM asistencias
                  WHERE hora_entrada <= ?
                    AND (hora_salida IS NULL OR hora_salida > ?)`,
@@ -112,7 +112,7 @@ class CapacityController {
                 const dateString = currentDate.toISOString().slice(0, 10);
 
                 const [attendanceRows] = await db.execute(
-                    `SELECT COUNT(*) AS total
+                    `SELECT COALESCE(SUM(1 + COALESCE(invitados_count, 0)), 0) AS total
                      FROM asistencias
                      WHERE DATE(hora_entrada) <= ?
                        AND (hora_salida IS NULL OR DATE(hora_salida) >= ?)`,

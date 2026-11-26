@@ -1,7 +1,7 @@
 const db = require("../config/database");
 const bcrypt = require("bcrypt");
 const { addDaysExcludingSundays } = require("../utils/helpers");
-const { sendEmail } = require("../utils/email");
+const OfferService = require("../services/offerService");
 
 class SocioModel {
     static async getAll() {
@@ -38,7 +38,14 @@ class SocioModel {
                 lp.metodo_pago AS ultimoPagoMetodo,
                 (SELECT COUNT(*) FROM membresias mm WHERE mm.usuario_id = u.id) AS totalMatriculas,
                 (SELECT COUNT(*) FROM asistencias aa WHERE aa.usuario_id = u.id) AS totalAsistencias,
-                (SELECT COUNT(*) FROM ofertas_socios oo WHERE (oo.usuario_id = u.id OR oo.usuario_id IS NULL) AND oo.estado = 'activo') AS ofertasDisponibles
+                (SELECT COUNT(*) FROM ofertas_socios oo
+                 WHERE (oo.usuario_id = u.id OR oo.usuario_id IS NULL)
+                   AND oo.estado = 'activo'
+                   AND (oo.fecha_fin IS NULL OR oo.fecha_fin >= NOW())
+                   AND (oo.cupos_maximos IS NULL OR oo.cupos_usados < oo.cupos_maximos)
+                   AND NOT EXISTS (SELECT 1 FROM ofertas_usos ou WHERE ou.oferta_id = oo.id AND ou.usuario_id = u.id)
+                ) AS ofertasDisponibles,
+                (SELECT COUNT(*) FROM solicitudes_renovacion sr WHERE sr.usuario_id = u.id AND sr.estado = 'pendiente') AS solicitudesPendientes
             FROM usuarios u
             INNER JOIN roles r ON r.id = u.rol_id
             LEFT JOIN staff_member_links l ON l.member_user_id=u.id
@@ -63,7 +70,6 @@ class SocioModel {
             ORDER BY u.id DESC`,
         );
 
-        // Enriquecer cada fila con cálculo de segmento (VIP, Nuevo, Por Vencer, Inactivo, Activo)
         return rows.map((s) => {
             const diasRest = s.diasRestantes !== null ? Number(s.diasRestantes) : -999;
             const matriculas = Number(s.totalMatriculas || 0);
@@ -111,7 +117,6 @@ class SocioModel {
     }
 
     static async getFicha(socioId) {
-        // 1. Datos personales del socio
         const [userRows] = await db.execute(
             `SELECT u.id, u.nombre, u.apellido, u.dni, u.email, u.telefono, u.activo,
                     u.fecha_registro AS fechaRegistro,
@@ -124,17 +129,18 @@ class SocioModel {
         if (!userRows[0]) return null;
         const socio = userRows[0];
 
-        // 2. Historial COMPLETO de todas las membresías / matrículas del socio
         const [membresias] = await db.execute(
             `SELECT m.id, m.plan_id AS planId, p.nombre AS planNombre, p.duracion_dias AS duracionDias,
                     p.precio AS planPrecio, m.fecha_inicio AS fechaInicio, m.fecha_fin AS fechaFin,
+                    m.dias_extra AS diasExtra,
                     CASE
                         WHEN m.estado = 'activo' AND m.fecha_fin < CURDATE() THEN 'expirado'
                         ELSE m.estado
                     END AS estado,
                     m.creado_en AS creadoEn,
                     DATEDIFF(m.fecha_fin, CURDATE()) AS diasRestantes,
-                    pa.monto AS montoPagado, pa.metodo_pago AS metodoPago, pa.fecha_pago AS fechaPago
+                    pa.monto AS montoPagado, pa.metodo_pago AS metodoPago, pa.fecha_pago AS fechaPago,
+                    pa.descuento_aplicado AS descuentoAplicado, pa.codigo_cupon AS codigoCupon
              FROM membresias m
              INNER JOIN planes_membresia p ON p.id = m.plan_id
              LEFT JOIN pagos pa ON pa.membresia_id = m.id
@@ -143,7 +149,6 @@ class SocioModel {
             [socioId],
         );
 
-        // 3. Historial de asistencias reales en sala
         const [asistencias] = await db.execute(
             `SELECT id, hora_entrada AS horaEntrada, hora_salida AS horaSalida,
                     COALESCE(metodo_registro, 'manual') AS metodoRegistro,
@@ -160,17 +165,8 @@ class SocioModel {
             [socioId],
         );
 
-        // 4. Ofertas asignadas y generales activas
-        const [ofertas] = await db.execute(
-            `SELECT id, usuario_id AS usuarioId, titulo, descripcion, tipo, valor, codigo_cupon AS codigoCupon,
-                    fecha_inicio AS fechaInicio, fecha_fin AS fechaFin, estado, creado_en AS creadoEn
-             FROM ofertas_socios
-             WHERE (usuario_id = ? OR usuario_id IS NULL)
-             ORDER BY id DESC`,
-            [socioId],
-        );
+        const ofertas = await OfferService.getMemberOffers(socioId);
 
-        // 5. Pagos totales
         const [pagosTotal] = await db.execute(
             `SELECT COALESCE(SUM(monto), 0) AS totalInvertido, COUNT(*) AS countPagos
              FROM pagos
@@ -240,43 +236,8 @@ class SocioModel {
         };
     }
 
-    static async createOffer({ usuarioId, titulo, descripcion, tipo, valor, codigoCupon, diasVigencia = 30 }) {
-        const [result] = await db.execute(
-            `INSERT INTO ofertas_socios
-             (usuario_id, titulo, descripcion, tipo, valor, codigo_cupon, fecha_fin, estado)
-             VALUES (?, ?, ?, ?, ?, ?, DATE_ADD(CURDATE(), INTERVAL ? DAY), 'activo')`,
-            [usuarioId || null, titulo, descripcion, tipo || 'descuento_porcentaje', valor || 0, codigoCupon || null, diasVigencia],
-        );
-
-        // Enviar notificación por email al socio si la oferta es personalizada
-        if (usuarioId) {
-            const [u] = await db.execute("SELECT nombre, apellido, email FROM usuarios WHERE id = ?", [usuarioId]);
-            if (u[0] && u[0].email) {
-                await sendEmail({
-                    to: u[0].email,
-                    subject: `¡Beneficio Exclusivo en Panda Fitness: ${titulo}!`,
-                    html: `
-                        <div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto;padding:20px;background:#f8fafc;border-radius:12px;">
-                            <div style="background:#111827;padding:20px;border-radius:12px 12px 0 0;text-align:center;">
-                                <h1 style="color:#ffffff;margin:0;font-size:24px;">PANDA FITNESS</h1>
-                            </div>
-                            <div style="background:#ffffff;padding:30px;border-radius:0 0 12px 12px;border:1px solid #e2e8f0;">
-                                <h2 style="color:#111827;margin:0 0 12px;">¡Tienes una Oferta Exclusiva!</h2>
-                                <p style="color:#4b5563;font-size:15px;line-height:1.6;">Hola <strong>${u[0].nombre} ${u[0].apellido}</strong>, hemos preparado un beneficio especial pensado para ti:</p>
-                                <div style="background:#ecfccb;border:1.5px solid #84cc16;border-radius:10px;padding:20px;margin:20px 0;text-align:center;">
-                                    <h3 style="color:#15803d;margin:0 0 8px;font-size:18px;">${titulo}</h3>
-                                    <p style="color:#166534;margin:0 0 12px;font-size:14px;">${descripcion}</p>
-                                    ${codigoCupon ? `<div style="display:inline-block;background:#111d15;color:#c4f039;font-weight:800;font-size:16px;padding:8px 18px;border-radius:8px;letter-spacing:1px;">CÓDIGO: ${codigoCupon}</div>` : ''}
-                                </div>
-                                <p style="color:#4b5563;font-size:14px;">Presenta este cupón en recepción al renovar o acércate para activar tu beneficio.</p>
-                            </div>
-                        </div>
-                    `,
-                }).catch(() => {});
-            }
-        }
-
-        return { id: result.insertId, usuarioId, titulo, valor, codigoCupon };
+    static async createOffer(payload) {
+        return OfferService.createOffer(payload);
     }
 
     static async checkDuplicate(dni, email) {
@@ -296,7 +257,7 @@ class SocioModel {
         return result.affectedRows > 0;
     }
 
-    static async create({ dni, nombre, apellido, email, telefono, planId, fechaInicio, metodoPago, device }) {
+    static async create({ dni, nombre, apellido, email, telefono, planId, fechaInicio, metodoPago, device, codigoCupon = null }) {
         const connection = await db.getConnection();
 
         try {
@@ -319,9 +280,33 @@ class SocioModel {
                 throw new Error("El plan seleccionado no existe");
             }
 
-            const passwordHash = await bcrypt.hash(dni, 12);
             const plan = planRows[0];
-            const endDate = addDaysExcludingSundays(fechaInicio, plan.duracion_dias);
+            let montoFinal = Number(plan.precio);
+            let descuentoAplicado = 0;
+            let diasExtra = 0;
+            let appliedOfferId = null;
+            let appliedCode = null;
+
+            if (codigoCupon && String(codigoCupon).trim()) {
+                const validated = await OfferService.validateOfferCode(
+                    {
+                        code: codigoCupon,
+                        userId: null,
+                        planPrecio: montoFinal,
+                        context: "alta_socio",
+                        checkPendingRequest: false,
+                    },
+                    connection,
+                );
+                appliedOfferId = validated.oferta.id;
+                appliedCode = validated.oferta.codigoCupon;
+                descuentoAplicado = validated.descuentoAplicado;
+                diasExtra = validated.diasExtra;
+                montoFinal = validated.montoFinal;
+            }
+
+            const passwordHash = await bcrypt.hash(dni, 12);
+            const endDate = addDaysExcludingSundays(fechaInicio, Number(plan.duracion_dias) + diasExtra);
 
             const [userResult] = await connection.execute(
                 `INSERT INTO usuarios
@@ -334,17 +319,26 @@ class SocioModel {
 
             const [membershipResult] = await connection.execute(
                 `INSERT INTO membresias
-                    (usuario_id, plan_id, fecha_inicio, fecha_fin, estado)
-                VALUES (?, ?, ?, ?, 'activo')`,
-                [userId, plan.id, fechaInicio, endDate],
+                    (usuario_id, plan_id, fecha_inicio, fecha_fin, estado, oferta_id, dias_extra)
+                VALUES (?, ?, ?, ?, 'activo', ?, ?)`,
+                [userId, plan.id, fechaInicio, endDate, appliedOfferId, diasExtra],
             );
 
             await connection.execute(
                 `INSERT INTO pagos
-                    (usuario_id, monto, fecha_pago, metodo_pago, membresia_id)
-                VALUES (?, ?, ?, ?, ?)`,
-                [userId, plan.precio, fechaInicio, metodoPago || "efectivo", membershipResult.insertId],
+                    (usuario_id, monto, fecha_pago, metodo_pago, descuento_aplicado, codigo_cupon, membresia_id)
+                VALUES (?, ?, ?, ?, ?, ?, ?)`,
+                [userId, montoFinal, fechaInicio, metodoPago || "efectivo", descuentoAplicado, appliedCode, membershipResult.insertId],
             );
+
+            if (appliedOfferId) {
+                await OfferService.consumeOffer(connection, {
+                    ofertaId: appliedOfferId,
+                    userId,
+                    membresiaId: membershipResult.insertId,
+                    descuentoAplicado,
+                });
+            }
 
             if (device) await connection.execute('INSERT INTO socio_dispositivos (usuario_id, credential_id, public_key, counter) VALUES (?, ?, ?, ?)',
                 [userId, device.credentialId, device.publicKey, device.counter]);
@@ -359,6 +353,10 @@ class SocioModel {
                 telefono,
                 fechaInicio,
                 fechaFin: endDate,
+                montoPagado: montoFinal,
+                descuentoAplicado,
+                diasExtra,
+                codigoCupon: appliedCode,
                 estadoMembresia: "activo",
             };
         } catch (error) {

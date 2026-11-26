@@ -14,6 +14,9 @@ app.use(express.urlencoded({ limit: "15mb", extended: true }));
 
 // Mount central router
 app.use("/api", apiRoutes);
+app.use("/api", (req, res) => {
+    res.status(404).json({ message: "Ruta API no encontrada" });
+});
 
 const { finalizeEndedGuests, finalizeOverdueAttendances } = require("./services/cronService");
 

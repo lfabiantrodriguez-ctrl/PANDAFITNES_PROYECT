@@ -649,7 +649,7 @@ export default function RewardsView({ token, user, personal = false }) {
   }
 
   return (
-    <div className="dashboard-page" style={{ maxWidth: '100%', margin: 0, paddingBottom: '70px', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
+    <div className="dashboard-page" style={{ maxWidth: '100%', margin: 0, paddingBottom: '16px', width: '100%', boxSizing: 'border-box', overflowX: 'hidden' }}>
       {/* Encabezado */}
       <div className="view-header-row d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
         <div>

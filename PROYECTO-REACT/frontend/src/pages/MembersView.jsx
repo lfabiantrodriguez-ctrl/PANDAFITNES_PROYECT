@@ -1,10 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import DeviceEnrollment from '../components/DeviceEnrollment'
 import ViewTitle from '../components/ViewTitle'
 import {moduleLabel} from '../utils/access'
 import ModalDialog from '../components/ModalDialog'
 import MemberProfileModal from '../components/MemberProfileModal'
 import OfferModal from '../components/OfferModal'
+import RenewalRequestsPanel from '../components/RenewalRequestsPanel'
+import PlansAndOffersModal from '../components/PlansAndOffersModal'
+import CouponCodeField from '../components/CouponCodeField'
 import TablePagination, { paginateList } from '../components/TablePagination'
 import { formatDate, getTodayPeru } from '../utils/formatters'
 import { SocioService } from '../services/SocioService'
@@ -14,8 +18,11 @@ import { MembershipService } from '../services/MembershipService'
 
 export default function MembersView({ token, user }) {
   const today = useMemo(() => getTodayPeru(), [])
+  const [searchParams, setSearchParams] = useSearchParams()
   const [members, setMembers] = useState([])
   const [plans, setPlans] = useState([])
+  const [pendingRequestsCount, setPendingRequestsCount] = useState(0)
+  const [showPlansModal, setShowPlansModal] = useState(false)
   const [showForm, setShowForm] = useState(false)
   const [editingId, setEditingId] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -25,8 +32,10 @@ export default function MembersView({ token, user }) {
   const [searchTerm, setSearchTerm] = useState('')
 
   // Filtro de segmentación inteligente (CRM Socios)
-  // 'todos' | 'vip' | 'nuevos' | 'por_vencer' | 'inactivos' | 'activos'
-  const [segmentFilter, setSegmentFilter] = useState('todos')
+  // 'todos' | 'vip' | 'nuevos' | 'por_vencer' | 'inactivos' | 'activos' | 'solicitudes'
+  const [segmentFilter, setSegmentFilter] = useState(() =>
+    searchParams.get('tab') === 'solicitudes' ? 'solicitudes' : 'todos',
+  )
   const [currentPage, setCurrentPage] = useState(1)
   const PAGE_SIZE = 10
 
@@ -45,6 +54,8 @@ export default function MembersView({ token, user }) {
     fechaInicio: today,
     metodoPago: 'efectivo',
   })
+  const [renewCoupon, setRenewCoupon] = useState('')
+  const [appliedRenewCoupon, setAppliedRenewCoupon] = useState(null)
   const [renewLoading, setRenewLoading] = useState(false)
 
   // Formulario de Alta de nuevo socio
@@ -58,19 +69,29 @@ export default function MembersView({ token, user }) {
     fechaInicio: today,
     metodoPago: 'efectivo',
   })
+  const [newMemberCoupon, setNewMemberCoupon] = useState('')
+  const [appliedNewCoupon, setAppliedNewCoupon] = useState(null)
 
   const selectedNewPlan = plans.find((plan) => String(plan.id) === String(form.planId))
   const selectedRenewPlan = plans.find((plan) => String(plan.id) === String(renewForm.planId))
 
+  useEffect(() => {
+    if (searchParams.get('tab') === 'solicitudes') {
+      setSegmentFilter('solicitudes')
+    }
+  }, [searchParams])
+
   const loadData = useCallback(async () => {
     try {
-      const [plansData, membersData] = await Promise.all([
+      const [plansData, membersData, reqData] = await Promise.all([
         PlanService.getPlanes(token),
         SocioService.getSocios(token),
+        MembershipService.getAdminRenewalRequests(token, 'pendiente').catch(() => ({ solicitudes: [] })),
       ])
 
       setPlans(plansData.planes || [])
       setMembers(membersData.socios || [])
+      setPendingRequestsCount((reqData.solicitudes || []).length)
       setForm((current) => ({
         ...current,
         planId: current.planId || String(plansData.planes?.[0]?.id || ''),
@@ -113,6 +134,8 @@ export default function MembersView({ token, user }) {
       fechaInicio: today,
       metodoPago: 'efectivo',
     })
+    setNewMemberCoupon('')
+    setAppliedNewCoupon(null)
     setFieldErrors({})
     setFormStatus({ loading: false, dniLoading: false, error: '' })
   }
@@ -198,7 +221,7 @@ export default function MembersView({ token, user }) {
 
     try {
       if (editingId) await SocioService.updateSocio(token, editingId, form)
-      else await SocioService.createSocio(token, form)
+      else await SocioService.createSocio(token, { ...form, codigoCupon: appliedNewCoupon?.oferta?.codigoCupon || null })
       setMessage(editingId ? 'Datos del socio actualizados.' : `Socio ${form.nombre} ${form.apellido} registrado exitosamente.`)
       resetForm()
       setShowForm(false)
@@ -251,6 +274,8 @@ export default function MembersView({ token, user }) {
 
   function openRenewModal(socio) {
     setRenewErrors({})
+    setRenewCoupon('')
+    setAppliedRenewCoupon(null)
     setRenewForm({
       socioId: socio.id,
       socioNombre: socio.nombre,
@@ -282,9 +307,11 @@ export default function MembersView({ token, user }) {
         planId: renewForm.planId,
         fechaInicio: renewForm.fechaInicio,
         metodoPago: renewForm.metodoPago,
+        codigoCupon: appliedRenewCoupon?.oferta?.codigoCupon || null,
       })
       setMessage(`Membresía renovada con éxito para ${renewForm.socioNombre} ${renewForm.socioApellido}.`)
       setShowRenewModal(false)
+      window.dispatchEvent(new Event('panda_notifications_updated'))
       loadData()
       if (profileModalSocioId) {
         setProfileModalSocioId(renewForm.socioId) // recargar ficha si estaba abierta
@@ -362,6 +389,16 @@ export default function MembersView({ token, user }) {
           <button
             className="btn btn-outline-dark fw-bold d-flex align-items-center gap-2 px-3 py-2"
             type="button"
+            onClick={() => setShowPlansModal(true)}
+            style={{ borderRadius: '12px', fontSize: '0.9rem' }}
+          >
+            <i className="bi bi-tags text-success fs-6"></i>
+            <span>Planes y Campañas</span>
+          </button>
+
+          <button
+            className="btn btn-outline-dark fw-bold d-flex align-items-center gap-2 px-3 py-2"
+            type="button"
             onClick={() => {
               setTargetOfferSocio(null)
               setShowOfferModal(true)
@@ -408,6 +445,7 @@ export default function MembersView({ token, user }) {
       >
         {[
           { key: 'todos', label: 'Todos los Socios', count: segmentCounts.todos, iconClass: 'bi bi-people-fill' },
+          { key: 'solicitudes', label: 'Solicitudes de Renovación', count: pendingRequestsCount, iconClass: 'bi bi-inbox-fill text-warning' },
           { key: 'activos', label: 'Vigentes / Activos', count: segmentCounts.activos, iconClass: 'bi bi-check-circle-fill text-success' },
           { key: 'por_vencer', label: 'Por Vencer (≤ 7 días)', count: segmentCounts.por_vencer, iconClass: 'bi bi-alarm-fill text-warning' },
           { key: 'inactivos', label: 'Sin Plan / Vencidos', count: segmentCounts.inactivos, iconClass: 'bi bi-exclamation-triangle-fill text-danger' },
@@ -426,14 +464,18 @@ export default function MembersView({ token, user }) {
                 fontSize: '0.84rem',
                 border: isActive ? '1.5px solid #111d15' : '1px solid #e2e8f0',
               }}
-              onClick={() => setSegmentFilter(tab.key)}
+              onClick={() => {
+                setSegmentFilter(tab.key)
+                if (tab.key === 'solicitudes') setSearchParams({ tab: 'solicitudes' })
+                else if (searchParams.get('tab')) setSearchParams({})
+              }}
             >
               <i className={tab.iconClass}></i>
               <span>{tab.label}</span>
               <span
                 className="badge rounded-pill"
                 style={{
-                  background: isActive ? '#c4f039' : '#e2e8f0',
+                  background: isActive ? '#c4f039' : tab.key === 'solicitudes' && tab.count > 0 ? '#fef3c7' : '#e2e8f0',
                   color: '#111d15',
                   fontWeight: 800,
                   fontSize: '0.72rem',
@@ -446,6 +488,10 @@ export default function MembersView({ token, user }) {
         })}
       </div>
 
+      {segmentFilter === 'solicitudes' ? (
+        <RenewalRequestsPanel token={token} plans={plans} onProcessed={loadData} />
+      ) : (
+      <>
       {/* BUSCADOR */}
       <div className="mb-4">
         <input
@@ -802,6 +848,8 @@ export default function MembersView({ token, user }) {
           itemLabel="socios"
         />
       )}
+      </>
+      )}
 
       {/* MODAL: ALTA DE NUEVO SOCIO */}
       <ModalDialog
@@ -1041,15 +1089,34 @@ export default function MembersView({ token, user }) {
           </div>
 
           {!editingId && selectedNewPlan && (
-            <div className="p-3 mt-4 rounded-3 border bg-light d-flex justify-content-between align-items-center">
-              <div>
-                <strong className="text-dark">{selectedNewPlan.nombre}</strong>
-                <div className="text-muted small">{selectedNewPlan.duracionDias} días de acceso libre</div>
+            <>
+              <CouponCodeField
+                token={token}
+                plan={selectedNewPlan}
+                context="alta_socio"
+                value={newMemberCoupon}
+                onChange={setNewMemberCoupon}
+                appliedCoupon={appliedNewCoupon}
+                onApplied={setAppliedNewCoupon}
+              />
+              <div className="p-3 mt-3 rounded-3 border bg-light d-flex justify-content-between align-items-center">
+                <div>
+                  <strong className="text-dark">{selectedNewPlan.nombre}</strong>
+                  <div className="text-muted small">
+                    {selectedNewPlan.duracionDias} días de acceso libre
+                    {appliedNewCoupon?.diasExtra ? ` + ${appliedNewCoupon.diasExtra} días gratis` : ''}
+                  </div>
+                  {appliedNewCoupon?.descuentoAplicado > 0 && (
+                    <div className="text-success small fw-semibold">
+                      Descuento aplicado: -S/. {Number(appliedNewCoupon.descuentoAplicado).toFixed(2)}
+                    </div>
+                  )}
+                </div>
+                <span className="badge bg-dark text-white fs-6 px-3 py-2">
+                  S/. {(appliedNewCoupon ? Number(appliedNewCoupon.montoFinal) : Number(selectedNewPlan.precio)).toFixed(2)}
+                </span>
               </div>
-              <span className="badge bg-dark text-white fs-6 px-3 py-2">
-                S/. {Number(selectedNewPlan.precio).toFixed(2)}
-              </span>
-            </div>
+            </>
           )}
 
           <DeviceEnrollment key={editingId || 'new'} socioId={editingId} token={token} dni={form.dni} ticket={form.deviceTicket}
@@ -1154,15 +1221,35 @@ export default function MembersView({ token, user }) {
           )}
 
           {selectedRenewPlan && (
-            <div className="p-3 my-3 rounded-3 border bg-light d-flex justify-content-between align-items-center">
-              <div>
-                <strong className="text-dark">{selectedRenewPlan.nombre}</strong>
-                <div className="text-muted small">Extiende {selectedRenewPlan.duracionDias} días adicionales de acceso</div>
+            <>
+              <CouponCodeField
+                token={token}
+                plan={selectedRenewPlan}
+                userId={renewForm.socioId}
+                context="renovacion"
+                value={renewCoupon}
+                onChange={setRenewCoupon}
+                appliedCoupon={appliedRenewCoupon}
+                onApplied={setAppliedRenewCoupon}
+              />
+              <div className="p-3 my-3 rounded-3 border bg-light d-flex justify-content-between align-items-center">
+                <div>
+                  <strong className="text-dark">{selectedRenewPlan.nombre}</strong>
+                  <div className="text-muted small">
+                    Extiende {selectedRenewPlan.duracionDias} días adicionales
+                    {appliedRenewCoupon?.diasExtra ? ` + ${appliedRenewCoupon.diasExtra} días gratis` : ''}
+                  </div>
+                  {appliedRenewCoupon?.descuentoAplicado > 0 && (
+                    <div className="text-success small fw-semibold">
+                      Descuento aplicado: -S/. {Number(appliedRenewCoupon.descuentoAplicado).toFixed(2)}
+                    </div>
+                  )}
+                </div>
+                <span className="badge bg-dark text-white fs-6 px-3 py-2">
+                  S/. {(appliedRenewCoupon ? Number(appliedRenewCoupon.montoFinal) : Number(selectedRenewPlan.precio)).toFixed(2)}
+                </span>
               </div>
-              <span className="badge bg-dark text-white fs-6 px-3 py-2">
-                S/. {Number(selectedRenewPlan.precio).toFixed(2)}
-              </span>
-            </div>
+            </>
           )}
 
           <div className="d-flex justify-content-end gap-2 pt-3 border-top">
@@ -1213,6 +1300,17 @@ export default function MembersView({ token, user }) {
         onSuccess={() => {
           loadData()
           setMessage(targetOfferSocio ? `Oferta personalizada asignada a ${targetOfferSocio.nombre} ${targetOfferSocio.apellido}` : 'Promoción general publicada con éxito')
+        }}
+      />
+
+      <PlansAndOffersModal
+        isOpen={showPlansModal}
+        onClose={() => setShowPlansModal(false)}
+        token={token}
+        plans={plans}
+        onPlansUpdated={(updatedPlans) => {
+          setPlans(updatedPlans)
+          setMessage('Precios y configuración del plan actualizados.')
         }}
       />
     </>
